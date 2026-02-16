@@ -5,9 +5,9 @@ This file helps coding agents quickly understand and safely modify this reposito
 ## Project at a glance
 
 - Name: `openchat`
-- Type: Next.js App Router UI template
-- Current state: single-page, static demo of an AI chat product interface (no backend/API wiring yet)
-- Goal: provide a polished baseline chat experience that can be extended into a functional app
+- Type: Next.js App Router app with UI + REST backend scaffold
+- Current state: polished frontend demo plus backend MVP architecture (multi-issuer auth + Postgres adapter)
+- Goal: provide a baseline chat experience with portable backend foundations (Auth + DB adapters)
 
 ## Tech stack
 
@@ -15,6 +15,9 @@ This file helps coding agents quickly understand and safely modify this reposito
 - Language: TypeScript
 - Styling: Tailwind CSS v4 + custom CSS tokens in `app/globals.css`
 - Linting: ESLint via `eslint-config-next`
+- Backend auth/JWT: `jose`
+- Backend Postgres driver: `pg`
+- Runtime config validation: `zod`
 
 ## Code map
 
@@ -28,6 +31,24 @@ This file helps coding agents quickly understand and safely modify this reposito
   - Main template UI.
   - In-file mock data for conversations/messages/suggestions/tools.
   - Sidebar, chat stream, composer, and right context panel.
+- `app/api/v1/*`
+  - MVP REST routes (`health`, `me`, `projects`, `auth`).
+- `backend/domain/*`
+  - Core backend entities (`Principal`, `User`, `Project`).
+- `backend/application/*`
+  - Use-cases (`GetCurrentUser`, `ListProjects`, `CreateProject`, `GetProjectById`).
+- `backend/ports/*`
+  - Contracts for auth context, permission checking, repositories, and unit-of-work.
+- `backend/adapters/auth/*`
+  - Multi-issuer JWT verification, claim mapping, and JIT user provisioning.
+- `backend/adapters/db/postgres/*`
+  - Postgres repositories, transaction unit-of-work, SQL migration.
+- `backend/adapters/db/convex/*`
+  - Convex adapter placeholder (not implemented).
+- `backend/transport/rest/*`
+  - Request pipeline helpers and consistent API error mapping.
+- `backend/composition/*`
+  - Config parsing and dependency container wiring.
 - `public/*.svg`
   - Default static assets from scaffold.
 
@@ -38,6 +59,99 @@ This file helps coding agents quickly understand and safely modify this reposito
 - Lint: `npm run lint`
 - Production build: `npm run build`
 - Start production build: `npm run start`
+
+## Backend runtime configuration
+
+- Copy `.env.example` to `.env`.
+- `BACKEND_DB_ADAPTER` supports only `postgres` or `convex`.
+  - Use `postgres` for both local Postgres and Neon.
+  - Use `convex` only when Convex adapter is implemented.
+- For Postgres/Neon mode set:
+  - `BACKEND_DB_ADAPTER=postgres`
+  - `DATABASE_URL=<postgres connection string>`
+- Auth issuer config:
+  - `BACKEND_AUTH_ISSUERS` as JSON array.
+  - each item supports:
+    - `name`
+    - `issuer`
+    - `audience` (string or string[])
+    - `jwksUri`
+    - optional: `tokenUse` (`access` | `id` | `any`), `algorithms`, `requiredScopes`, `claimMapping`.
+    - optional for browser auth flows: `oidc.clientId`, `oidc.clientSecret`, `oidc.redirectUri`, `oidc.scopes`, `oidc.authorizationParams`, `oidc.loginParams`, `oidc.registerParams`.
+- Clock skew:
+  - `BACKEND_AUTH_CLOCK_SKEW_SECONDS` (default `60`, allowed `0-300`).
+- Cookie session config:
+  - `BACKEND_SESSION_SECRET` (required for login/register flows, min 32 chars)
+  - `BACKEND_SESSION_COOKIE_NAME` (default `openchat_session`)
+  - `BACKEND_AUTH_FLOW_COOKIE_NAME` (default `openchat_auth_flow`)
+  - `BACKEND_SESSION_SECURE_COOKIES` (`true`/`false`, defaults by environment)
+
+### Auth0 issuer example
+
+Use this shape in `BACKEND_AUTH_ISSUERS`:
+
+```json
+[
+  {
+    "name": "auth0",
+    "issuer": "https://YOUR_TENANT.us.auth0.com/",
+    "audience": "https://api.openchat.local",
+    "jwksUri": "https://YOUR_TENANT.us.auth0.com/.well-known/jwks.json",
+    "tokenUse": "access"
+  }
+]
+```
+
+Auth0 requirements:
+
+- Create an Auth0 API and use its identifier as `audience`.
+- Use RS256 signing in Auth0.
+- Keep `issuer` exact (usually includes trailing slash).
+- Send `Authorization: Bearer <access_token>` to protected endpoints.
+
+## Database migration
+
+- Apply `backend/adapters/db/postgres/migrations/001_initial.sql` before using protected endpoints.
+- Neon uses the same schema/queries as local Postgres (swap only `DATABASE_URL`).
+
+## MVP API routes
+
+- `GET /api/v1/health`
+- `GET /api/v1/me`
+- `GET /api/v1/projects`
+- `POST /api/v1/projects`
+- `GET /api/v1/projects/:id`
+- `GET /api/v1/auth/providers`
+- `GET /api/v1/auth/:provider/start?mode=login|register`
+- `GET /api/v1/auth/:provider/callback`
+- `POST /api/v1/auth/logout`
+
+Notes:
+
+- `/health` is public.
+- `/me` and `/projects*` require Bearer JWT.
+- Protected requests run JIT user provisioning keyed by `(issuer, subject)`.
+- Browser requests can authenticate via signed HTTP-only cookie session (fallback when `Authorization` header is absent).
+
+## Bring-up checklist (what must work)
+
+1. `npm install`
+2. `.env` configured (DB + `BACKEND_AUTH_ISSUERS`)
+3. Migration applied (`001_initial.sql`)
+4. `npm run dev`
+5. `GET /api/v1/health` returns `200`
+6. `GET /api/v1/me` with valid Auth0 access token returns `200`
+7. `GET /api/v1/projects` with same token returns `200`
+
+## Request pipeline
+
+1. Parse request
+2. Verify Bearer JWT via `JwtMultiIssuerVerifier` (or resolve access token from signed session cookie)
+3. Map token to normalized `Principal`
+4. JIT find/create local user by `(issuer, subject)`
+5. Permission check via `PermissionChecker`
+6. Execute use-case (with `UnitOfWork` when needed)
+7. Return consistent JSON response (with `x-request-id`)
 
 ## How the UI is organized
 
@@ -54,6 +168,10 @@ This file helps coding agents quickly understand and safely modify this reposito
 - Prefer existing design tokens from `app/globals.css` over hard-coded colors.
 - Preserve responsive behavior (`md`, `sm`, `xl` breakpoints already in use).
 - Keep TypeScript types explicit for UI data structures.
+- Keep backend business logic in `backend/application` and avoid transport/DB coupling there.
+- Keep adapter boundaries intact (ports interfaces are the contract).
+- Do not add IdP-specific checks in use-cases; normalize in auth adapters.
+- Do not add Neon-specific SQL branches; Neon shares Postgres adapter.
 - Avoid adding dependencies unless required for a clear feature.
 - Run `npm run lint` after meaningful code changes.
 
@@ -63,15 +181,32 @@ This file helps coding agents quickly understand and safely modify this reposito
   - Move mock arrays in `app/page.tsx` into state/hooks.
   - Introduce message send/append flow.
 - Add backend integration:
-  - Create API route handlers under `app/api/*`.
-  - Swap static data for fetched/session data.
+  - Add/extend API route handlers under `app/api/v1/*`.
+  - Keep route handlers thin and call backend use-cases.
+  - Add more repositories under `backend/ports` first, then implement adapters.
+- Add auth providers:
+  - Add issuer entries in `BACKEND_AUTH_ISSUERS`.
+  - Reuse `JwtMultiIssuerVerifier` + issuer-specific claim mapping.
+- Add Convex support:
+  - Implement `backend/adapters/db/convex/*` against existing repository ports.
+- Add repository contract tests:
+  - Run the same test suite against Postgres and Convex adapters.
 - Improve component structure:
   - Extract large sections from `app/page.tsx` into reusable components under a new `components/` directory.
 
 ## Known limitations
 
-- No authentication.
-- No persistence or server communication.
-- No tests yet.
+- No frontend-to-backend chat wiring yet (UI still uses mock data).
+- Convex adapter is a placeholder (not implemented).
+- No repository contract tests yet.
+- No rate limiting/audit logging/idempotency yet.
+
+## Troubleshooting
+
+- `401 unknown_issuer`: `iss` in token does not match configured `issuer`.
+- `401 invalid_claims`: `audience` mismatch.
+- `401 invalid_signature`: wrong JWKS URL or wrong tenant.
+- startup error about `DATABASE_URL`: set `BACKEND_DB_ADAPTER=postgres` with a valid connection string.
+- first protected call fails due to missing tables: apply migration `001_initial.sql`.
 
 When making major architectural changes, update this file so future agents inherit accurate context.

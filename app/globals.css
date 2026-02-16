@@ -25,6 +25,16 @@
   border-color: color-mix(in srgb, white 14%, transparent);
 }
 
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 body {
   min-height: 100vh;
   background:
