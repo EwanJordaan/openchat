@@ -1,26 +1,146 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-root: #070b12;
+  --bg-panel: rgba(7, 14, 24, 0.78);
+  --bg-panel-soft: rgba(10, 20, 34, 0.58);
+  --text-primary: #e8f3ff;
+  --text-muted: #b6c5da;
+  --text-dim: #7f91ab;
+  --accent-cyan: #26d8d3;
+  --accent-magenta: #f542b3;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--bg-root);
+  --color-foreground: var(--text-primary);
+  --font-sans: var(--font-space-grotesk);
+  --font-mono: var(--font-jetbrains-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: color-mix(in srgb, white 14%, transparent);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 14% 16%, color-mix(in srgb, var(--accent-cyan) 30%, transparent), transparent 32%),
+    radial-gradient(circle at 88% 10%, color-mix(in srgb, var(--accent-magenta) 27%, transparent), transparent 36%),
+    linear-gradient(155deg, #05090f 0%, #09101a 48%, #080d17 100%);
+  color: var(--text-primary);
+  font-family: var(--font-space-grotesk), "Segoe UI", sans-serif;
+}
+
+.surface {
+  border: 1px solid color-mix(in srgb, white 12%, transparent);
+  background: linear-gradient(
+    170deg,
+    color-mix(in srgb, var(--bg-panel) 92%, white 8%),
+    color-mix(in srgb, var(--bg-panel) 96%, black 4%)
+  );
+  border-radius: 1.25rem;
+  box-shadow:
+    0 20px 55px rgba(2, 7, 14, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.surface-soft {
+  border: 1px solid color-mix(in srgb, white 12%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-panel-soft) 95%, white 5%),
+    color-mix(in srgb, var(--bg-panel-soft) 98%, black 2%)
+  );
+  border-radius: 1rem;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(8px);
+}
+
+.brand-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  padding: 0.4rem;
+  color: #091018;
+  background: linear-gradient(
+    140deg,
+    var(--accent-cyan),
+    color-mix(in srgb, var(--accent-magenta) 78%, white 22%)
+  );
+}
+
+.ambient-orb {
+  position: absolute;
+  filter: blur(65px);
+  opacity: 0.4;
+  pointer-events: none;
+  animation: orbit 14s ease-in-out infinite;
+}
+
+.ambient-orb-a {
+  top: -8rem;
+  right: min(8%, 6rem);
+  width: 22rem;
+  height: 22rem;
+  background: color-mix(in srgb, var(--accent-magenta) 72%, transparent);
+}
+
+.ambient-orb-b {
+  bottom: -8rem;
+  left: min(8%, 5rem);
+  width: 18rem;
+  height: 18rem;
+  background: color-mix(in srgb, var(--accent-cyan) 75%, transparent);
+  animation-delay: 1.4s;
+}
+
+.message-enter {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: message-in 480ms ease forwards;
+}
+
+.typing-dot {
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-cyan) 72%, white 28%);
+  animation: typing 1s ease-in-out infinite;
+}
+
+@keyframes typing {
+  0%,
+  80%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes orbit {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-10px, 12px) scale(1.05);
+  }
 }
