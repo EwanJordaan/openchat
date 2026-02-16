@@ -7,6 +7,9 @@ export interface CurrentUserView {
     id: string;
     email: string | null;
     name: string | null;
+    avatarMimeType: string | null;
+    avatarUpdatedAt: string | null;
+    hasAvatar: boolean;
     createdAt: string;
     updatedAt: string;
     lastSeenAt: string;
@@ -34,7 +37,10 @@ export class GetCurrentUserUseCase {
     }
 
     return {
-      user,
+      user: {
+        ...user,
+        hasAvatar: Boolean(user.avatarMimeType),
+      },
       principal: {
         subject: principal.subject,
         issuer: principal.issuer,

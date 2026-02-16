@@ -1,7 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+
+import { type CurrentUserData, fetchCurrentUser, getDisplayName } from "@/app/lib/current-user";
+import { ProfileAvatar } from "@/components/profile-avatar";
 
 type Role = "assistant" | "user" | "system";
 
@@ -143,29 +147,72 @@ function PlusIcon() {
   );
 }
 
+function UserIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+      <path
+        d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.1 0-7.5 2.4-7.5 5.3 0 .4.34.7.75.7h13.5c.41 0 .75-.3.75-.7 0-2.9-3.4-5.3-7.5-5.3Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 export default function Home() {
   const [openMenuTitle, setOpenMenuTitle] = useState<string | null>(null);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSidebarContentVisible, setIsSidebarContentVisible] = useState(true);
   const [chatMessages, setChatMessages] = useState<Message[]>(initialMessages);
   const [draft, setDraft] = useState("");
   const [isAssistantTyping, setIsAssistantTyping] = useState(false);
+  const [currentUser, setCurrentUser] = useState<CurrentUserData | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const sidebarContentTimerRef = useRef<number | null>(null);
   const assistantReplyTimerRef = useRef<number | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const hasOpenMenu = openMenuTitle !== null;
 
   useEffect(() => {
+    const controller = new AbortController();
+
+    async function resolveSession() {
+      try {
+        const user = await fetchCurrentUser(controller.signal);
+        setCurrentUser(user);
+      } catch {
+        setCurrentUser(null);
+      } finally {
+        setIsAuthLoading(false);
+      }
+    }
+
+    void resolveSession();
+
+    return () => {
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      if (target.closest("[data-history-menu]")) return;
-      setOpenMenuTitle(null);
+
+      if (!target.closest("[data-history-menu]")) {
+        setOpenMenuTitle(null);
+      }
+
+      if (!target.closest("[data-profile-menu]")) {
+        setIsProfileMenuOpen(false);
+      }
     }
 
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setOpenMenuTitle(null);
+        setIsProfileMenuOpen(false);
       }
     }
 
@@ -201,6 +248,7 @@ export default function Home() {
 
   function toggleSidebar() {
     setOpenMenuTitle(null);
+    setIsProfileMenuOpen(false);
 
     if (sidebarContentTimerRef.current !== null) {
       window.clearTimeout(sidebarContentTimerRef.current);
@@ -256,6 +304,34 @@ export default function Home() {
     }, 650);
   }
 
+  async function handleLogout() {
+    try {
+      await fetch("/api/v1/auth/logout", {
+        method: "POST",
+      });
+    } finally {
+      setCurrentUser(null);
+      setIsProfileMenuOpen(false);
+      setAuthNotice("Signed out. Sign in again to access account features.");
+    }
+  }
+
+  if (isAuthLoading) {
+    return (
+      <main className="relative flex min-h-screen items-center justify-center p-6">
+        <div className="ambient-orb ambient-orb-a" aria-hidden="true" />
+        <div className="ambient-orb ambient-orb-b" aria-hidden="true" />
+        <section className="surface relative z-10 w-full max-w-md p-7">
+          <p className="text-sm text-[color:var(--text-muted)]">Loading workspace...</p>
+        </section>
+      </main>
+    );
+  }
+
+  const userDisplayName = currentUser
+    ? getDisplayName(currentUser.user.name, currentUser.user.email)
+    : "Guest";
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--bg-root)] text-[var(--text-primary)]">
       <div className="ambient-orb ambient-orb-a" aria-hidden="true" />
@@ -263,7 +339,7 @@ export default function Home() {
 
       <main className="relative mx-auto flex h-screen w-full max-w-[1600px] gap-3 p-3 sm:gap-4 sm:p-4 lg:gap-5 lg:p-5">
         <aside
-          className={`surface hidden shrink-0 flex-col overflow-hidden transition-[width] duration-200 md:flex ${
+          className={`surface relative z-[60] hidden shrink-0 flex-col overflow-visible transition-[width] duration-200 md:flex ${
             isSidebarCollapsed ? "w-14" : "w-72"
           }`}
         >
@@ -305,99 +381,194 @@ export default function Home() {
             )}
           </div>
 
-          <div
-            className={`scrollbar-chat flex-1 space-y-2 overflow-y-auto p-3 ${
-              isSidebarContentVisible ? "block" : "hidden"
-            }`}
-          >
-            {conversations.map((conversation) => {
-              const isMenuOpen = openMenuTitle === conversation.title;
+          {isSidebarContentVisible ? (
+            <div className="scrollbar-chat flex-1 space-y-2 overflow-y-auto p-3">
+              {conversations.map((conversation) => {
+                const isMenuOpen = openMenuTitle === conversation.title;
 
-              return (
-                <div
-                  key={conversation.title}
-                  data-history-menu
-                  className={`group/history relative ${isMenuOpen ? "z-30" : "z-0"}`}
-                >
-                  <button
-                    type="button"
-                    className={`w-full rounded-xl border px-3 py-2 pr-11 text-left transition ${
-                      conversation.active
-                        ? "border-[var(--accent-secondary)]/55 bg-[var(--accent-secondary)]/14"
-                        : hasOpenMenu
-                          ? "border-white/10 bg-white/[0.03]"
-                          : "border-white/10 bg-white/[0.03] hover:border-[var(--accent-primary)]/28 hover:bg-[var(--accent-primary)]/8"
-                    }`}
+                return (
+                  <div
+                    key={conversation.title}
+                    data-history-menu
+                    className={`group/history relative ${isMenuOpen ? "z-30" : "z-0"}`}
                   >
-                    <p className="truncate text-sm font-medium">{conversation.title}</p>
-                  </button>
-
-                  <div className="absolute right-1 top-1/2 -translate-y-1/2">
                     <button
                       type="button"
-                      aria-label={`Open menu for ${conversation.title}`}
-                      aria-haspopup="menu"
-                      aria-expanded={isMenuOpen}
-                      onClick={() => setOpenMenuTitle(isMenuOpen ? null : conversation.title)}
-                      className={`inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/12 bg-[var(--bg-root)] text-sm leading-none transition hover:text-[var(--text-primary)] ${
-                        isMenuOpen
-                          ? "pointer-events-auto text-[var(--text-primary)] opacity-100"
-                          : "pointer-events-none text-[var(--text-dim)] opacity-0 group-hover/history:pointer-events-auto group-hover/history:opacity-100 group-focus-within/history:pointer-events-auto group-focus-within/history:opacity-100"
+                      className={`w-full rounded-xl border px-3 py-2 pr-11 text-left transition ${
+                        conversation.active
+                          ? "border-[var(--accent-secondary)]/55 bg-[var(--accent-secondary)]/14"
+                          : hasOpenMenu
+                            ? "border-white/10 bg-white/[0.03]"
+                            : "border-white/10 bg-white/[0.03] hover:border-[var(--accent-primary)]/28 hover:bg-[var(--accent-primary)]/8"
                       }`}
                     >
-                      ...
+                      <p className="truncate text-sm font-medium">{conversation.title}</p>
                     </button>
 
-                    <div
-                      role="menu"
-                      aria-label={`Actions for ${conversation.title}`}
-                      className={`absolute right-0 top-full z-30 mt-1 w-32 rounded-lg border border-white/12 bg-[var(--bg-root)] p-1 shadow-[0_10px_30px_rgba(0,0,0,0.45)] transition ${
-                        isMenuOpen
-                          ? "pointer-events-auto visible translate-y-0 opacity-100"
-                          : "pointer-events-none invisible translate-y-1 opacity-0"
-                      }`}
-                    >
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2">
                       <button
                         type="button"
-                        role="menuitem"
-                        onClick={() => setOpenMenuTitle(null)}
-                        className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-primary)]/18 hover:text-[var(--accent-primary-strong)]"
+                        aria-label={`Open menu for ${conversation.title}`}
+                        aria-haspopup="menu"
+                        aria-expanded={isMenuOpen}
+                        onClick={() => setOpenMenuTitle(isMenuOpen ? null : conversation.title)}
+                        className={`inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/12 bg-[var(--bg-root)] text-sm leading-none transition hover:text-[var(--text-primary)] ${
+                          isMenuOpen
+                            ? "pointer-events-auto text-[var(--text-primary)] opacity-100"
+                            : "pointer-events-none text-[var(--text-dim)] opacity-0 group-hover/history:pointer-events-auto group-hover/history:opacity-100 group-focus-within/history:pointer-events-auto group-focus-within/history:opacity-100"
+                        }`}
                       >
-                        Share
+                        ...
                       </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => setOpenMenuTitle(null)}
-                        className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-primary)]/18 hover:text-[var(--accent-primary-strong)]"
+
+                      <div
+                        role="menu"
+                        aria-label={`Actions for ${conversation.title}`}
+                        className={`absolute right-0 top-full z-30 mt-1 w-32 rounded-lg border border-white/12 bg-[var(--bg-root)] p-1 shadow-[0_10px_30px_rgba(0,0,0,0.45)] transition ${
+                          isMenuOpen
+                            ? "pointer-events-auto visible translate-y-0 opacity-100"
+                            : "pointer-events-none invisible translate-y-1 opacity-0"
+                        }`}
                       >
-                        Rename
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => setOpenMenuTitle(null)}
-                        className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-primary)]/18 hover:text-[var(--accent-primary-strong)]"
-                      >
-                        Archive
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => setOpenMenuTitle(null)}
-                        className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-secondary)]/20 hover:text-[var(--accent-secondary-strong)]"
-                      >
-                        Delete
-                      </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => setOpenMenuTitle(null)}
+                          className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-primary)]/18 hover:text-[var(--accent-primary-strong)]"
+                        >
+                          Share
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => setOpenMenuTitle(null)}
+                          className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-primary)]/18 hover:text-[var(--accent-primary-strong)]"
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => setOpenMenuTitle(null)}
+                          className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-primary)]/18 hover:text-[var(--accent-primary-strong)]"
+                        >
+                          Archive
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => setOpenMenuTitle(null)}
+                          className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-secondary)]/20 hover:text-[var(--accent-secondary-strong)]"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex-1" />
+          )}
+
+          <div
+            className={`relative z-[70] mt-auto border-t border-white/10 ${isSidebarCollapsed ? "p-1.5" : "p-2"}`}
+            data-profile-menu
+          >
+            {authNotice && isSidebarContentVisible ? (
+              <div className="mb-2 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-2 text-xs text-[color:var(--text-muted)]">
+                {authNotice}
+              </div>
+            ) : null}
+
+            {currentUser ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  aria-label="Open profile menu"
+                  aria-haspopup="menu"
+                  aria-expanded={isProfileMenuOpen}
+                  onClick={() => setIsProfileMenuOpen((previous) => !previous)}
+                  className={`rounded-xl border border-white/12 bg-white/[0.03] transition hover:border-white/20 ${
+                    isSidebarCollapsed
+                      ? "mx-auto flex h-10 w-10 items-center justify-center rounded-full"
+                      : "flex w-full items-center gap-2 p-1.5"
+                  }`}
+                >
+                  <ProfileAvatar
+                    name={currentUser.user.name}
+                    email={currentUser.user.email}
+                    hasAvatar={currentUser.user.hasAvatar}
+                    avatarUpdatedAt={currentUser.user.avatarUpdatedAt}
+                    sizeClassName="h-8 w-8"
+                    textClassName="text-xs"
+                  />
+                  {!isSidebarCollapsed ? (
+                    <span className="truncate text-left text-xs font-medium text-[color:var(--text-primary)]">
+                      {getDisplayName(currentUser.user.name, currentUser.user.email)}
+                    </span>
+                  ) : null}
+                </button>
+
+                <div
+                  role="menu"
+                  aria-label="Profile actions"
+                  className={`absolute z-[80] w-40 space-y-1 rounded-xl border border-white/12 bg-[var(--bg-root)] p-1.5 shadow-[0_14px_34px_rgba(0,0,0,0.45)] transition ${
+                    isSidebarCollapsed ? "bottom-0 left-full ml-2" : "bottom-full left-0 mb-2"
+                  } ${
+                    isProfileMenuOpen
+                      ? "pointer-events-auto visible translate-y-0 opacity-100"
+                      : "pointer-events-none invisible translate-y-1 opacity-0"
+                  }`}
+                >
+                  <Link
+                    href="/settings"
+                    role="menuitem"
+                    onClick={() => setIsProfileMenuOpen(false)}
+                    className="block w-full rounded-md px-2.5 py-2 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-primary)]/16 hover:text-[var(--accent-primary-strong)]"
+                  >
+                    Settings
+                  </Link>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsProfileMenuOpen(false);
+                      void handleLogout();
+                    }}
+                    className="w-full rounded-md px-2.5 py-2 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-secondary)]/20 hover:text-[var(--accent-secondary-strong)]"
+                  >
+                    Logout
+                  </button>
                 </div>
-              );
-            })}
+              </div>
+            ) : (
+              <Link
+                href="/login?returnTo=%2F"
+                aria-label="Login"
+                className={`rounded-xl border border-white/12 bg-white/[0.03] text-xs font-medium text-[color:var(--text-primary)] transition hover:border-white/20 ${
+                  isSidebarCollapsed
+                    ? "mx-auto inline-flex h-10 w-10 items-center justify-center rounded-full"
+                    : "inline-flex w-full items-center justify-center p-1.5"
+                }`}
+              >
+                {isSidebarCollapsed ? <UserIcon /> : "Login"}
+              </Link>
+            )}
           </div>
         </aside>
 
         <section className="surface relative flex min-w-0 flex-1 flex-col overflow-hidden">
+          <header className="flex items-center justify-between border-b border-white/10 px-3 py-2.5 sm:px-5 sm:py-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-[color:var(--text-primary)]">{userDisplayName}</p>
+              <p className="truncate text-xs text-[color:var(--text-dim)]">
+                {currentUser ? "Signed in and ready" : "Browsing in guest mode"}
+              </p>
+            </div>
+          </header>
+
           <div
             ref={chatScrollRef}
             className="scrollbar-chat flex-1 space-y-4 overflow-y-auto px-3 py-4 pb-24 sm:px-5 sm:py-5 sm:pb-28"
@@ -474,6 +645,7 @@ export default function Home() {
           </div>
         </section>
       </main>
+
     </div>
   );
 }

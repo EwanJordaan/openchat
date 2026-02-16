@@ -13,3 +13,11 @@ export function toIsoString(value: unknown): string {
 
   throw new Error("Expected database date value to be a Date or string");
 }
+
+export function toNullableIsoString(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return toIsoString(value);
+}

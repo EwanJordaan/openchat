@@ -26,12 +26,16 @@ export async function GET(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const returnTo = sanitizeReturnTo(url.searchParams.get("returnTo"));
 
-    const response = Response.redirect(new URL(returnTo, request.url), 302);
-    response.headers.append("set-cookie", createClearedSessionCookie(container.config.session));
-    response.headers.append("set-cookie", createClearedAuthFlowCookie(container.config.session));
-    response.headers.set("x-request-id", requestId);
+    const headers = new Headers();
+    headers.set("location", new URL(returnTo, request.url).toString());
+    headers.set("x-request-id", requestId);
+    headers.append("set-cookie", createClearedSessionCookie(container.config.session));
+    headers.append("set-cookie", createClearedAuthFlowCookie(container.config.session));
 
-    return response;
+    return new Response(null, {
+      status: 302,
+      headers,
+    });
   });
 }
 

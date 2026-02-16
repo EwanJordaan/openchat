@@ -11,11 +11,25 @@ export interface UpdateUserProfileInput {
   name?: string | null;
 }
 
+export interface UserAvatar {
+  mimeType: string;
+  bytes: Uint8Array;
+  updatedAt: string;
+}
+
+export interface SetUserAvatarInput {
+  mimeType: string;
+  bytes: Uint8Array;
+}
+
 export interface UserRepository {
   getById(userId: string): Promise<User | null>;
+  getAvatar(userId: string): Promise<UserAvatar | null>;
   getByExternalIdentity(issuer: string, subject: string): Promise<User | null>;
   createUser(input: CreateUserInput): Promise<User>;
   updateProfile(userId: string, input: UpdateUserProfileInput): Promise<User>;
+  setAvatar(userId: string, input: SetUserAvatarInput): Promise<User>;
+  clearAvatar(userId: string): Promise<User>;
   touchLastSeen(userId: string, lastSeenAtIso: string): Promise<void>;
   linkExternalIdentity(userId: string, issuer: string, subject: string): Promise<void>;
 }

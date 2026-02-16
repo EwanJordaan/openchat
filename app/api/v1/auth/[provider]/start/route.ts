@@ -57,11 +57,15 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
       container.config.session,
     );
 
-    const response = Response.redirect(redirectTo.toString(), 302);
-    response.headers.append("set-cookie", flowCookie);
-    response.headers.set("x-request-id", requestId);
+    const headers = new Headers();
+    headers.set("location", redirectTo.toString());
+    headers.set("x-request-id", requestId);
+    headers.append("set-cookie", flowCookie);
 
-    return response;
+    return new Response(null, {
+      status: 302,
+      headers,
+    });
   });
 }
 

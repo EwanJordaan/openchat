@@ -26,7 +26,18 @@ export async function handleApiRoute(
     });
 
     if (!response.headers.has("x-request-id")) {
-      response.headers.set("x-request-id", requestId);
+      try {
+        response.headers.set("x-request-id", requestId);
+      } catch {
+        const headers = new Headers(response.headers);
+        headers.set("x-request-id", requestId);
+
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        });
+      }
     }
 
     return response;

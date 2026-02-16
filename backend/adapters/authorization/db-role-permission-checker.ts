@@ -25,6 +25,10 @@ export class DbRolePermissionChecker implements PermissionChecker {
       return true;
     }
 
+    if (action === "user.update.self") {
+      return true;
+    }
+
     if (!roles.has("member")) {
       return false;
     }

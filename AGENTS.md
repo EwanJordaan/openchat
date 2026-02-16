@@ -6,7 +6,7 @@ This file helps coding agents quickly understand and safely modify this reposito
 
 - Name: `openchat`
 - Type: Next.js App Router app with UI + REST backend scaffold
-- Current state: polished frontend demo plus backend MVP architecture (multi-issuer auth + Postgres adapter)
+- Current state: polished frontend demo plus backend MVP architecture (multi-issuer auth + adapter-based data layer), with login/register and account settings/profile avatar flows
 - Goal: provide a baseline chat experience with portable backend foundations (Auth + DB adapters)
 
 ## Tech stack
@@ -31,6 +31,9 @@ This file helps coding agents quickly understand and safely modify this reposito
   - Main template UI.
   - In-file mock data for conversations/messages/suggestions/tools.
   - Sidebar, chat stream, composer, and right context panel.
+- `app/settings/page.tsx`
+  - Authenticated account settings UI.
+  - Profile editing, avatar upload/remove, session/provider details.
 - `app/api/v1/*`
   - MVP REST routes (`health`, `me`, `projects`, `auth`).
 - `backend/domain/*`
@@ -44,7 +47,7 @@ This file helps coding agents quickly understand and safely modify this reposito
 - `backend/adapters/db/postgres/*`
   - Postgres repositories, transaction unit-of-work, SQL migration.
 - `backend/adapters/db/convex/*`
-  - Convex adapter placeholder (not implemented).
+  - In-memory fallback adapter used when `BACKEND_DB_ADAPTER=convex`.
 - `backend/transport/rest/*`
   - Request pipeline helpers and consistent API error mapping.
 - `backend/composition/*`
@@ -63,9 +66,9 @@ This file helps coding agents quickly understand and safely modify this reposito
 ## Backend runtime configuration
 
 - Copy `.env.example` to `.env`.
-- `BACKEND_DB_ADAPTER` supports only `postgres` or `convex`.
+- `BACKEND_DB_ADAPTER` supports `postgres` or `convex`.
   - Use `postgres` for both local Postgres and Neon.
-  - Use `convex` only when Convex adapter is implemented.
+  - `convex` currently maps to an in-memory fallback adapter for local/dev portability.
 - For Postgres/Neon mode set:
   - `BACKEND_DB_ADAPTER=postgres`
   - `DATABASE_URL=<postgres connection string>`
@@ -112,12 +115,17 @@ Auth0 requirements:
 ## Database migration
 
 - Apply `backend/adapters/db/postgres/migrations/001_initial.sql` before using protected endpoints.
+- Apply `backend/adapters/db/postgres/migrations/002_user_profile_avatar.sql` for account avatar support.
 - Neon uses the same schema/queries as local Postgres (swap only `DATABASE_URL`).
 
 ## MVP API routes
 
 - `GET /api/v1/health`
 - `GET /api/v1/me`
+- `PATCH /api/v1/me`
+- `GET /api/v1/me/avatar`
+- `PUT /api/v1/me/avatar`
+- `DELETE /api/v1/me/avatar`
 - `GET /api/v1/projects`
 - `POST /api/v1/projects`
 - `GET /api/v1/projects/:id`
@@ -197,7 +205,7 @@ Notes:
 ## Known limitations
 
 - No frontend-to-backend chat wiring yet (UI still uses mock data).
-- Convex adapter is a placeholder (not implemented).
+- Convex mode is an in-memory fallback adapter (not a persisted Convex backend).
 - No repository contract tests yet.
 - No rate limiting/audit logging/idempotency yet.
 

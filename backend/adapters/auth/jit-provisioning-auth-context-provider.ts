@@ -37,15 +37,20 @@ export class JitProvisioningAuthContextProvider implements AuthContextProvider {
         await users.linkExternalIdentity(user.id, principal.issuer, principal.subject);
         await roles.assignRoleToUser(user.id, "member");
       } else {
-        const profileHasChanges =
-          (principal.email !== undefined && principal.email !== user.email) ||
-          (principal.name !== undefined && principal.name !== user.name);
+        const profilePatch: { email?: string | null; name?: string | null } = {};
+
+        if (principal.email !== undefined && principal.email !== user.email) {
+          profilePatch.email = principal.email;
+        }
+
+        if ((user.name === null || user.name.trim().length === 0) && principal.name !== undefined) {
+          profilePatch.name = principal.name;
+        }
+
+        const profileHasChanges = profilePatch.email !== undefined || profilePatch.name !== undefined;
 
         if (profileHasChanges) {
-          user = await users.updateProfile(user.id, {
-            email: principal.email,
-            name: principal.name,
-          });
+          user = await users.updateProfile(user.id, profilePatch);
         }
       }
 

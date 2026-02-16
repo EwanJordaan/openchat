@@ -8,7 +8,7 @@ OpenChat is a Next.js chat product template with an in-progress REST backend sca
 - Tailwind CSS v4 for UI
 - REST backend in App Router route handlers (`app/api/v1/*`)
 - Auth verification with `jose` (OIDC/JWT, multi-issuer)
-- Persistence adapters (Postgres/Neon implemented, Convex placeholder)
+- Persistence adapters (Postgres/Neon implemented, Convex mode uses an in-memory adapter fallback)
 
 ## Quick start
 
@@ -19,7 +19,7 @@ npm install
 ```
 
 2. Create `.env` from `.env.example` and set values.
-3. Run the SQL migration in `backend/adapters/db/postgres/migrations/001_initial.sql`.
+3. Run SQL migrations in `backend/adapters/db/postgres/migrations/001_initial.sql` and `backend/adapters/db/postgres/migrations/002_user_profile_avatar.sql`.
 4. Start the app:
 
 ```bash
@@ -82,6 +82,10 @@ Example issuer config:
 
 - `GET /api/v1/health`
 - `GET /api/v1/me`
+- `PATCH /api/v1/me`
+- `GET /api/v1/me/avatar`
+- `PUT /api/v1/me/avatar`
+- `DELETE /api/v1/me/avatar`
 - `GET /api/v1/projects`
 - `POST /api/v1/projects`
 - `GET /api/v1/projects/:id`
@@ -103,7 +107,7 @@ For browser sessions, the backend also accepts an HTTP-only cookie session and r
 - `backend/ports`: contracts (auth, permissions, repositories, unit-of-work)
 - `backend/adapters/auth`: JWT multi-issuer verification + principal mapping + JIT provisioning
 - `backend/adapters/db/postgres`: repository implementation + migration
-- `backend/adapters/db/convex`: scaffold placeholder for future adapter
+- `backend/adapters/db/convex`: in-memory fallback adapter used when `BACKEND_DB_ADAPTER=convex`
 - `backend/transport/rest`: request pipeline + error mapping
 - `backend/composition`: config loading + dependency wiring
 

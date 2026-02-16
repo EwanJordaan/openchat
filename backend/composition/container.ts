@@ -1,10 +1,15 @@
 import { CreateProjectUseCase } from "@/backend/application/use-cases/create-project";
 import { GetCurrentUserUseCase } from "@/backend/application/use-cases/get-current-user";
+import { GetCurrentUserAvatarUseCase } from "@/backend/application/use-cases/get-current-user-avatar";
 import { GetProjectByIdUseCase } from "@/backend/application/use-cases/get-project-by-id";
 import { ListProjectsUseCase } from "@/backend/application/use-cases/list-projects";
+import { RemoveCurrentUserAvatarUseCase } from "@/backend/application/use-cases/remove-current-user-avatar";
+import { UpdateCurrentUserProfileUseCase } from "@/backend/application/use-cases/update-current-user-profile";
+import { UploadCurrentUserAvatarUseCase } from "@/backend/application/use-cases/upload-current-user-avatar";
 import { JitProvisioningAuthContextProvider } from "@/backend/adapters/auth/jit-provisioning-auth-context-provider";
 import { JwtMultiIssuerVerifier } from "@/backend/adapters/auth/jwt-multi-issuer-verifier";
 import { DbRolePermissionChecker } from "@/backend/adapters/authorization/db-role-permission-checker";
+import { ConvexUnitOfWork, createConvexRepositories } from "@/backend/adapters/db/convex";
 import { createPostgresRepositories } from "@/backend/adapters/db/postgres/repository-factory";
 import { getPostgresPool } from "@/backend/adapters/db/postgres/client";
 import { PostgresUnitOfWork } from "@/backend/adapters/db/postgres/unit-of-work";
@@ -23,6 +28,10 @@ export interface ApplicationContainer {
   unitOfWork: UnitOfWork;
   useCases: {
     getCurrentUser: GetCurrentUserUseCase;
+    getCurrentUserAvatar: GetCurrentUserAvatarUseCase;
+    updateCurrentUserProfile: UpdateCurrentUserProfileUseCase;
+    uploadCurrentUserAvatar: UploadCurrentUserAvatarUseCase;
+    removeCurrentUserAvatar: RemoveCurrentUserAvatarUseCase;
     listProjects: ListProjectsUseCase;
     getProjectById: GetProjectByIdUseCase;
     createProject: CreateProjectUseCase;
@@ -30,45 +39,109 @@ export interface ApplicationContainer {
 }
 
 declare global {
-  var __openchatBackendContainer: ApplicationContainer | undefined;
+  var __openchatBackendContainerState:
+    | {
+        fingerprint: string;
+        container: ApplicationContainer;
+        dispose?: () => Promise<void>;
+      }
+    | undefined;
 }
 
 export function getApplicationContainer(): ApplicationContainer {
-  if (!globalThis.__openchatBackendContainer) {
-    globalThis.__openchatBackendContainer = createApplicationContainer();
+  const config = loadBackendConfig();
+  const fingerprint = createConfigFingerprint(config);
+
+  const currentState = globalThis.__openchatBackendContainerState;
+  if (currentState && currentState.fingerprint === fingerprint) {
+    return currentState.container;
   }
 
-  return globalThis.__openchatBackendContainer;
+  const nextState = createApplicationContainerState(config, fingerprint);
+  globalThis.__openchatBackendContainerState = nextState;
+
+  if (currentState?.dispose) {
+    void currentState.dispose().catch(() => {
+      // Ignore cleanup errors while hot-switching adapters.
+    });
+  }
+
+  return nextState.container;
 }
 
-function createApplicationContainer(): ApplicationContainer {
-  const config = loadBackendConfig();
-
-  if (config.db.adapter !== "postgres") {
-    throw new Error("Convex adapter wiring is not implemented yet");
-  }
-
-  const pool = getPostgresPool(config.db.databaseUrl as string);
-  const repositories = createPostgresRepositories(pool);
-  const unitOfWork = new PostgresUnitOfWork(pool);
+function createApplicationContainerState(config: BackendConfig, fingerprint: string): {
+  fingerprint: string;
+  container: ApplicationContainer;
+  dispose?: () => Promise<void>;
+} {
+  const adapter = createDataAdapter(config);
 
   const jwtVerifier = new JwtMultiIssuerVerifier(config.auth.issuers, config.auth.clockSkewSeconds);
-  const authContextProvider = new JitProvisioningAuthContextProvider(jwtVerifier, unitOfWork);
+  const authContextProvider = new JitProvisioningAuthContextProvider(jwtVerifier, adapter.unitOfWork);
   const permissionChecker = new DbRolePermissionChecker();
 
   const useCases = {
-    getCurrentUser: new GetCurrentUserUseCase(repositories.users),
-    listProjects: new ListProjectsUseCase(repositories.projects),
-    getProjectById: new GetProjectByIdUseCase(repositories.projects),
-    createProject: new CreateProjectUseCase(unitOfWork),
+    getCurrentUser: new GetCurrentUserUseCase(adapter.repositories.users),
+    getCurrentUserAvatar: new GetCurrentUserAvatarUseCase(adapter.repositories.users),
+    updateCurrentUserProfile: new UpdateCurrentUserProfileUseCase(adapter.repositories.users),
+    uploadCurrentUserAvatar: new UploadCurrentUserAvatarUseCase(adapter.repositories.users),
+    removeCurrentUserAvatar: new RemoveCurrentUserAvatarUseCase(adapter.repositories.users),
+    listProjects: new ListProjectsUseCase(adapter.repositories.projects),
+    getProjectById: new GetProjectByIdUseCase(adapter.repositories.projects),
+    createProject: new CreateProjectUseCase(adapter.unitOfWork),
   };
 
   return {
-    config,
-    authContextProvider,
-    permissionChecker,
+    fingerprint,
+    container: {
+      config,
+      authContextProvider,
+      permissionChecker,
+      repositories: adapter.repositories,
+      unitOfWork: adapter.unitOfWork,
+      useCases,
+    },
+    dispose: adapter.dispose,
+  };
+}
+
+interface DataAdapterRuntime {
+  repositories: RepositoryBundle;
+  unitOfWork: UnitOfWork;
+  dispose?: () => Promise<void>;
+}
+
+function createDataAdapter(config: BackendConfig): DataAdapterRuntime {
+  if (config.db.adapter === "postgres") {
+    const pool = getPostgresPool(config.db.databaseUrl as string);
+    const repositories = createPostgresRepositories(pool);
+    const unitOfWork = new PostgresUnitOfWork(pool);
+
+    return {
+      repositories,
+      unitOfWork,
+      dispose: async () => {
+        await pool.end();
+      },
+    };
+  }
+
+  const repositories = createConvexRepositories();
+  const unitOfWork = new ConvexUnitOfWork(repositories);
+
+  return {
     repositories,
     unitOfWork,
-    useCases,
   };
+}
+
+function createConfigFingerprint(config: BackendConfig): string {
+  return JSON.stringify({
+    db: config.db,
+    auth: {
+      clockSkewSeconds: config.auth.clockSkewSeconds,
+      issuers: config.auth.issuers,
+    },
+    session: config.session,
+  });
 }

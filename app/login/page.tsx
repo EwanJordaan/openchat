@@ -16,9 +16,11 @@ interface ProvidersResponse {
 export default function LoginPage() {
   const [providers, setProviders] = useState<AuthProviderView[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [returnTo, setReturnTo] = useState("/");
 
   useEffect(() => {
     const controller = new AbortController();
+    setReturnTo(sanitizeReturnTo(new URLSearchParams(window.location.search).get("returnTo")));
 
     async function loadProviders() {
       try {
@@ -56,7 +58,7 @@ export default function LoginPage() {
         <div className="mb-6 flex items-center justify-between">
           <div className="brand-chip h-9 w-9">OC</div>
           <Link
-            href="/register"
+            href={`/register?returnTo=${encodeURIComponent(returnTo)}`}
             className="text-sm text-[color:var(--text-muted)] transition hover:text-[color:var(--text-primary)]"
           >
             Need an account?
@@ -77,7 +79,7 @@ export default function LoginPage() {
             providers.map((provider) => (
               <Link
                 key={provider.name}
-                href={`${provider.loginUrl}&returnTo=%2F`}
+                href={`${provider.loginUrl}&returnTo=${encodeURIComponent(returnTo)}`}
                 className="surface-soft block w-full px-4 py-3 text-left text-sm font-medium text-[color:var(--text-primary)] transition hover:border-white/25 hover:text-[color:var(--accent-primary-strong)]"
               >
                 Continue with {provider.name}
@@ -97,4 +99,12 @@ export default function LoginPage() {
       </section>
     </main>
   );
+}
+
+function sanitizeReturnTo(raw: string | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) {
+    return "/";
+  }
+
+  return raw;
 }

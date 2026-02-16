@@ -70,13 +70,18 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
     );
 
     const clearFlowCookie = createClearedAuthFlowCookie(container.config.session);
-    const response = Response.redirect(new URL(sanitizeReturnTo(flow.returnTo), request.url), 302);
+    const redirectTo = new URL(sanitizeReturnTo(flow.returnTo), request.url).toString();
 
-    response.headers.append("set-cookie", sessionCookie);
-    response.headers.append("set-cookie", clearFlowCookie);
-    response.headers.set("x-request-id", requestId);
+    const headers = new Headers();
+    headers.set("location", redirectTo);
+    headers.set("x-request-id", requestId);
+    headers.append("set-cookie", sessionCookie);
+    headers.append("set-cookie", clearFlowCookie);
 
-    return response;
+    return new Response(null, {
+      status: 302,
+      headers,
+    });
   });
 }
 
