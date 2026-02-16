@@ -106,12 +106,68 @@ body {
   animation: message-in 480ms ease forwards;
 }
 
+.markdown-content p {
+  margin: 0;
+}
+
+.markdown-content p + p {
+  margin-top: 0.7rem;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin: 0.6rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.markdown-content li + li {
+  margin-top: 0.35rem;
+}
+
+.markdown-content strong {
+  color: var(--accent-primary-strong);
+  font-weight: 600;
+}
+
+.markdown-content code {
+  border: 1px solid color-mix(in srgb, white 16%, transparent);
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, var(--bg-panel-soft) 88%, black 12%);
+  padding: 0.05rem 0.35rem;
+  font-family: var(--font-jetbrains-mono), "Consolas", monospace;
+  font-size: 0.85em;
+}
+
 .typing-dot {
   width: 0.35rem;
   height: 0.35rem;
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent-primary-strong) 72%, white 28%);
   animation: typing 1s ease-in-out infinite;
+}
+
+.scrollbar-chat {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent-primary) 45%, #4e5f75 55%) transparent;
+}
+
+.scrollbar-chat::-webkit-scrollbar {
+  width: 9px;
+}
+
+.scrollbar-chat::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-chat::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--accent-primary) 40%, #4e5f75 60%);
+}
+
+.scrollbar-chat::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--accent-secondary) 48%, #5a6f88 52%);
 }
 
 @keyframes typing {
