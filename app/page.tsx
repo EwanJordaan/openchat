@@ -134,12 +134,12 @@ export default function Home() {
                   <p className="text-xs text-[var(--text-muted)]">Workspace Alpha</p>
                 </div>
               </div>
-              <button className="rounded-lg border border-white/15 px-2 py-1 text-xs text-[var(--text-muted)] transition hover:border-[var(--accent-cyan)] hover:text-[var(--text-primary)]">
+              <button className="rounded-lg border border-white/15 px-2 py-1 text-xs text-[var(--text-muted)] transition hover:border-[var(--accent-primary)]/50 hover:text-[var(--text-primary)]">
                 Ctrl+K
               </button>
             </div>
 
-            <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent-cyan)]/85 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-[var(--accent-cyan)]">
+            <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--accent-primary)]/50 bg-[var(--accent-primary)]/22 px-3 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:bg-[var(--accent-primary)]/30">
               <SparkIcon />
               New conversation
             </button>
@@ -151,7 +151,7 @@ export default function Home() {
                 key={conversation.title}
                 className={`w-full rounded-xl border px-3 py-2 text-left transition ${
                   conversation.active
-                    ? "border-[var(--accent-magenta)]/60 bg-[var(--accent-magenta)]/12"
+                    ? "border-[var(--accent-primary)]/50 bg-[var(--accent-primary)]/13"
                     : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
                 }`}
               >
@@ -163,7 +163,7 @@ export default function Home() {
                   {conversation.preview}
                 </p>
                 {conversation.pinned ? (
-                  <span className="mt-2 inline-flex rounded-full border border-[var(--accent-cyan)]/40 bg-[var(--accent-cyan)]/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--accent-cyan)]">
+                  <span className="mt-2 inline-flex rounded-full border border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/12 px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--accent-primary-strong)]">
                     Pinned
                   </span>
                 ) : null}
@@ -184,10 +184,10 @@ export default function Home() {
                 </h1>
               </div>
               <div className="hidden items-center gap-2 sm:flex">
-                <span className="rounded-full border border-[var(--accent-cyan)]/35 bg-[var(--accent-cyan)]/10 px-3 py-1 text-xs font-medium text-[var(--accent-cyan)]">
+                <span className="rounded-full border border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/12 px-3 py-1 text-xs font-medium text-[var(--accent-primary-strong)]">
                   Model: GPT-5.3
                 </span>
-                <span className="rounded-full border border-[var(--accent-magenta)]/35 bg-[var(--accent-magenta)]/10 px-3 py-1 text-xs font-medium text-[var(--accent-magenta)]">
+                <span className="rounded-full border border-white/15 bg-white/[0.03] px-3 py-1 text-xs font-medium text-[var(--text-muted)]">
                   Streaming On
                 </span>
               </div>
@@ -214,7 +214,7 @@ export default function Home() {
                   style={{ animationDelay: `${index * 80}ms` }}
                 >
                   {!isUser ? (
-                    <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--accent-cyan)] to-[var(--accent-magenta)] text-[10px] font-bold text-slate-950">
+                    <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--accent-primary)]/35 bg-[var(--accent-soft)] text-[10px] font-bold text-[var(--accent-primary-strong)]">
                       {roleBadge(message.role)}
                     </div>
                   ) : null}
@@ -222,7 +222,7 @@ export default function Home() {
                   <div
                     className={`max-w-[85%] rounded-2xl border px-4 py-3 sm:max-w-[75%] ${
                       isUser
-                        ? "border-[var(--accent-magenta)]/45 bg-[var(--accent-magenta)]/16"
+                        ? "border-[var(--accent-primary)]/45 bg-[var(--accent-primary)]/14"
                         : "border-white/10 bg-white/[0.04]"
                     }`}
                   >
@@ -236,7 +236,7 @@ export default function Home() {
             })}
 
             <article className="message-enter flex gap-3" style={{ animationDelay: "420ms" }}>
-              <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--accent-cyan)] to-[var(--accent-magenta)] text-[10px] font-bold text-slate-950">
+              <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--accent-primary)]/35 bg-[var(--accent-soft)] text-[10px] font-bold text-[var(--accent-primary-strong)]">
                 AI
               </div>
               <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
@@ -252,7 +252,7 @@ export default function Home() {
               {suggestions.map((suggestion) => (
                 <button
                   key={suggestion}
-                  className="rounded-full border border-white/12 bg-white/[0.03] px-3 py-1 text-xs text-[var(--text-muted)] transition hover:border-[var(--accent-cyan)]/50 hover:text-[var(--text-primary)]"
+                  className="rounded-full border border-white/12 bg-white/[0.03] px-3 py-1 text-xs text-[var(--text-muted)] transition hover:border-[var(--accent-primary)]/45 hover:text-[var(--text-primary)]"
                 >
                   {suggestion}
                 </button>
@@ -268,7 +268,7 @@ export default function Home() {
                 className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-1 py-1 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-dim)]"
                 placeholder="Ask OpenChat to draft, summarize, or brainstorm..."
               />
-              <button className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-magenta)] px-3 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110">
+              <button className="inline-flex items-center gap-2 rounded-xl border border-[var(--accent-primary)]/45 bg-[var(--accent-primary)]/22 px-3 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:bg-[var(--accent-primary)]/30">
                 Send
                 <SendIcon />
               </button>
@@ -308,7 +308,7 @@ export default function Home() {
                   {tool}
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-white/20 accent-[var(--accent-cyan)]"
+                    className="h-4 w-4 rounded border-white/20 accent-[var(--accent-primary)]"
                     defaultChecked={tool !== "Image insights"}
                   />
                 </label>
