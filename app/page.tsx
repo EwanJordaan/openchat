@@ -134,12 +134,12 @@ export default function Home() {
                   <p className="text-xs text-[var(--text-muted)]">Workspace Alpha</p>
                 </div>
               </div>
-              <button className="rounded-lg border border-white/15 px-2 py-1 text-xs text-[var(--text-muted)] transition hover:border-[var(--accent-primary)]/50 hover:text-[var(--text-primary)]">
+              <button className="rounded-lg border border-white/15 bg-[var(--accent-primary)]/8 px-2 py-1 text-xs text-[var(--text-muted)] transition hover:border-[var(--accent-primary)]/60 hover:bg-[var(--accent-primary)]/16 hover:text-[var(--accent-primary-strong)]">
                 Ctrl+K
               </button>
             </div>
 
-            <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--accent-primary)]/50 bg-[var(--accent-primary)]/22 px-3 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:bg-[var(--accent-primary)]/30">
+            <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] px-3 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110">
               <SparkIcon />
               New conversation
             </button>
@@ -151,8 +151,8 @@ export default function Home() {
                 key={conversation.title}
                 className={`w-full rounded-xl border px-3 py-2 text-left transition ${
                   conversation.active
-                    ? "border-[var(--accent-primary)]/50 bg-[var(--accent-primary)]/13"
-                    : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+                    ? "border-[var(--accent-secondary)]/55 bg-[var(--accent-secondary)]/14"
+                    : "border-white/10 bg-white/[0.03] hover:border-[var(--accent-primary)]/28 hover:bg-[var(--accent-primary)]/8"
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -163,7 +163,7 @@ export default function Home() {
                   {conversation.preview}
                 </p>
                 {conversation.pinned ? (
-                  <span className="mt-2 inline-flex rounded-full border border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/12 px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--accent-primary-strong)]">
+                  <span className="mt-2 inline-flex rounded-full border border-[var(--accent-primary)]/42 bg-[var(--accent-primary)]/16 px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--accent-primary-strong)]">
                     Pinned
                   </span>
                 ) : null}
@@ -184,20 +184,20 @@ export default function Home() {
                 </h1>
               </div>
               <div className="hidden items-center gap-2 sm:flex">
-                <span className="rounded-full border border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/12 px-3 py-1 text-xs font-medium text-[var(--accent-primary-strong)]">
+                <span className="rounded-full border border-[var(--accent-primary)]/42 bg-[var(--accent-primary)]/15 px-3 py-1 text-xs font-medium text-[var(--accent-primary-strong)]">
                   Model: GPT-5.3
                 </span>
-                <span className="rounded-full border border-white/15 bg-white/[0.03] px-3 py-1 text-xs font-medium text-[var(--text-muted)]">
+                <span className="rounded-full border border-[var(--accent-secondary)]/45 bg-[var(--accent-secondary)]/16 px-3 py-1 text-xs font-medium text-[var(--accent-secondary-strong)]">
                   Streaming On
                 </span>
               </div>
             </div>
 
             <div className="mt-3 flex gap-2 sm:hidden">
-              <button className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-[var(--text-muted)]">
+              <button className="rounded-lg border border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/14 px-3 py-1.5 text-xs text-[var(--accent-primary-strong)] transition hover:bg-[var(--accent-primary)]/22">
                 Menu
               </button>
-              <button className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-[var(--text-muted)]">
+              <button className="rounded-lg border border-[var(--accent-secondary)]/35 bg-[var(--accent-secondary)]/14 px-3 py-1.5 text-xs text-[var(--accent-secondary-strong)] transition hover:bg-[var(--accent-secondary)]/22">
                 Context
               </button>
             </div>
@@ -214,7 +214,7 @@ export default function Home() {
                   style={{ animationDelay: `${index * 80}ms` }}
                 >
                   {!isUser ? (
-                    <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--accent-primary)]/35 bg-[var(--accent-soft)] text-[10px] font-bold text-[var(--accent-primary-strong)]">
+                    <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] text-[10px] font-bold text-slate-950">
                       {roleBadge(message.role)}
                     </div>
                   ) : null}
@@ -222,7 +222,7 @@ export default function Home() {
                   <div
                     className={`max-w-[85%] rounded-2xl border px-4 py-3 sm:max-w-[75%] ${
                       isUser
-                        ? "border-[var(--accent-primary)]/45 bg-[var(--accent-primary)]/14"
+                        ? "border-[var(--accent-secondary)]/45 bg-[var(--accent-secondary)]/16"
                         : "border-white/10 bg-white/[0.04]"
                     }`}
                   >
@@ -236,7 +236,7 @@ export default function Home() {
             })}
 
             <article className="message-enter flex gap-3" style={{ animationDelay: "420ms" }}>
-              <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--accent-primary)]/35 bg-[var(--accent-soft)] text-[10px] font-bold text-[var(--accent-primary-strong)]">
+              <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] text-[10px] font-bold text-slate-950">
                 AI
               </div>
               <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
@@ -252,7 +252,7 @@ export default function Home() {
               {suggestions.map((suggestion) => (
                 <button
                   key={suggestion}
-                  className="rounded-full border border-white/12 bg-white/[0.03] px-3 py-1 text-xs text-[var(--text-muted)] transition hover:border-[var(--accent-primary)]/45 hover:text-[var(--text-primary)]"
+                  className="rounded-full border border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/10 px-3 py-1 text-xs text-[var(--text-muted)] transition hover:border-[var(--accent-secondary)]/40 hover:bg-[var(--accent-secondary)]/14 hover:text-[var(--text-primary)]"
                 >
                   {suggestion}
                 </button>
@@ -260,7 +260,7 @@ export default function Home() {
             </div>
 
             <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-2">
-              <button className="rounded-xl border border-white/15 p-2 text-[var(--text-muted)] transition hover:text-[var(--text-primary)]">
+              <button className="rounded-xl border border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/12 p-2 text-[var(--accent-primary-strong)] transition hover:bg-[var(--accent-primary)]/20">
                 +
               </button>
               <textarea
@@ -268,7 +268,7 @@ export default function Home() {
                 className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-1 py-1 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-dim)]"
                 placeholder="Ask OpenChat to draft, summarize, or brainstorm..."
               />
-              <button className="inline-flex items-center gap-2 rounded-xl border border-[var(--accent-primary)]/45 bg-[var(--accent-primary)]/22 px-3 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:bg-[var(--accent-primary)]/30">
+              <button className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] px-3 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110">
                 Send
                 <SendIcon />
               </button>

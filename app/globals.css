@@ -7,8 +7,10 @@
   --text-primary: #dbe7f4;
   --text-muted: #a8b6c9;
   --text-dim: #76879d;
-  --accent-primary: #84a4c6;
-  --accent-primary-strong: #a8c2dc;
+  --accent-primary: #31bfd3;
+  --accent-primary-strong: #9ce6f1;
+  --accent-secondary: #e889bc;
+  --accent-secondary-strong: #f2b3d4;
   --accent-soft: #1b2a3b;
 }
 
@@ -26,8 +28,8 @@
 body {
   min-height: 100vh;
   background:
-    radial-gradient(circle at 14% 16%, color-mix(in srgb, var(--accent-primary) 18%, transparent), transparent 34%),
-    radial-gradient(circle at 88% 10%, color-mix(in srgb, #8596ab 11%, transparent), transparent 38%),
+    radial-gradient(circle at 14% 16%, color-mix(in srgb, var(--accent-primary) 24%, transparent), transparent 34%),
+    radial-gradient(circle at 88% 10%, color-mix(in srgb, var(--accent-secondary) 18%, transparent), transparent 38%),
     linear-gradient(155deg, #091018 0%, #0d141d 48%, #0a111a 100%);
   color: var(--text-primary);
   font-family: var(--font-space-grotesk), "Segoe UI", sans-serif;
@@ -68,15 +70,15 @@ body {
   color: #f2f7fe;
   background: linear-gradient(
     140deg,
-    color-mix(in srgb, var(--accent-primary) 86%, white 14%),
-    color-mix(in srgb, var(--accent-primary) 72%, #152638 28%)
+    color-mix(in srgb, var(--accent-primary) 88%, white 12%),
+    color-mix(in srgb, var(--accent-secondary) 80%, #1a2a3c 20%)
   );
 }
 
 .ambient-orb {
   position: absolute;
   filter: blur(72px);
-  opacity: 0.2;
+  opacity: 0.28;
   pointer-events: none;
   animation: orbit 18s ease-in-out infinite;
 }
@@ -86,7 +88,7 @@ body {
   right: min(8%, 6rem);
   width: 22rem;
   height: 22rem;
-  background: color-mix(in srgb, var(--accent-primary) 42%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 52%, transparent);
 }
 
 .ambient-orb-b {
@@ -94,7 +96,7 @@ body {
   left: min(8%, 5rem);
   width: 18rem;
   height: 18rem;
-  background: color-mix(in srgb, #6f8299 33%, transparent);
+  background: color-mix(in srgb, var(--accent-secondary) 45%, transparent);
   animation-delay: 1.8s;
 }
 
