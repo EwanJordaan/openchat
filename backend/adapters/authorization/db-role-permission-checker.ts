@@ -1,7 +1,12 @@
 import type { Principal } from "@/backend/domain/principal";
 import type { AuthorizationResource, PermissionChecker } from "@/backend/ports/permission-checker";
 
-const MEMBER_ACTIONS = new Set(["project.read", "project.create"]);
+const MEMBER_ACTIONS = new Set([
+  "project.read",
+  "project.create",
+]);
+
+const AUTHENTICATED_ACTIONS = new Set(["chat.read", "chat.create", "chat.message.create"]);
 
 export class DbRolePermissionChecker implements PermissionChecker {
   async can(
@@ -26,6 +31,10 @@ export class DbRolePermissionChecker implements PermissionChecker {
     }
 
     if (action === "user.update.self") {
+      return true;
+    }
+
+    if (AUTHENTICATED_ACTIONS.has(action)) {
       return true;
     }
 

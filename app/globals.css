@@ -1,6 +1,43 @@
 @import "tailwindcss";
 
-:root {
+:root,
+:root[data-theme="default"],
+body[data-theme="default"] {
+  --bg-root: #17181b;
+  --bg-panel: #222429;
+  --bg-panel-soft: #2a2d34;
+  --text-primary: #ebedf1;
+  --text-muted: #bcc2cc;
+  --text-dim: #939baa;
+  --accent-primary: #59606a;
+  --accent-primary-strong: #d9dfe9;
+  --accent-secondary: #505763;
+  --accent-secondary-strong: #d0d7e1;
+  --accent-soft: #3d424b;
+  --send-button-bg: #1dc7c9;
+  --send-button-fg: #06292d;
+  --surface-border: rgba(255, 255, 255, 0.1);
+  --surface-background: var(--bg-panel);
+  --surface-soft-background: var(--bg-panel-soft);
+  --surface-radius: 0px;
+  --surface-soft-radius: 0px;
+  --surface-shadow: none;
+  --surface-soft-shadow: none;
+  --surface-backdrop-blur: 0px;
+  --surface-soft-backdrop-blur: 0px;
+  --brand-chip-background: #2a2d33;
+  --brand-chip-color: #e5e9ef;
+  --ambient-orb-opacity: 0;
+  --ambient-orb-blur: 64px;
+  --ambient-orb-display: none;
+  --body-background: linear-gradient(180deg, #17181b 0%, #17181b 100%);
+  --layout-shell-gap: 0px;
+  --layout-shell-padding: 0px;
+  --layout-shell-max-width: 100%;
+}
+
+:root[data-theme="galaxy"],
+body[data-theme="galaxy"] {
   --bg-root: #0b1118;
   --bg-panel: rgba(12, 18, 27, 0.82);
   --bg-panel-soft: rgba(14, 21, 30, 0.62);
@@ -12,6 +49,195 @@
   --accent-secondary: #e889bc;
   --accent-secondary-strong: #f2b3d4;
   --accent-soft: #1b2a3b;
+  --send-button-bg: #e889bc;
+  --send-button-fg: #1a0d14;
+  --surface-border: color-mix(in srgb, white 12%, transparent);
+  --surface-background: linear-gradient(
+    170deg,
+    color-mix(in srgb, var(--bg-panel) 94%, white 6%),
+    color-mix(in srgb, var(--bg-panel) 98%, black 2%)
+  );
+  --surface-soft-background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-panel-soft) 96%, white 4%),
+    color-mix(in srgb, var(--bg-panel-soft) 99%, black 1%)
+  );
+  --surface-radius: 1.25rem;
+  --surface-soft-radius: 1rem;
+  --surface-shadow:
+    0 20px 55px rgba(2, 7, 14, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --surface-soft-shadow: 0 12px 35px rgba(0, 0, 0, 0.28);
+  --surface-backdrop-blur: 10px;
+  --surface-soft-backdrop-blur: 8px;
+  --brand-chip-background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--accent-primary) 88%, white 12%),
+    color-mix(in srgb, var(--accent-secondary) 80%, #1a2a3c 20%)
+  );
+  --brand-chip-color: #f2f7fe;
+  --ambient-orb-opacity: 0.28;
+  --ambient-orb-blur: 72px;
+  --ambient-orb-display: block;
+  --body-background:
+    radial-gradient(circle at 14% 16%, color-mix(in srgb, var(--accent-primary) 24%, transparent), transparent 34%),
+    radial-gradient(circle at 88% 10%, color-mix(in srgb, var(--accent-secondary) 18%, transparent), transparent 38%),
+    linear-gradient(155deg, #091018 0%, #0d141d 48%, #0a111a 100%);
+  --layout-shell-gap: 0.75rem;
+  --layout-shell-padding: 0.75rem;
+  --layout-shell-max-width: 1600px;
+}
+
+:root[data-theme="aurora"],
+body[data-theme="aurora"] {
+  --bg-root: #08191a;
+  --bg-panel: rgba(10, 34, 36, 0.84);
+  --bg-panel-soft: rgba(11, 30, 31, 0.68);
+  --text-primary: #d8f0ea;
+  --text-muted: #9fcfc6;
+  --text-dim: #6ea198;
+  --accent-primary: #52cfbe;
+  --accent-primary-strong: #b7f5ea;
+  --accent-secondary: #5aa4db;
+  --accent-secondary-strong: #b8ddf8;
+  --accent-soft: #19393a;
+  --send-button-bg: #5aa4db;
+  --send-button-fg: #061e35;
+  --surface-border: color-mix(in srgb, #8ff3de 20%, transparent);
+  --surface-background: linear-gradient(
+    170deg,
+    color-mix(in srgb, var(--bg-panel) 94%, white 6%),
+    color-mix(in srgb, var(--bg-panel) 98%, black 2%)
+  );
+  --surface-soft-background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-panel-soft) 96%, white 4%),
+    color-mix(in srgb, var(--bg-panel-soft) 99%, black 1%)
+  );
+  --surface-radius: 1.2rem;
+  --surface-soft-radius: 0.95rem;
+  --surface-shadow: 0 18px 46px rgba(1, 17, 19, 0.45);
+  --surface-soft-shadow: 0 10px 28px rgba(0, 0, 0, 0.26);
+  --surface-backdrop-blur: 9px;
+  --surface-soft-backdrop-blur: 7px;
+  --brand-chip-background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--accent-primary) 88%, white 12%),
+    color-mix(in srgb, var(--accent-secondary) 80%, #1a2a3c 20%)
+  );
+  --brand-chip-color: #f2f7fe;
+  --ambient-orb-opacity: 0.22;
+  --ambient-orb-blur: 74px;
+  --ambient-orb-display: block;
+  --body-background:
+    radial-gradient(circle at 16% 12%, color-mix(in srgb, #52cfbe 22%, transparent), transparent 33%),
+    radial-gradient(circle at 84% 16%, color-mix(in srgb, #5aa4db 20%, transparent), transparent 37%),
+    linear-gradient(155deg, #061313 0%, #092124 52%, #07171a 100%);
+  --layout-shell-gap: 0.75rem;
+  --layout-shell-padding: 0.75rem;
+  --layout-shell-max-width: 1600px;
+}
+
+:root[data-theme="sunset"],
+body[data-theme="sunset"] {
+  --bg-root: #261d20;
+  --bg-panel: rgba(46, 31, 35, 0.86);
+  --bg-panel-soft: rgba(42, 29, 33, 0.7);
+  --text-primary: #f7e8dd;
+  --text-muted: #dfc0ad;
+  --text-dim: #bd9580;
+  --accent-primary: #f29a6b;
+  --accent-primary-strong: #ffd5be;
+  --accent-secondary: #e86a8c;
+  --accent-secondary-strong: #f7b6ca;
+  --accent-soft: #4a3137;
+  --send-button-bg: #f29a6b;
+  --send-button-fg: #32170f;
+  --surface-border: color-mix(in srgb, #ffd8bf 18%, transparent);
+  --surface-background: linear-gradient(
+    170deg,
+    color-mix(in srgb, var(--bg-panel) 94%, white 6%),
+    color-mix(in srgb, var(--bg-panel) 98%, black 2%)
+  );
+  --surface-soft-background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-panel-soft) 96%, white 4%),
+    color-mix(in srgb, var(--bg-panel-soft) 99%, black 1%)
+  );
+  --surface-radius: 1.18rem;
+  --surface-soft-radius: 0.92rem;
+  --surface-shadow: 0 18px 44px rgba(24, 9, 12, 0.46);
+  --surface-soft-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+  --surface-backdrop-blur: 8px;
+  --surface-soft-backdrop-blur: 6px;
+  --brand-chip-background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--accent-primary) 88%, white 12%),
+    color-mix(in srgb, var(--accent-secondary) 80%, #1a2a3c 20%)
+  );
+  --brand-chip-color: #f2f7fe;
+  --ambient-orb-opacity: 0.2;
+  --ambient-orb-blur: 72px;
+  --ambient-orb-display: block;
+  --body-background:
+    radial-gradient(circle at 15% 16%, color-mix(in srgb, #f29a6b 25%, transparent), transparent 36%),
+    radial-gradient(circle at 83% 12%, color-mix(in srgb, #e86a8c 18%, transparent), transparent 40%),
+    linear-gradient(158deg, #201518 0%, #2c1e23 52%, #221719 100%);
+  --layout-shell-gap: 0.75rem;
+  --layout-shell-padding: 0.75rem;
+  --layout-shell-max-width: 1600px;
+}
+
+:root[data-theme="midnight"],
+body[data-theme="midnight"] {
+  --bg-root: #080c14;
+  --bg-panel: rgba(10, 14, 23, 0.88);
+  --bg-panel-soft: rgba(12, 17, 27, 0.74);
+  --text-primary: #dce4f2;
+  --text-muted: #aab8cd;
+  --text-dim: #75859d;
+  --accent-primary: #7a8fb5;
+  --accent-primary-strong: #d2def4;
+  --accent-secondary: #6d7ea2;
+  --accent-secondary-strong: #b9c7e4;
+  --accent-soft: #1a2235;
+  --send-button-bg: #7a8fb5;
+  --send-button-fg: #0a111d;
+  --surface-border: color-mix(in srgb, #cad8f3 14%, transparent);
+  --surface-background: linear-gradient(
+    170deg,
+    color-mix(in srgb, var(--bg-panel) 94%, white 6%),
+    color-mix(in srgb, var(--bg-panel) 98%, black 2%)
+  );
+  --surface-soft-background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-panel-soft) 96%, white 4%),
+    color-mix(in srgb, var(--bg-panel-soft) 99%, black 1%)
+  );
+  --surface-radius: 1.16rem;
+  --surface-soft-radius: 0.92rem;
+  --surface-shadow:
+    0 20px 50px rgba(2, 6, 12, 0.58),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --surface-soft-shadow: 0 12px 30px rgba(0, 0, 0, 0.34);
+  --surface-backdrop-blur: 10px;
+  --surface-soft-backdrop-blur: 7px;
+  --brand-chip-background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--accent-primary) 88%, white 12%),
+    color-mix(in srgb, var(--accent-secondary) 80%, #1a2a3c 20%)
+  );
+  --brand-chip-color: #f2f7fe;
+  --ambient-orb-opacity: 0.16;
+  --ambient-orb-blur: 78px;
+  --ambient-orb-display: block;
+  --body-background:
+    radial-gradient(circle at 20% 14%, color-mix(in srgb, #7a8fb5 17%, transparent), transparent 36%),
+    radial-gradient(circle at 86% 9%, color-mix(in srgb, #6d7ea2 14%, transparent), transparent 41%),
+    linear-gradient(160deg, #060a12 0%, #0a111c 54%, #070d16 100%);
+  --layout-shell-gap: 0.75rem;
+  --layout-shell-padding: 0.75rem;
+  --layout-shell-max-width: 1600px;
 }
 
 @theme inline {
@@ -37,38 +263,59 @@ button:disabled,
 
 body {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 14% 16%, color-mix(in srgb, var(--accent-primary) 24%, transparent), transparent 34%),
-    radial-gradient(circle at 88% 10%, color-mix(in srgb, var(--accent-secondary) 18%, transparent), transparent 38%),
-    linear-gradient(155deg, #091018 0%, #0d141d 48%, #0a111a 100%);
+  background: var(--body-background);
   color: var(--text-primary);
   font-family: var(--font-space-grotesk), "Segoe UI", sans-serif;
 }
 
+.app-shell {
+  max-width: var(--layout-shell-max-width);
+  gap: var(--layout-shell-gap);
+  padding: var(--layout-shell-padding);
+}
+
+@media (min-width: 640px) {
+  :root[data-theme="galaxy"] .app-shell,
+  :root[data-theme="aurora"] .app-shell,
+  :root[data-theme="sunset"] .app-shell,
+  :root[data-theme="midnight"] .app-shell,
+  body[data-theme="galaxy"] .app-shell,
+  body[data-theme="aurora"] .app-shell,
+  body[data-theme="sunset"] .app-shell,
+  body[data-theme="midnight"] .app-shell {
+    gap: 1rem;
+    padding: 1rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root[data-theme="galaxy"] .app-shell,
+  :root[data-theme="aurora"] .app-shell,
+  :root[data-theme="sunset"] .app-shell,
+  :root[data-theme="midnight"] .app-shell,
+  body[data-theme="galaxy"] .app-shell,
+  body[data-theme="aurora"] .app-shell,
+  body[data-theme="sunset"] .app-shell,
+  body[data-theme="midnight"] .app-shell {
+    gap: 1.25rem;
+    padding: 1.25rem;
+  }
+}
+
 .surface {
-  border: 1px solid color-mix(in srgb, white 12%, transparent);
-  background: linear-gradient(
-    170deg,
-    color-mix(in srgb, var(--bg-panel) 94%, white 6%),
-    color-mix(in srgb, var(--bg-panel) 98%, black 2%)
-  );
-  border-radius: 1.25rem;
-  box-shadow:
-    0 20px 55px rgba(2, 7, 14, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
+  border: 1px solid var(--surface-border);
+  background: var(--surface-background);
+  border-radius: var(--surface-radius);
+  box-shadow: var(--surface-shadow);
+  backdrop-filter: blur(var(--surface-backdrop-blur));
 }
 
 .surface-soft {
-  border: 1px solid color-mix(in srgb, white 12%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-panel-soft) 96%, white 4%),
-    color-mix(in srgb, var(--bg-panel-soft) 99%, black 1%)
-  );
-  border-radius: 1rem;
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(8px);
+  border: 1px solid var(--surface-border);
+  background: var(--surface-soft-background);
+  border-radius: var(--surface-soft-radius);
+  box-shadow: var(--surface-soft-shadow);
+  backdrop-filter: blur(var(--surface-soft-backdrop-blur));
 }
 
 .brand-chip {
@@ -77,18 +324,15 @@ body {
   justify-content: center;
   border-radius: 0.75rem;
   padding: 0.4rem;
-  color: #f2f7fe;
-  background: linear-gradient(
-    140deg,
-    color-mix(in srgb, var(--accent-primary) 88%, white 12%),
-    color-mix(in srgb, var(--accent-secondary) 80%, #1a2a3c 20%)
-  );
+  color: var(--brand-chip-color);
+  background: var(--brand-chip-background);
 }
 
 .ambient-orb {
+  display: var(--ambient-orb-display);
   position: absolute;
-  filter: blur(72px);
-  opacity: 0.28;
+  filter: blur(var(--ambient-orb-blur));
+  opacity: var(--ambient-orb-opacity);
   pointer-events: none;
   animation: orbit 18s ease-in-out infinite;
 }
@@ -108,6 +352,92 @@ body {
   height: 18rem;
   background: color-mix(in srgb, var(--accent-secondary) 45%, transparent);
   animation-delay: 1.8s;
+}
+
+.chat-history-link {
+  border: 1px solid color-mix(in srgb, white 10%, transparent);
+  background: color-mix(in srgb, white 3%, transparent);
+  border-radius: 0.7rem;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.chat-history-link:hover,
+.chat-history-link:focus-visible {
+  border-color: color-mix(in srgb, var(--accent-primary) 28%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+}
+
+.chat-history-link[data-active="true"] {
+  border-color: color-mix(in srgb, var(--accent-secondary) 55%, transparent);
+  background: color-mix(in srgb, var(--accent-secondary) 14%, transparent);
+}
+
+:root[data-theme="default"] .chat-history-list > :not([hidden]) ~ :not([hidden]),
+body[data-theme="default"] .chat-history-list > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0 !important;
+}
+
+:root[data-theme="default"] .chat-history-link,
+body[data-theme="default"] .chat-history-link {
+  border-color: transparent !important;
+  background: transparent !important;
+  border-radius: 0.7rem;
+  box-shadow: none !important;
+}
+
+:root[data-theme="default"] .chat-history-link[data-active="true"],
+body[data-theme="default"] .chat-history-link[data-active="true"] {
+  border-color: color-mix(in srgb, white 16%, transparent) !important;
+  background: color-mix(in srgb, var(--bg-panel-soft) 82%, transparent) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="default"] .chat-history-link[data-active="true"]:hover,
+:root[data-theme="default"] .chat-history-link[data-active="true"]:focus-visible,
+body[data-theme="default"] .chat-history-link[data-active="true"]:hover,
+body[data-theme="default"] .chat-history-link[data-active="true"]:focus-visible {
+  border-color: color-mix(in srgb, white 16%, transparent) !important;
+  background: color-mix(in srgb, var(--bg-panel-soft) 82%, transparent) !important;
+}
+
+:root[data-theme="default"] .chat-history-link:hover,
+:root[data-theme="default"] .chat-history-link:focus-visible,
+body[data-theme="default"] .chat-history-link:hover,
+body[data-theme="default"] .chat-history-link:focus-visible {
+  border-color: color-mix(in srgb, white 16%, transparent) !important;
+  background: color-mix(in srgb, var(--bg-panel-soft) 82%, transparent) !important;
+}
+
+:root[data-theme="default"] .new-chat-button,
+body[data-theme="default"] .new-chat-button {
+  border-radius: 0.8rem;
+}
+
+:root[data-theme="default"] .composer-shell,
+body[data-theme="default"] .composer-shell {
+  border-radius: 0.9rem;
+}
+
+:root[data-theme="default"] .message-user-bubble,
+body[data-theme="default"] .message-user-bubble {
+  border-radius: 1rem;
+}
+
+:root[data-theme="default"] .workspace-sidebar,
+:root[data-theme="default"] .workspace-main,
+body[data-theme="default"] .workspace-sidebar,
+body[data-theme="default"] .workspace-main {
+  min-height: 100vh;
+}
+
+:root[data-theme="default"] .workspace-sidebar,
+body[data-theme="default"] .workspace-sidebar {
+  border-right-width: 0;
+}
+
+:root[data-theme="default"] .workspace-main,
+body[data-theme="default"] .workspace-main {
+  border-left-width: 1px;
 }
 
 .message-enter {

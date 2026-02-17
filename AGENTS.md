@@ -6,7 +6,7 @@ This file helps coding agents quickly understand and safely modify this reposito
 
 - Name: `openchat`
 - Type: Next.js App Router app with UI + REST backend scaffold
-- Current state: polished frontend demo plus backend MVP architecture (multi-issuer auth + adapter-based data layer), with login/register and account settings/profile avatar flows
+- Current state: polished frontend demo plus backend MVP architecture (multi-issuer auth + adapter-based data layer), with login/register, account settings/profile avatar flows, and persisted owner-scoped chats
 - Goal: provide a baseline chat experience with portable backend foundations (Auth + DB adapters)
 
 ## Tech stack
@@ -35,17 +35,17 @@ This file helps coding agents quickly understand and safely modify this reposito
   - Authenticated account settings UI.
   - Profile editing, avatar upload/remove, session/provider details.
 - `app/api/v1/*`
-  - MVP REST routes (`health`, `me`, `projects`, `auth`).
+  - MVP REST routes (`health`, `me`, `projects`, `chats`, `auth`).
 - `backend/domain/*`
   - Core backend entities (`Principal`, `User`, `Project`).
 - `backend/application/*`
-  - Use-cases (`GetCurrentUser`, `ListProjects`, `CreateProject`, `GetProjectById`).
+  - Use-cases (`GetCurrentUser`, `ListProjects`, `CreateProject`, `GetProjectById`, chat list/get/create/append).
 - `backend/ports/*`
   - Contracts for auth context, permission checking, repositories, and unit-of-work.
 - `backend/adapters/auth/*`
   - Multi-issuer JWT verification, claim mapping, and JIT user provisioning.
 - `backend/adapters/db/postgres/*`
-  - Postgres repositories, transaction unit-of-work, SQL migration.
+  - Postgres repositories, transaction unit-of-work, SQL migrations.
 - `backend/adapters/db/convex/*`
   - In-memory fallback adapter used when `BACKEND_DB_ADAPTER=convex`.
 - `backend/transport/rest/*`
@@ -116,6 +116,7 @@ Auth0 requirements:
 
 - Apply `backend/adapters/db/postgres/migrations/001_initial.sql` before using protected endpoints.
 - Apply `backend/adapters/db/postgres/migrations/002_user_profile_avatar.sql` for account avatar support.
+- Apply `backend/adapters/db/postgres/migrations/003_chats.sql` for persisted chats/messages.
 - Neon uses the same schema/queries as local Postgres (swap only `DATABASE_URL`).
 
 ## MVP API routes
@@ -129,6 +130,10 @@ Auth0 requirements:
 - `GET /api/v1/projects`
 - `POST /api/v1/projects`
 - `GET /api/v1/projects/:id`
+- `GET /api/v1/chats`
+- `POST /api/v1/chats`
+- `GET /api/v1/chats/:id`
+- `POST /api/v1/chats/:id/messages`
 - `GET /api/v1/auth/providers`
 - `GET /api/v1/auth/:provider/start?mode=login|register`
 - `GET /api/v1/auth/:provider/callback`
@@ -204,7 +209,7 @@ Notes:
 
 ## Known limitations
 
-- No frontend-to-backend chat wiring yet (UI still uses mock data).
+- Assistant replies are still temporary placeholder responses (persisted to chat history).
 - Convex mode is an in-memory fallback adapter (not a persisted Convex backend).
 - No repository contract tests yet.
 - No rate limiting/audit logging/idempotency yet.

@@ -1,103 +1,110 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
-import { type CurrentUserData, fetchCurrentUser, getDisplayName } from "@/app/lib/current-user";
+import { type Chat, type ChatWithMessages } from "@/backend/domain/chat";
+import {
+  appendChatMessage,
+  ChatApiError,
+  clearChatCache,
+  createChatFromMessage,
+  fetchChatById,
+  fetchChats,
+  getCachedChatsSnapshot,
+} from "@/app/lib/chats";
+import {
+  clearCurrentUserCache,
+  type CurrentUserData,
+  fetchCurrentUser,
+  getCachedCurrentUser,
+  getDisplayName,
+} from "@/app/lib/current-user";
+import { getPublicSiteConfig } from "@/app/lib/site-config";
 import { ProfileAvatar } from "@/components/profile-avatar";
+import { buildTemporaryAssistantResponse } from "@/shared/temporary-assistant-response";
 
 type Role = "assistant" | "user" | "system";
 
-type Conversation = {
-  title: string;
-  preview: string;
-  time: string;
-  pinned?: boolean;
-  active?: boolean;
-};
-
 type Message = {
+  id: string;
   role: Role;
   content: string;
   time: string;
 };
 
-const conversations: Conversation[] = [
-  {
-    title: "Landing page copy refresh",
-    preview: "Drafting two variants with a calmer CTA.",
-    time: "2m",
-    pinned: true,
-    active: true,
-  },
-  {
-    title: "Weekly product digest",
-    preview: "Summaries are ready, adding key takeaways.",
-    time: "18m",
-    pinned: true,
-  },
-  {
-    title: "Support macro writing",
-    preview: "Polished response templates in plain tone.",
-    time: "1h",
-  },
-  {
-    title: "Recruiting outreach",
-    preview: "Follow-up sequence with subject line tests.",
-    time: "3h",
-  },
-  {
-    title: "Roadmap brainstorming",
-    preview: "Tradeoffs for Q2 backlog re-prioritization.",
-    time: "Yesterday",
-  },
-];
+const publicSiteConfig = getPublicSiteConfig();
 
-const initialMessages: Message[] = [
-  {
-    role: "system",
-    content:
-      "You are assisting with product messaging. Keep answers concise, grounded, and action-oriented.",
-    time: "10:02",
-  },
-  {
-    role: "user",
-    content:
-      "Give me a homepage hero section for an AI support copilot targeted at SaaS teams. Keep it bold but not too hype.",
-    time: "10:04",
-  },
-  {
-    role: "assistant",
-    content:
-      "Here is a clean direction:\n\n**Headline**: Resolve tickets in half the time, with answers your team can trust.\n\n**Subheadline**: OpenChat learns your docs, past resolutions, and product tone so every reply is faster, clearer, and on-brand.\n\n**Primary CTA**: Start free\n\n**Secondary CTA**: See a live demo",
-    time: "10:05",
-  },
-  {
-    role: "user",
-    content:
-      "Nice. Add three value bullets under it focused on impact for support leaders.",
-    time: "10:06",
-  },
-  {
-    role: "assistant",
-    content:
-      "- Increase first-response speed with AI-assisted drafts that agents can send in seconds.\n- Improve consistency with policy-aware answers grounded in your internal knowledge base.\n- Track quality and deflection trends with built-in analytics for coaching and planning.",
-    time: "10:07",
-  },
-];
-
-function getCurrentTimeLabel() {
+function getCurrentTimeLabel(date = new Date()) {
   return new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-  }).format(new Date());
+  }).format(date);
 }
 
-function getTemporaryAssistantMessage(userMessage: string) {
-  // TODO: Replace this with the real function/API call that gets assistant messages.
-  return `Temporary response: I can help with this request. Next, wire this to your backend so replies come from the model.\n\nYou said: "${userMessage}"`;
+function mapChatMessages(payload: ChatWithMessages): Message[] {
+  const sortedMessages = [...payload.messages].sort((a, b) => {
+    const leftTime = Date.parse(a.createdAt);
+    const rightTime = Date.parse(b.createdAt);
+
+    const safeLeftTime = Number.isNaN(leftTime) ? 0 : leftTime;
+    const safeRightTime = Number.isNaN(rightTime) ? 0 : rightTime;
+
+    if (safeLeftTime !== safeRightTime) {
+      return safeLeftTime - safeRightTime;
+    }
+
+    const rolePriority = getRolePriority(a.role) - getRolePriority(b.role);
+    if (rolePriority !== 0) {
+      return rolePriority;
+    }
+
+    return a.id.localeCompare(b.id);
+  });
+
+  return sortedMessages.map((message) => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    time: getCurrentTimeLabel(new Date(message.createdAt)),
+  }));
+}
+
+function getRolePriority(role: Role): number {
+  if (role === "user") {
+    return 0;
+  }
+
+  if (role === "assistant") {
+    return 1;
+  }
+
+  return 2;
+}
+
+function upsertChat(chats: Chat[], updatedChat: Chat): Chat[] {
+  const next = [updatedChat, ...chats.filter((chat) => chat.id !== updatedChat.id)];
+  return next.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function getChatIdFromPathname(pathname: string): string | null {
+  if (!pathname.startsWith("/c/")) {
+    return null;
+  }
+
+  const raw = pathname.slice(3).split("/")[0];
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
 }
 
 function SparkIcon() {
@@ -159,41 +166,73 @@ function UserIcon() {
 }
 
 export default function Home() {
-  const [openMenuTitle, setOpenMenuTitle] = useState<string | null>(null);
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const activeChatId = useMemo(() => getChatIdFromPathname(pathname), [pathname]);
+  const cachedCurrentUser = useMemo(() => getCachedCurrentUser(), []);
+  const cachedChats = useMemo(() => {
+    if (!cachedCurrentUser) {
+      return [];
+    }
+
+    return getCachedChatsSnapshot(cachedCurrentUser.user.id) ?? [];
+  }, [cachedCurrentUser]);
+
+  const [openMenuChatId, setOpenMenuChatId] = useState<string | null>(null);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSidebarContentVisible, setIsSidebarContentVisible] = useState(true);
-  const [chatMessages, setChatMessages] = useState<Message[]>(initialMessages);
+  const [chatMessages, setChatMessages] = useState<Message[]>([]);
+  const [chats, setChats] = useState<Chat[]>(cachedChats);
   const [draft, setDraft] = useState("");
   const [isAssistantTyping, setIsAssistantTyping] = useState(false);
-  const [currentUser, setCurrentUser] = useState<CurrentUserData | null>(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isChatListLoading, setIsChatListLoading] = useState(false);
+  const [isActiveChatLoading, setIsActiveChatLoading] = useState(false);
+  const [isActiveChatMissing, setIsActiveChatMissing] = useState(false);
+  const [currentUser, setCurrentUser] = useState<CurrentUserData | null>(cachedCurrentUser ?? null);
+  const [isAuthLoading, setIsAuthLoading] = useState(cachedCurrentUser === undefined);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
+
   const sidebarContentTimerRef = useRef<number | null>(null);
   const assistantReplyTimerRef = useRef<number | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
-  const hasOpenMenu = openMenuTitle !== null;
 
   useEffect(() => {
-    const controller = new AbortController();
+    if (cachedCurrentUser !== undefined) {
+      return;
+    }
+
+    let isDisposed = false;
 
     async function resolveSession() {
       try {
-        const user = await fetchCurrentUser(controller.signal);
+        const user = await fetchCurrentUser();
+
+        if (isDisposed) {
+          return;
+        }
+
         setCurrentUser(user);
       } catch {
+        if (isDisposed) {
+          return;
+        }
+
         setCurrentUser(null);
       } finally {
-        setIsAuthLoading(false);
+        if (!isDisposed) {
+          setIsAuthLoading(false);
+        }
       }
     }
 
     void resolveSession();
 
     return () => {
-      controller.abort();
+      isDisposed = true;
     };
-  }, []);
+  }, [cachedCurrentUser]);
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
@@ -201,7 +240,7 @@ export default function Home() {
       if (!(target instanceof Element)) return;
 
       if (!target.closest("[data-history-menu]")) {
-        setOpenMenuTitle(null);
+        setOpenMenuChatId(null);
       }
 
       if (!target.closest("[data-profile-menu]")) {
@@ -211,7 +250,7 @@ export default function Home() {
 
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setOpenMenuTitle(null);
+        setOpenMenuChatId(null);
         setIsProfileMenuOpen(false);
       }
     }
@@ -246,8 +285,135 @@ export default function Home() {
     chatContainer.scrollTop = chatContainer.scrollHeight;
   }, [chatMessages, isAssistantTyping]);
 
+  useEffect(() => {
+    if (!currentUser) {
+      setChats([]);
+      return;
+    }
+
+    const userId = currentUser.user.id;
+    const cachedChatList = getCachedChatsSnapshot(userId);
+    if (cachedChatList !== undefined) {
+      setChats(cachedChatList);
+      setIsChatListLoading(false);
+      return;
+    }
+
+    let isDisposed = false;
+
+    async function loadChats() {
+      setIsChatListLoading(true);
+
+      try {
+        const loadedChats = await fetchChats(userId);
+
+        if (isDisposed) {
+          return;
+        }
+
+        setChats(loadedChats);
+      } catch (error) {
+        if (isDisposed) {
+          return;
+        }
+
+        if (error instanceof ChatApiError && error.status === 401) {
+          clearCurrentUserCache();
+          clearChatCache();
+          setCurrentUser(null);
+          setChats([]);
+          return;
+        }
+
+        setAuthNotice("Could not load chats right now.");
+      } finally {
+        if (!isDisposed) {
+          setIsChatListLoading(false);
+        }
+      }
+    }
+
+    void loadChats();
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [currentUser]);
+
+  useEffect(() => {
+    const requestedChatId = activeChatId;
+
+    if (isAuthLoading) {
+      return;
+    }
+
+    if (!requestedChatId) {
+      setIsActiveChatMissing(false);
+      setIsActiveChatLoading(false);
+      setChatMessages([]);
+      return;
+    }
+
+    if (!currentUser) {
+      setIsActiveChatMissing(false);
+      setIsActiveChatLoading(false);
+      setChatMessages([]);
+      return;
+    }
+
+    const chatId = requestedChatId;
+    let isDisposed = false;
+
+    async function loadActiveChat() {
+      setIsActiveChatLoading(true);
+
+      try {
+        const activeChat = await fetchChatById(chatId);
+
+        if (isDisposed) {
+          return;
+        }
+
+        setChatMessages(mapChatMessages(activeChat));
+        setChats((previous) => upsertChat(previous, activeChat.chat));
+        setIsActiveChatMissing(false);
+      } catch (error) {
+        if (isDisposed) {
+          return;
+        }
+
+        if (error instanceof ChatApiError && error.status === 404) {
+          setIsActiveChatMissing(true);
+          setChatMessages([]);
+          return;
+        }
+
+        if (error instanceof ChatApiError && error.status === 401) {
+          clearCurrentUserCache();
+          clearChatCache();
+          setCurrentUser(null);
+          setChats([]);
+          setChatMessages([]);
+          return;
+        }
+
+        setAuthNotice("Could not load this chat right now.");
+      } finally {
+        if (!isDisposed) {
+          setIsActiveChatLoading(false);
+        }
+      }
+    }
+
+    void loadActiveChat();
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [activeChatId, currentUser, isAuthLoading]);
+
   function toggleSidebar() {
-    setOpenMenuTitle(null);
+    setOpenMenuChatId(null);
     setIsProfileMenuOpen(false);
 
     if (sidebarContentTimerRef.current !== null) {
@@ -269,10 +435,10 @@ export default function Home() {
     setIsSidebarCollapsed(true);
   }
 
-  function handleSendMessage(event: FormEvent<HTMLFormElement>) {
+  async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (isAssistantTyping) {
+    if (isAssistantTyping || isActiveChatMissing || isActiveChatLoading) {
       return;
     }
 
@@ -281,27 +447,84 @@ export default function Home() {
       return;
     }
 
-    const userMessage: Message = {
+    if (!currentUser) {
+      if (!publicSiteConfig.features.allowGuestResponses) {
+        setAuthNotice("Sign in to send messages and save chats.");
+        return;
+      }
+
+      const userMessage: Message = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: trimmedDraft,
+        time: getCurrentTimeLabel(),
+      };
+
+      setChatMessages((previous) => [...previous, userMessage]);
+      setDraft("");
+      setIsAssistantTyping(true);
+
+      assistantReplyTimerRef.current = window.setTimeout(() => {
+        const assistantMessage: Message = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: buildTemporaryAssistantResponse(trimmedDraft),
+          time: getCurrentTimeLabel(),
+        };
+
+        setChatMessages((previous) => [...previous, assistantMessage]);
+        setIsAssistantTyping(false);
+        assistantReplyTimerRef.current = null;
+      }, 650);
+
+      return;
+    }
+
+    const optimisticMessage: Message = {
+      id: crypto.randomUUID(),
       role: "user",
       content: trimmedDraft,
       time: getCurrentTimeLabel(),
     };
 
-    setChatMessages((prevMessages) => [...prevMessages, userMessage]);
+    const previousMessages = chatMessages;
+    setChatMessages((previous) => [...previous, optimisticMessage]);
     setDraft("");
     setIsAssistantTyping(true);
+    setAuthNotice(null);
 
-    assistantReplyTimerRef.current = window.setTimeout(() => {
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: getTemporaryAssistantMessage(trimmedDraft),
-        time: getCurrentTimeLabel(),
-      };
+    try {
+      if (!activeChatId) {
+        const createdChat = await createChatFromMessage(trimmedDraft);
+        setChats((previous) => upsertChat(previous, createdChat.chat));
+        setChatMessages(mapChatMessages(createdChat));
+        router.push(`/c/${createdChat.chat.id}`);
+        return;
+      }
 
-      setChatMessages((prevMessages) => [...prevMessages, assistantMessage]);
+      const targetChatId = activeChatId;
+      const updatedChat = await appendChatMessage(targetChatId, trimmedDraft);
+      setChats((previous) => upsertChat(previous, updatedChat.chat));
+      setChatMessages(mapChatMessages(updatedChat));
+    } catch (error) {
+      setChatMessages(previousMessages);
+      setDraft(trimmedDraft);
+
+      if (error instanceof ChatApiError && error.status === 404) {
+        setIsActiveChatMissing(true);
+      }
+
+      if (error instanceof ChatApiError && error.status === 401) {
+        clearCurrentUserCache();
+        clearChatCache();
+        setCurrentUser(null);
+        setChats([]);
+      }
+
+      setAuthNotice(error instanceof Error ? error.message : "Could not send message.");
+    } finally {
       setIsAssistantTyping(false);
-      assistantReplyTimerRef.current = null;
-    }, 650);
+    }
   }
 
   async function handleLogout() {
@@ -310,36 +533,35 @@ export default function Home() {
         method: "POST",
       });
     } finally {
+      clearCurrentUserCache();
+      clearChatCache();
       setCurrentUser(null);
+      setChats([]);
+      setChatMessages([]);
       setIsProfileMenuOpen(false);
       setAuthNotice("Signed out. Sign in again to access account features.");
+      router.push("/");
     }
-  }
-
-  if (isAuthLoading) {
-    return (
-      <main className="relative flex min-h-screen items-center justify-center p-6">
-        <div className="ambient-orb ambient-orb-a" aria-hidden="true" />
-        <div className="ambient-orb ambient-orb-b" aria-hidden="true" />
-        <section className="surface relative z-10 w-full max-w-md p-7">
-          <p className="text-sm text-[color:var(--text-muted)]">Loading workspace...</p>
-        </section>
-      </main>
-    );
   }
 
   const userDisplayName = currentUser
     ? getDisplayName(currentUser.user.name, currentUser.user.email)
     : "Guest";
 
+  const composerDisabled =
+    isAssistantTyping ||
+    isActiveChatLoading ||
+    isActiveChatMissing ||
+    (!currentUser && !publicSiteConfig.features.allowGuestResponses);
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--bg-root)] text-[var(--text-primary)]">
       <div className="ambient-orb ambient-orb-a" aria-hidden="true" />
       <div className="ambient-orb ambient-orb-b" aria-hidden="true" />
 
-      <main className="relative mx-auto flex h-screen w-full max-w-[1600px] gap-3 p-3 sm:gap-4 sm:p-4 lg:gap-5 lg:p-5">
+      <main className="app-shell relative mx-auto flex h-screen w-full">
         <aside
-          className={`surface relative z-[60] hidden shrink-0 flex-col overflow-visible transition-[width] duration-200 md:flex ${
+          className={`workspace-sidebar surface relative z-[60] hidden shrink-0 flex-col overflow-visible transition-[width] duration-200 md:flex ${
             isSidebarCollapsed ? "w-14" : "w-72"
           }`}
         >
@@ -364,109 +586,106 @@ export default function Home() {
             </div>
 
             {isSidebarContentVisible ? (
-              <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--accent-primary)]/55 bg-[var(--accent-primary)] px-3 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110">
+              <Link
+                href="/"
+                onClick={() => {
+                  setOpenMenuChatId(null);
+                  setIsActiveChatMissing(false);
+                }}
+                className="new-chat-button mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--accent-primary)]/55 bg-[var(--accent-primary)] px-3 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110"
+              >
                 <PlusIcon />
                 <span className="whitespace-nowrap">New chat</span>
-              </button>
+              </Link>
             ) : (
               <div className="mt-3 flex justify-center">
-                <button
-                  type="button"
+                <Link
+                  href="/"
                   aria-label="New chat"
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--accent-primary)]/60 bg-transparent text-[var(--accent-primary)] transition hover:bg-[var(--accent-primary)]/12 hover:text-[var(--accent-primary-strong)]"
+                  onClick={() => {
+                    setOpenMenuChatId(null);
+                    setIsActiveChatMissing(false);
+                  }}
+                  className="new-chat-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--accent-primary)]/60 bg-transparent text-[var(--accent-primary)] transition hover:bg-[var(--accent-primary)]/12 hover:text-[var(--accent-primary-strong)]"
                 >
                   <PlusIcon />
-                </button>
+                </Link>
               </div>
             )}
           </div>
 
           {isSidebarContentVisible ? (
-            <div className="scrollbar-chat flex-1 space-y-2 overflow-y-auto p-3">
-              {conversations.map((conversation) => {
-                const isMenuOpen = openMenuTitle === conversation.title;
+            <div className="chat-history-list scrollbar-chat flex-1 space-y-2 overflow-y-auto p-3">
+              {chats.length === 0 ? (
+                currentUser ? (
+                  isChatListLoading ? null : (
+                    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-[var(--text-muted)]">
+                      No chats yet. Start with your first message.
+                    </div>
+                  )
+                ) : isAuthLoading ? null : (
+                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-[var(--text-muted)]">
+                    Sign in to view your chats.
+                  </div>
+                )
+              ) : (
+                chats.map((chat) => {
+                  const isActive = chat.id === activeChatId;
+                  const isMenuOpen = openMenuChatId === chat.id;
 
-                return (
-                  <div
-                    key={conversation.title}
-                    data-history-menu
-                    className={`group/history relative ${isMenuOpen ? "z-30" : "z-0"}`}
-                  >
-                    <button
-                      type="button"
-                      className={`w-full rounded-xl border px-3 py-2 pr-11 text-left transition ${
-                        conversation.active
-                          ? "border-[var(--accent-secondary)]/55 bg-[var(--accent-secondary)]/14"
-                          : hasOpenMenu
-                            ? "border-white/10 bg-white/[0.03]"
-                            : "border-white/10 bg-white/[0.03] hover:border-[var(--accent-primary)]/28 hover:bg-[var(--accent-primary)]/8"
-                      }`}
+                  return (
+                    <div
+                      key={chat.id}
+                      data-history-menu
+                      className={`group/history relative ${isMenuOpen ? "z-30" : "z-0"}`}
                     >
-                      <p className="truncate text-sm font-medium">{conversation.title}</p>
-                    </button>
-
-                    <div className="absolute right-1 top-1/2 -translate-y-1/2">
-                      <button
-                        type="button"
-                        aria-label={`Open menu for ${conversation.title}`}
-                        aria-haspopup="menu"
-                        aria-expanded={isMenuOpen}
-                        onClick={() => setOpenMenuTitle(isMenuOpen ? null : conversation.title)}
-                        className={`inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/12 bg-[var(--bg-root)] text-sm leading-none transition hover:text-[var(--text-primary)] ${
-                          isMenuOpen
-                            ? "pointer-events-auto text-[var(--text-primary)] opacity-100"
-                            : "pointer-events-none text-[var(--text-dim)] opacity-0 group-hover/history:pointer-events-auto group-hover/history:opacity-100 group-focus-within/history:pointer-events-auto group-focus-within/history:opacity-100"
-                        }`}
+                      <Link
+                        href={`/c/${encodeURIComponent(chat.id)}`}
+                        data-active={isActive ? "true" : "false"}
+                        className="chat-history-link block w-full px-3 py-2 pr-11 text-left"
                       >
-                        ...
-                      </button>
+                        <p className="truncate text-sm font-medium">{chat.title}</p>
+                      </Link>
 
-                      <div
-                        role="menu"
-                        aria-label={`Actions for ${conversation.title}`}
-                        className={`absolute right-0 top-full z-30 mt-1 w-32 rounded-lg border border-white/12 bg-[var(--bg-root)] p-1 shadow-[0_10px_30px_rgba(0,0,0,0.45)] transition ${
-                          isMenuOpen
-                            ? "pointer-events-auto visible translate-y-0 opacity-100"
-                            : "pointer-events-none invisible translate-y-1 opacity-0"
-                        }`}
-                      >
+                      <div className="absolute right-1 top-1/2 -translate-y-1/2">
                         <button
                           type="button"
-                          role="menuitem"
-                          onClick={() => setOpenMenuTitle(null)}
-                          className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-primary)]/18 hover:text-[var(--accent-primary-strong)]"
+                          aria-label={`Open menu for ${chat.title}`}
+                          aria-haspopup="menu"
+                          aria-expanded={isMenuOpen}
+                          onClick={() => setOpenMenuChatId(isMenuOpen ? null : chat.id)}
+                          className={`inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/12 bg-[var(--bg-root)] text-sm leading-none transition hover:text-[var(--text-primary)] ${
+                            isMenuOpen
+                              ? "pointer-events-auto text-[var(--text-primary)] opacity-100"
+                              : "pointer-events-none text-[var(--text-dim)] opacity-0 group-hover/history:pointer-events-auto group-hover/history:opacity-100 group-focus-within/history:pointer-events-auto group-focus-within/history:opacity-100"
+                          }`}
                         >
-                          Share
+                          ...
                         </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => setOpenMenuTitle(null)}
-                          className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-primary)]/18 hover:text-[var(--accent-primary-strong)]"
+
+                        <div
+                          role="menu"
+                          aria-label={`Actions for ${chat.title}`}
+                          className={`absolute right-0 top-full z-30 mt-1 w-32 rounded-lg border border-white/12 bg-[var(--bg-root)] p-1 shadow-[0_10px_30px_rgba(0,0,0,0.45)] transition ${
+                            isMenuOpen
+                              ? "pointer-events-auto visible translate-y-0 opacity-100"
+                              : "pointer-events-none invisible translate-y-1 opacity-0"
+                          }`}
                         >
-                          Rename
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => setOpenMenuTitle(null)}
-                          className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-primary)]/18 hover:text-[var(--accent-primary-strong)]"
-                        >
-                          Archive
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => setOpenMenuTitle(null)}
-                          className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-secondary)]/20 hover:text-[var(--accent-secondary-strong)]"
-                        >
-                          Delete
-                        </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => setOpenMenuChatId(null)}
+                            className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-primary)]/18 hover:text-[var(--accent-primary-strong)]"
+                          >
+                            Open
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           ) : (
             <div className="flex-1" />
@@ -545,7 +764,7 @@ export default function Home() {
               </div>
             ) : (
               <Link
-                href="/login?returnTo=%2F"
+                href={`/login?returnTo=${encodeURIComponent(pathname)}`}
                 aria-label="Login"
                 className={`rounded-xl border border-white/12 bg-white/[0.03] text-xs font-medium text-[color:var(--text-primary)] transition hover:border-white/20 ${
                   isSidebarCollapsed
@@ -559,12 +778,18 @@ export default function Home() {
           </div>
         </aside>
 
-        <section className="surface relative flex min-w-0 flex-1 flex-col overflow-hidden">
+        <section className="workspace-main surface relative flex min-w-0 flex-1 flex-col overflow-hidden">
           <header className="flex items-center justify-between border-b border-white/10 px-3 py-2.5 sm:px-5 sm:py-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-[color:var(--text-primary)]">{userDisplayName}</p>
               <p className="truncate text-xs text-[color:var(--text-dim)]">
-                {currentUser ? "Signed in and ready" : "Browsing in guest mode"}
+                {isActiveChatMissing
+                  ? "Chat not found"
+                  : activeChatId
+                    ? "Saved chat"
+                    : currentUser
+                      ? "New chat"
+                      : "Browsing in guest mode"}
               </p>
             </div>
           </header>
@@ -573,36 +798,51 @@ export default function Home() {
             ref={chatScrollRef}
             className="scrollbar-chat flex-1 space-y-4 overflow-y-auto px-3 py-4 pb-24 sm:px-5 sm:py-5 sm:pb-28"
           >
-            {chatMessages.map((message, index) => {
-              const isUser = message.role === "user";
-
-              return (
-                <article
-                  key={`${message.time}-${index}`}
-                  className={`message-enter flex ${isUser ? "justify-end" : "justify-start"}`}
-                  style={{ animationDelay: `${index * 80}ms` }}
+            {isActiveChatMissing ? (
+              <article className="mx-auto max-w-md rounded-2xl border border-white/12 bg-white/[0.03] p-5 text-center">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Chat not found</p>
+                <p className="mt-2 text-xs text-[var(--text-muted)]">
+                  This chat does not exist, or you do not have access to it.
+                </p>
+                <Link
+                  href="/"
+                  className="mt-4 inline-flex items-center justify-center rounded-lg border border-[var(--accent-primary)]/55 bg-[var(--accent-primary)] px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:brightness-110"
                 >
-                  <div
-                    className={`max-w-[85%] px-1 py-1 sm:max-w-[75%] ${
-                      isUser
-                        ? "rounded-2xl border border-[var(--accent-secondary)]/45 bg-[var(--accent-secondary)]/16 px-4 py-3"
-                        : ""
-                    }`}
+                  New chat
+                </Link>
+              </article>
+            ) : isActiveChatLoading ? (
+              null
+            ) : chatMessages.length === 0 ? null : (
+              chatMessages.map((message, index) => {
+                const isUser = message.role === "user";
+
+                return (
+                  <article
+                    key={message.id}
+                    className={`message-enter flex ${isUser ? "justify-end" : "justify-start"}`}
+                    style={{ animationDelay: `${index * 80}ms` }}
                   >
-                    {isUser ? (
-                      <p className="whitespace-pre-line text-sm leading-6 text-[var(--text-primary)]">
-                        {message.content}
-                      </p>
-                    ) : (
-                      <div className="markdown-content text-sm leading-6 text-[var(--text-primary)]">
-                        <ReactMarkdown>{message.content}</ReactMarkdown>
-                      </div>
-                    )}
-                    <p className="mt-2 text-[11px] text-[var(--text-dim)]">{message.time}</p>
-                  </div>
-                </article>
-              );
-            })}
+                    <div
+                      className={`max-w-[85%] px-1 py-1 sm:max-w-[75%] ${
+                        isUser
+                          ? "message-user-bubble rounded-2xl border border-[var(--accent-secondary)]/45 bg-[var(--accent-secondary)]/16 px-4 py-3"
+                          : ""
+                      }`}
+                    >
+                      {isUser ? (
+                        <p className="whitespace-pre-line text-sm leading-6 text-[var(--text-primary)]">{message.content}</p>
+                      ) : (
+                        <div className="markdown-content text-sm leading-6 text-[var(--text-primary)]">
+                          <ReactMarkdown>{message.content}</ReactMarkdown>
+                        </div>
+                      )}
+                      <p className="mt-2 text-[11px] text-[var(--text-dim)]">{message.time}</p>
+                    </div>
+                  </article>
+                );
+              })
+            )}
 
             {isAssistantTyping ? (
               <article className="message-enter flex" style={{ animationDelay: "120ms" }}>
@@ -618,7 +858,7 @@ export default function Home() {
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-3 pb-3 sm:px-5 sm:pb-4">
             <form
               onSubmit={handleSendMessage}
-              className="pointer-events-auto flex items-center gap-1 rounded-lg border border-white/12 bg-[var(--bg-root)] px-1.5 py-1"
+              className="composer-shell pointer-events-auto flex items-center gap-1 rounded-lg border border-white/12 bg-[var(--bg-root)] px-1.5 py-1"
             >
               <button
                 type="button"
@@ -628,16 +868,21 @@ export default function Home() {
               </button>
               <input
                 type="text"
-                className="peer h-7 flex-1 bg-transparent px-1 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-dim)]"
-                placeholder="Ask OpenChat to draft, summarize, or brainstorm..."
+                className="peer h-7 flex-1 bg-transparent px-1 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-dim)] disabled:cursor-not-allowed disabled:opacity-70"
+                placeholder={
+                  !currentUser && !publicSiteConfig.features.allowGuestResponses
+                    ? "Sign in to send messages..."
+                    : "Ask OpenChat to draft, summarize, or brainstorm..."
+                }
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
+                disabled={composerDisabled}
               />
               <button
                 type="submit"
                 aria-label="Send message"
-                disabled={isAssistantTyping}
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--accent-secondary)] text-slate-950 transition hover:brightness-110 peer-placeholder-shown:hidden disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={composerDisabled || draft.trim().length === 0}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--send-button-bg)] text-[var(--send-button-fg)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <SendIcon />
               </button>
@@ -645,7 +890,6 @@ export default function Home() {
           </div>
         </section>
       </main>
-
     </div>
   );
 }

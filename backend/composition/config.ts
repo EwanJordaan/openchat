@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { AuthIssuerConfig } from "@/backend/adapters/auth/types";
+import { openChatConfig } from "@/openchat.config";
 
 const envSchema = z.object({
   BACKEND_DB_ADAPTER: z.enum(["postgres", "convex"]).optional(),
@@ -68,7 +69,7 @@ export interface BackendConfig {
 export function loadBackendConfig(): BackendConfig {
   const env = envSchema.parse(process.env);
 
-  const dbAdapter = env.BACKEND_DB_ADAPTER ?? "postgres";
+  const dbAdapter = env.BACKEND_DB_ADAPTER ?? openChatConfig.backend.database.defaultAdapter;
   const clockSkewSeconds = parseClockSkew(env.BACKEND_AUTH_CLOCK_SKEW_SECONDS);
   const issuers = parseIssuerConfig(env.BACKEND_AUTH_ISSUERS);
   const sessionCookieName = parseCookieName(env.BACKEND_SESSION_COOKIE_NAME, "openchat_session");

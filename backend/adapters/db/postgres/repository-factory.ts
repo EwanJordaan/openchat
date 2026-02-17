@@ -1,3 +1,4 @@
+import { PostgresChatRepository } from "@/backend/adapters/db/postgres/chat-repository";
 import type { RepositoryBundle } from "@/backend/ports/repositories";
 
 import { PostgresProjectRepository } from "@/backend/adapters/db/postgres/project-repository";
@@ -10,5 +11,6 @@ export function createPostgresRepositories(db: PgQueryable): RepositoryBundle {
     users: new PostgresUserRepository(db),
     roles: new PostgresRoleRepository(db),
     projects: new PostgresProjectRepository(db),
+    chats: new PostgresChatRepository(db),
   };
 }

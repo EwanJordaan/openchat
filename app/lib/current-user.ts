@@ -23,7 +23,83 @@ interface CurrentUserApiResponse {
   data?: CurrentUserData;
 }
 
-export async function fetchCurrentUser(signal?: AbortSignal): Promise<CurrentUserData | null> {
+const CURRENT_USER_CACHE_TTL_MS = 30 * 60 * 1000;
+const CURRENT_USER_CACHE_STORAGE_KEY = "openchat_current_user_cache_v1";
+
+interface CurrentUserCacheEntry {
+  value: CurrentUserData | null;
+  expiresAt: number;
+}
+
+let currentUserCache: CurrentUserCacheEntry | null = null;
+let currentUserInFlightRequest: Promise<CurrentUserData | null> | null = null;
+
+export async function fetchCurrentUser(_signal?: AbortSignal): Promise<CurrentUserData | null> {
+  const cached = getCachedCurrentUser();
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  if (currentUserInFlightRequest) {
+    return currentUserInFlightRequest;
+  }
+
+  const request = requestCurrentUser(_signal);
+  currentUserInFlightRequest = request;
+
+  try {
+    const user = await request;
+    setCurrentUserCache(user);
+    return user;
+  } finally {
+    if (currentUserInFlightRequest === request) {
+      currentUserInFlightRequest = null;
+    }
+  }
+}
+
+export function getCachedCurrentUser(): CurrentUserData | null | undefined {
+  const memoryValue = getMemoryCachedCurrentUser();
+  if (memoryValue !== undefined) {
+    return cloneCurrentUserData(memoryValue);
+  }
+
+  const persisted = readPersistedCurrentUser();
+  if (!persisted) {
+    return undefined;
+  }
+
+  if (persisted.expiresAt <= Date.now()) {
+    clearPersistedCurrentUser();
+    return undefined;
+  }
+
+  currentUserCache = {
+    value: cloneCurrentUserData(persisted.value),
+    expiresAt: persisted.expiresAt,
+  };
+
+  return cloneCurrentUserData(persisted.value);
+}
+
+export function setCurrentUserCache(value: CurrentUserData | null): void {
+  const snapshot = cloneCurrentUserData(value);
+
+  currentUserCache = {
+    value: snapshot,
+    expiresAt: Date.now() + CURRENT_USER_CACHE_TTL_MS,
+  };
+
+  writePersistedCurrentUser(currentUserCache);
+}
+
+export function clearCurrentUserCache(): void {
+  currentUserCache = null;
+  currentUserInFlightRequest = null;
+  clearPersistedCurrentUser();
+}
+
+async function requestCurrentUser(signal?: AbortSignal): Promise<CurrentUserData | null> {
   const response = await fetch("/api/v1/me", {
     credentials: "include",
     cache: "no-store",
@@ -44,6 +120,89 @@ export async function fetchCurrentUser(signal?: AbortSignal): Promise<CurrentUse
   }
 
   return payload.data;
+}
+
+function getMemoryCachedCurrentUser(): CurrentUserData | null | undefined {
+  if (!currentUserCache) {
+    return undefined;
+  }
+
+  if (currentUserCache.expiresAt <= Date.now()) {
+    currentUserCache = null;
+    return undefined;
+  }
+
+  return currentUserCache.value;
+}
+
+function cloneCurrentUserData(value: CurrentUserData | null): CurrentUserData | null {
+  if (!value) {
+    return null;
+  }
+
+  return {
+    user: {
+      ...value.user,
+    },
+    principal: {
+      ...value.principal,
+      roles: [...value.principal.roles],
+      permissions: [...value.principal.permissions],
+    },
+  };
+}
+
+function hasDom(): boolean {
+  return typeof window !== "undefined";
+}
+
+function readPersistedCurrentUser(): CurrentUserCacheEntry | null {
+  if (!hasDom()) {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(CURRENT_USER_CACHE_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as CurrentUserCacheEntry;
+    if (!parsed || typeof parsed.expiresAt !== "number") {
+      return null;
+    }
+
+    return {
+      value: cloneCurrentUserData(parsed.value),
+      expiresAt: parsed.expiresAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedCurrentUser(entry: CurrentUserCacheEntry): void {
+  if (!hasDom()) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(CURRENT_USER_CACHE_STORAGE_KEY, JSON.stringify(entry));
+  } catch {
+    // Ignore storage write failures.
+  }
+}
+
+function clearPersistedCurrentUser(): void {
+  if (!hasDom()) {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(CURRENT_USER_CACHE_STORAGE_KEY);
+  } catch {
+    // Ignore storage removal failures.
+  }
 }
 
 export function getDisplayName(name: string | null | undefined, email: string | null | undefined): string {

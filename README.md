@@ -9,6 +9,7 @@ OpenChat is a Next.js chat product template with an in-progress REST backend sca
 - REST backend in App Router route handlers (`app/api/v1/*`)
 - Auth verification with `jose` (OIDC/JWT, multi-issuer)
 - Persistence adapters (Postgres/Neon implemented, Convex mode uses an in-memory adapter fallback)
+- Central typed app config in `openchat.config.ts`
 
 ## Quick start
 
@@ -19,7 +20,7 @@ npm install
 ```
 
 2. Create `.env` from `.env.example` and set values.
-3. Run SQL migrations in `backend/adapters/db/postgres/migrations/001_initial.sql` and `backend/adapters/db/postgres/migrations/002_user_profile_avatar.sql`.
+3. Run SQL migrations in `backend/adapters/db/postgres/migrations/001_initial.sql`, `backend/adapters/db/postgres/migrations/002_user_profile_avatar.sql`, and `backend/adapters/db/postgres/migrations/003_chats.sql`.
 4. Start the app:
 
 ```bash
@@ -43,6 +44,8 @@ Set these environment variables:
 - `BACKEND_SESSION_COOKIE_NAME`: optional, default `openchat_session`
 - `BACKEND_AUTH_FLOW_COOKIE_NAME`: optional, default `openchat_auth_flow`
 - `BACKEND_SESSION_SECURE_COOKIES`: optional (`true`/`false`), defaults by `NODE_ENV`
+- `NEXT_PUBLIC_ALLOW_GUEST_RESPONSES`: optional (`true`/`false`), defaults from `openchat.config.ts`
+- `NEXT_PUBLIC_DEFAULT_THEME`: optional (`default` | `galaxy` | `aurora` | `sunset` | `midnight`), defaults from `openchat.config.ts`
 
 Example issuer config:
 
@@ -89,6 +92,10 @@ Example issuer config:
 - `GET /api/v1/projects`
 - `POST /api/v1/projects`
 - `GET /api/v1/projects/:id`
+- `GET /api/v1/chats`
+- `POST /api/v1/chats`
+- `GET /api/v1/chats/:id`
+- `POST /api/v1/chats/:id/messages`
 - `GET /api/v1/auth/providers`
 - `GET /api/v1/auth/:provider/start?mode=login|register`
 - `GET /api/v1/auth/:provider/callback`
@@ -99,6 +106,12 @@ Protected endpoints require:
 - `Authorization: Bearer <access_token>`
 
 For browser sessions, the backend also accepts an HTTP-only cookie session and resolves the principal from that cookie when the `Authorization` header is absent.
+
+Chat behavior:
+
+- `/` starts as a new empty chat draft.
+- The first message creates a saved chat and navigates to `/c/:chatId`.
+- Chat access is owner-scoped; non-owner or unknown chat IDs return not found.
 
 ## Current backend design
 

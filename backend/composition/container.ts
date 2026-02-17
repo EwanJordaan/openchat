@@ -1,7 +1,11 @@
+import { AppendChatMessageUseCase } from "@/backend/application/use-cases/append-chat-message";
+import { CreateChatFromFirstMessageUseCase } from "@/backend/application/use-cases/create-chat-from-first-message";
 import { CreateProjectUseCase } from "@/backend/application/use-cases/create-project";
+import { GetChatByIdUseCase } from "@/backend/application/use-cases/get-chat-by-id";
 import { GetCurrentUserUseCase } from "@/backend/application/use-cases/get-current-user";
 import { GetCurrentUserAvatarUseCase } from "@/backend/application/use-cases/get-current-user-avatar";
 import { GetProjectByIdUseCase } from "@/backend/application/use-cases/get-project-by-id";
+import { ListChatsUseCase } from "@/backend/application/use-cases/list-chats";
 import { ListProjectsUseCase } from "@/backend/application/use-cases/list-projects";
 import { RemoveCurrentUserAvatarUseCase } from "@/backend/application/use-cases/remove-current-user-avatar";
 import { UpdateCurrentUserProfileUseCase } from "@/backend/application/use-cases/update-current-user-profile";
@@ -20,6 +24,16 @@ import type { UnitOfWork } from "@/backend/ports/unit-of-work";
 
 import { loadBackendConfig, type BackendConfig } from "@/backend/composition/config";
 
+const CONTAINER_SHAPE_VERSION = 2;
+
+interface ContainerState {
+  fingerprint: string;
+  container: ApplicationContainer;
+  dispose?: () => Promise<void>;
+}
+
+let devContainerState: ContainerState | undefined;
+
 export interface ApplicationContainer {
   config: BackendConfig;
   authContextProvider: AuthContextProvider;
@@ -35,30 +49,28 @@ export interface ApplicationContainer {
     listProjects: ListProjectsUseCase;
     getProjectById: GetProjectByIdUseCase;
     createProject: CreateProjectUseCase;
+    listChats: ListChatsUseCase;
+    getChatById: GetChatByIdUseCase;
+    createChatFromFirstMessage: CreateChatFromFirstMessageUseCase;
+    appendChatMessage: AppendChatMessageUseCase;
   };
 }
 
 declare global {
-  var __openchatBackendContainerState:
-    | {
-        fingerprint: string;
-        container: ApplicationContainer;
-        dispose?: () => Promise<void>;
-      }
-    | undefined;
+  var __openchatBackendContainerState: ContainerState | undefined;
 }
 
 export function getApplicationContainer(): ApplicationContainer {
   const config = loadBackendConfig();
   const fingerprint = createConfigFingerprint(config);
 
-  const currentState = globalThis.__openchatBackendContainerState;
-  if (currentState && currentState.fingerprint === fingerprint) {
+  const currentState = getCurrentContainerState();
+  if (currentState && currentState.fingerprint === fingerprint && isContainerCompatible(currentState.container)) {
     return currentState.container;
   }
 
   const nextState = createApplicationContainerState(config, fingerprint);
-  globalThis.__openchatBackendContainerState = nextState;
+  setCurrentContainerState(nextState);
 
   if (currentState?.dispose) {
     void currentState.dispose().catch(() => {
@@ -89,6 +101,10 @@ function createApplicationContainerState(config: BackendConfig, fingerprint: str
     listProjects: new ListProjectsUseCase(adapter.repositories.projects),
     getProjectById: new GetProjectByIdUseCase(adapter.repositories.projects),
     createProject: new CreateProjectUseCase(adapter.unitOfWork),
+    listChats: new ListChatsUseCase(adapter.repositories.chats),
+    getChatById: new GetChatByIdUseCase(adapter.repositories.chats),
+    createChatFromFirstMessage: new CreateChatFromFirstMessageUseCase(adapter.unitOfWork),
+    appendChatMessage: new AppendChatMessageUseCase(adapter.unitOfWork),
   };
 
   return {
@@ -103,6 +119,23 @@ function createApplicationContainerState(config: BackendConfig, fingerprint: str
     },
     dispose: adapter.dispose,
   };
+}
+
+function getCurrentContainerState(): ContainerState | undefined {
+  if (process.env.NODE_ENV === "production") {
+    return globalThis.__openchatBackendContainerState;
+  }
+
+  return devContainerState;
+}
+
+function setCurrentContainerState(nextState: ContainerState): void {
+  if (process.env.NODE_ENV === "production") {
+    globalThis.__openchatBackendContainerState = nextState;
+    return;
+  }
+
+  devContainerState = nextState;
 }
 
 interface DataAdapterRuntime {
@@ -137,6 +170,7 @@ function createDataAdapter(config: BackendConfig): DataAdapterRuntime {
 
 function createConfigFingerprint(config: BackendConfig): string {
   return JSON.stringify({
+    containerShapeVersion: CONTAINER_SHAPE_VERSION,
     db: config.db,
     auth: {
       clockSkewSeconds: config.auth.clockSkewSeconds,
@@ -144,4 +178,24 @@ function createConfigFingerprint(config: BackendConfig): string {
     },
     session: config.session,
   });
+}
+
+function isContainerCompatible(container: ApplicationContainer): boolean {
+  const candidate = container as unknown as {
+    repositories?: { chats?: unknown };
+    useCases?: {
+      listChats?: unknown;
+      getChatById?: unknown;
+      createChatFromFirstMessage?: unknown;
+      appendChatMessage?: unknown;
+    };
+  };
+
+  return Boolean(
+    candidate.repositories?.chats &&
+      candidate.useCases?.listChats &&
+      candidate.useCases?.getChatById &&
+      candidate.useCases?.createChatFromFirstMessage &&
+      candidate.useCases?.appendChatMessage,
+  );
 }

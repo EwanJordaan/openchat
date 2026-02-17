@@ -1,6 +1,10 @@
+import type { Chat, ChatMessage, ChatWithMessages } from "@/backend/domain/chat";
 import type { Project } from "@/backend/domain/project";
 import type { User } from "@/backend/domain/user";
 import type {
+  AppendChatMessagesInput,
+  ChatRepository,
+  CreateChatWithMessagesInput,
   CreateProjectInput,
   CreateUserInput,
   ProjectRepository,
@@ -23,6 +27,8 @@ interface InMemoryStore {
   rolesByName: Map<string, string>;
   userRoles: Map<string, Set<string>>;
   projects: Map<string, Project>;
+  chats: Map<string, Chat>;
+  chatMessagesByChatId: Map<string, ChatMessage[]>;
 }
 
 export function createConvexRepositories(): RepositoryBundle {
@@ -32,6 +38,7 @@ export function createConvexRepositories(): RepositoryBundle {
     users: new InMemoryUserRepository(store),
     roles: new InMemoryRoleRepository(store),
     projects: new InMemoryProjectRepository(store),
+    chats: new InMemoryChatRepository(store),
   };
 }
 
@@ -217,6 +224,108 @@ class InMemoryProjectRepository implements ProjectRepository {
   }
 }
 
+class InMemoryChatRepository implements ChatRepository {
+  constructor(private readonly store: InMemoryStore) {}
+
+  async listForUser(userId: string): Promise<Chat[]> {
+    return [...this.store.chats.values()]
+      .filter((chat) => chat.ownerUserId === userId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .map((chat) => ({ ...chat }));
+  }
+
+  async getByIdForUser(chatId: string, userId: string): Promise<ChatWithMessages | null> {
+    const chat = this.store.chats.get(chatId);
+    if (!chat || chat.ownerUserId !== userId) {
+      return null;
+    }
+
+    const messages = this.store.chatMessagesByChatId.get(chatId) ?? [];
+
+    return {
+      chat: { ...chat },
+      messages: messages.map((message) => ({ ...message })),
+    };
+  }
+
+  async createWithInitialMessages(input: CreateChatWithMessagesInput): Promise<ChatWithMessages> {
+    const now = new Date().toISOString();
+
+    const chat: Chat = {
+      id: input.chatId,
+      ownerUserId: input.ownerUserId,
+      title: input.title,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const messages: ChatMessage[] = [
+      {
+        id: input.userMessageId,
+        chatId: input.chatId,
+        role: "user",
+        content: input.userMessageContent,
+        createdAt: now,
+      },
+      {
+        id: input.assistantMessageId,
+        chatId: input.chatId,
+        role: "assistant",
+        content: input.assistantMessageContent,
+        createdAt: now,
+      },
+    ];
+
+    this.store.chats.set(chat.id, chat);
+    this.store.chatMessagesByChatId.set(chat.id, messages);
+
+    return {
+      chat: { ...chat },
+      messages: messages.map((message) => ({ ...message })),
+    };
+  }
+
+  async appendMessages(input: AppendChatMessagesInput): Promise<ChatWithMessages | null> {
+    const chat = this.store.chats.get(input.chatId);
+    if (!chat || chat.ownerUserId !== input.ownerUserId) {
+      return null;
+    }
+
+    const now = new Date().toISOString();
+
+    const userMessage: ChatMessage = {
+      id: input.userMessageId,
+      chatId: input.chatId,
+      role: "user",
+      content: input.userMessageContent,
+      createdAt: now,
+    };
+
+    const assistantMessage: ChatMessage = {
+      id: input.assistantMessageId,
+      chatId: input.chatId,
+      role: "assistant",
+      content: input.assistantMessageContent,
+      createdAt: now,
+    };
+
+    const nextMessages = [...(this.store.chatMessagesByChatId.get(input.chatId) ?? []), userMessage, assistantMessage];
+    this.store.chatMessagesByChatId.set(input.chatId, nextMessages);
+
+    const updatedChat: Chat = {
+      ...chat,
+      updatedAt: now,
+    };
+
+    this.store.chats.set(updatedChat.id, updatedChat);
+
+    return {
+      chat: { ...updatedChat },
+      messages: nextMessages.map((message) => ({ ...message })),
+    };
+  }
+}
+
 function createStore(): InMemoryStore {
   return {
     users: new Map(),
@@ -227,6 +336,8 @@ function createStore(): InMemoryStore {
     ]),
     userRoles: new Map(),
     projects: new Map(),
+    chats: new Map(),
+    chatMessagesByChatId: new Map(),
   };
 }
 
