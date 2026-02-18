@@ -148,6 +148,8 @@ Auth0 requirements:
 - `POST /api/v1/chats`
 - `GET /api/v1/chats/:id`
 - `POST /api/v1/chats/:id/messages`
+- `POST /api/v1/chat/guest`
+- `GET /api/v1/model-providers`
 - `GET /api/v1/auth/providers`
 - `GET /api/v1/auth/start?mode=login|register`
 - `GET /api/v1/auth/:provider/start?mode=login|register`
@@ -234,7 +236,7 @@ Notes:
 
 ## Known limitations
 
-- Assistant replies are still temporary placeholder responses (persisted to chat history).
+- Live assistant replies require at least one configured provider API key.
 - Convex mode is an in-memory fallback adapter (not a persisted Convex backend).
 - No repository contract tests yet.
 - No rate limiting/audit logging/idempotency yet.

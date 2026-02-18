@@ -12,19 +12,21 @@ import { UpdateCurrentUserProfileUseCase } from "@/backend/application/use-cases
 import { UploadCurrentUserAvatarUseCase } from "@/backend/application/use-cases/upload-current-user-avatar";
 import { JitProvisioningAuthContextProvider } from "@/backend/adapters/auth/jit-provisioning-auth-context-provider";
 import { JwtMultiIssuerVerifier } from "@/backend/adapters/auth/jwt-multi-issuer-verifier";
+import { LiveModelProviderClient } from "@/backend/adapters/ai/live-model-provider-client";
 import { DbRolePermissionChecker } from "@/backend/adapters/authorization/db-role-permission-checker";
 import { ConvexUnitOfWork, createConvexRepositories } from "@/backend/adapters/db/convex";
 import { createPostgresRepositories } from "@/backend/adapters/db/postgres/repository-factory";
 import { getPostgresPool } from "@/backend/adapters/db/postgres/client";
 import { PostgresUnitOfWork } from "@/backend/adapters/db/postgres/unit-of-work";
 import type { AuthContextProvider } from "@/backend/ports/auth-context-provider";
+import type { ModelProviderClient } from "@/backend/ports/model-provider-client";
 import type { PermissionChecker } from "@/backend/ports/permission-checker";
 import type { RepositoryBundle } from "@/backend/ports/repositories";
 import type { UnitOfWork } from "@/backend/ports/unit-of-work";
 
 import { loadBackendConfig, type BackendConfig } from "@/backend/composition/config";
 
-const CONTAINER_SHAPE_VERSION = 2;
+const CONTAINER_SHAPE_VERSION = 3;
 
 interface ContainerState {
   fingerprint: string;
@@ -38,6 +40,7 @@ export interface ApplicationContainer {
   config: BackendConfig;
   authContextProvider: AuthContextProvider;
   permissionChecker: PermissionChecker;
+  modelProviderClient: ModelProviderClient;
   repositories: RepositoryBundle;
   unitOfWork: UnitOfWork;
   useCases: {
@@ -91,6 +94,7 @@ function createApplicationContainerState(config: BackendConfig, fingerprint: str
   const jwtVerifier = new JwtMultiIssuerVerifier(config.auth.issuers, config.auth.clockSkewSeconds);
   const authContextProvider = new JitProvisioningAuthContextProvider(jwtVerifier, adapter.unitOfWork);
   const permissionChecker = new DbRolePermissionChecker();
+  const modelProviderClient = new LiveModelProviderClient();
 
   const useCases = {
     getCurrentUser: new GetCurrentUserUseCase(adapter.repositories.users),
@@ -103,8 +107,8 @@ function createApplicationContainerState(config: BackendConfig, fingerprint: str
     createProject: new CreateProjectUseCase(adapter.unitOfWork),
     listChats: new ListChatsUseCase(adapter.repositories.chats),
     getChatById: new GetChatByIdUseCase(adapter.repositories.chats),
-    createChatFromFirstMessage: new CreateChatFromFirstMessageUseCase(adapter.unitOfWork),
-    appendChatMessage: new AppendChatMessageUseCase(adapter.unitOfWork),
+    createChatFromFirstMessage: new CreateChatFromFirstMessageUseCase(adapter.unitOfWork, modelProviderClient),
+    appendChatMessage: new AppendChatMessageUseCase(adapter.unitOfWork, modelProviderClient),
   };
 
   return {
@@ -113,6 +117,7 @@ function createApplicationContainerState(config: BackendConfig, fingerprint: str
       config,
       authContextProvider,
       permissionChecker,
+      modelProviderClient,
       repositories: adapter.repositories,
       unitOfWork: adapter.unitOfWork,
       useCases,
@@ -186,6 +191,7 @@ function createConfigFingerprint(config: BackendConfig): string {
 
 function isContainerCompatible(container: ApplicationContainer): boolean {
   const candidate = container as unknown as {
+    modelProviderClient?: unknown;
     repositories?: { chats?: unknown };
     useCases?: {
       listChats?: unknown;
@@ -196,6 +202,7 @@ function isContainerCompatible(container: ApplicationContainer): boolean {
   };
 
   return Boolean(
+    candidate.modelProviderClient &&
     candidate.repositories?.chats &&
       candidate.useCases?.listChats &&
       candidate.useCases?.getChatById &&

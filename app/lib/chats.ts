@@ -142,6 +142,34 @@ export async function appendChatMessage(
   return cloneChatWithMessages(payload.data);
 }
 
+export async function requestGuestAssistantResponse(
+  message: string,
+  modelProvider: ModelProviderId,
+): Promise<string> {
+  const response = await fetch("/api/v1/chat/guest", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ message, modelProvider }),
+  });
+
+  if (!response.ok) {
+    throw await toChatApiError(response, "Failed to generate guest response");
+  }
+
+  const payload = (await response.json()) as ApiResponse<{
+    message?: string;
+  }>;
+  const assistantMessage = payload.data?.message?.trim();
+  if (!assistantMessage) {
+    throw new ChatApiError("Guest response did not include an assistant message", 500, "invalid_response");
+  }
+
+  return assistantMessage;
+}
+
 export function getCachedChatsSnapshot(userId: string): Chat[] | undefined {
   const memoryEntry = chatListCache.get(userId);
   if (memoryEntry && isCacheEntryFresh(memoryEntry)) {

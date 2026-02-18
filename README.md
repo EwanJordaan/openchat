@@ -120,6 +120,8 @@ Example issuer config:
 - `POST /api/v1/chats`
 - `GET /api/v1/chats/:id`
 - `POST /api/v1/chats/:id/messages`
+- `POST /api/v1/chat/guest`
+- `GET /api/v1/model-providers`
 - `GET /api/v1/auth/providers`
 - `GET /api/v1/auth/start?mode=login|register`
 - `GET /api/v1/auth/:provider/start?mode=login|register`
@@ -152,6 +154,7 @@ Chat behavior:
 - The first message creates a saved chat and navigates to `/c/:chatId`.
 - Chat access is owner-scoped; non-owner or unknown chat IDs return not found.
 - You can choose a model provider in Settings and in the chat header.
+- Guest responses (when enabled) call live model providers but are not persisted.
 
 ## Current backend design
 

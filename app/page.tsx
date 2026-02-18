@@ -15,7 +15,9 @@ import {
   fetchChatById,
   fetchChats,
   getCachedChatsSnapshot,
+  requestGuestAssistantResponse,
 } from "@/app/lib/chats";
+import { fetchModelProviders, type ModelProviderAvailability } from "@/app/lib/model-providers-api";
 import {
   OPENCHAT_MODEL_PROVIDER_OPTIONS,
   resolveModelProviderId,
@@ -30,7 +32,6 @@ import {
 } from "@/app/lib/current-user";
 import { getPublicSiteConfig } from "@/app/lib/site-config";
 import { ProfileAvatar } from "@/components/profile-avatar";
-import { buildTemporaryAssistantResponse } from "@/shared/temporary-assistant-response";
 
 type Role = "assistant" | "user" | "system";
 
@@ -49,6 +50,13 @@ function getCurrentTimeLabel(date = new Date()) {
     minute: "2-digit",
     hour12: false,
   }).format(date);
+}
+
+function getDefaultProviderAvailability(): ModelProviderAvailability[] {
+  return OPENCHAT_MODEL_PROVIDER_OPTIONS.map((providerOption) => ({
+    ...providerOption,
+    configured: true,
+  }));
 }
 
 function mapChatMessages(payload: ChatWithMessages): Message[] {
@@ -192,17 +200,68 @@ export default function Home() {
   const [selectedModelProvider, setSelectedModelProvider] = useState<ModelProviderId>(
     publicSiteConfig.ai.defaultModelProvider,
   );
+  const [providerAvailability, setProviderAvailability] = useState<ModelProviderAvailability[]>(
+    getDefaultProviderAvailability(),
+  );
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
 
   const sidebarContentTimerRef = useRef<number | null>(null);
-  const assistantReplyTimerRef = useRef<number | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const cachedProvider = getModelProviderPreference(publicSiteConfig.ai.defaultModelProvider);
     setSelectedModelProvider(cachedProvider);
   }, []);
+
+  useEffect(() => {
+    let isDisposed = false;
+
+    async function loadProviderAvailability() {
+      try {
+        const payload = await fetchModelProviders();
+        if (isDisposed) {
+          return;
+        }
+
+        setProviderAvailability(payload.providers);
+      } catch {
+        if (isDisposed) {
+          return;
+        }
+
+        setProviderAvailability(getDefaultProviderAvailability());
+      }
+    }
+
+    void loadProviderAvailability();
+
+    return () => {
+      isDisposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (providerAvailability.length === 0) {
+      return;
+    }
+
+    const selectedProviderOption = providerAvailability.find(
+      (provider) => provider.id === selectedModelProvider,
+    );
+
+    if (selectedProviderOption?.configured) {
+      return;
+    }
+
+    const firstConfigured = providerAvailability.find((provider) => provider.configured);
+    if (!firstConfigured) {
+      return;
+    }
+
+    setSelectedModelProvider(firstConfigured.id);
+    setModelProviderPreference(firstConfigured.id);
+  }, [providerAvailability, selectedModelProvider]);
 
   useEffect(() => {
     let isDisposed = false;
@@ -279,10 +338,6 @@ export default function Home() {
     return () => {
       if (sidebarContentTimerRef.current !== null) {
         window.clearTimeout(sidebarContentTimerRef.current);
-      }
-
-      if (assistantReplyTimerRef.current !== null) {
-        window.clearTimeout(assistantReplyTimerRef.current);
       }
     };
   }, []);
@@ -458,6 +513,28 @@ export default function Home() {
       return;
     }
 
+    const selectedProviderOption = providerAvailability.find(
+      (providerOption) => providerOption.id === selectedModelProvider,
+    );
+    const hasConfiguredProvider = providerAvailability.some((providerOption) => providerOption.configured);
+    if (!hasConfiguredProvider) {
+      setAuthNotice("No AI providers are configured. Add a provider key in admin settings.");
+      return;
+    }
+
+    if (selectedProviderOption && !selectedProviderOption.configured) {
+      const fallbackProviderOption = providerAvailability.find((providerOption) => providerOption.configured);
+      if (!fallbackProviderOption) {
+        setAuthNotice("No AI providers are configured. Add a provider key in admin settings.");
+        return;
+      }
+
+      setSelectedModelProvider(fallbackProviderOption.id);
+      setModelProviderPreference(fallbackProviderOption.id);
+      setAuthNotice(`${fallbackProviderOption.label} is selected because your previous provider is unavailable.`);
+      return;
+    }
+
     if (!currentUser) {
       if (!publicSiteConfig.features.allowGuestResponses) {
         setAuthNotice("Sign in to send messages and save chats.");
@@ -471,22 +548,29 @@ export default function Home() {
         time: getCurrentTimeLabel(),
       };
 
+      const previousMessages = chatMessages;
       setChatMessages((previous) => [...previous, userMessage]);
       setDraft("");
       setIsAssistantTyping(true);
 
-      assistantReplyTimerRef.current = window.setTimeout(() => {
+      try {
+        const assistantReply = await requestGuestAssistantResponse(trimmedDraft, selectedModelProvider);
+
         const assistantMessage: Message = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: buildTemporaryAssistantResponse(trimmedDraft, selectedModelProvider),
+          content: assistantReply,
           time: getCurrentTimeLabel(),
         };
 
         setChatMessages((previous) => [...previous, assistantMessage]);
+      } catch (error) {
+        setChatMessages(previousMessages);
+        setDraft(trimmedDraft);
+        setAuthNotice(error instanceof Error ? error.message : "Could not send message.");
+      } finally {
         setIsAssistantTyping(false);
-        assistantReplyTimerRef.current = null;
-      }, 650);
+      }
 
       return;
     }
@@ -557,18 +641,29 @@ export default function Home() {
 
   function handleModelProviderChange(event: ChangeEvent<HTMLSelectElement>) {
     const nextProvider = resolveModelProviderId(event.target.value, publicSiteConfig.ai.defaultModelProvider);
+    const nextProviderOption = providerAvailability.find((providerOption) => providerOption.id === nextProvider);
+    if (nextProviderOption && !nextProviderOption.configured) {
+      setAuthNotice(`${nextProviderOption.label} is not configured in admin settings.`);
+      return;
+    }
+
     setSelectedModelProvider(nextProvider);
     setModelProviderPreference(nextProvider);
+    setAuthNotice(null);
   }
 
   const userDisplayName = currentUser
     ? getDisplayName(currentUser.user.name, currentUser.user.email)
     : "Guest";
 
+  const configuredProviderOptions = providerAvailability.filter((providerOption) => providerOption.configured);
+  const hasConfiguredProvider = configuredProviderOptions.length > 0;
+
   const composerDisabled =
     isAssistantTyping ||
     isActiveChatLoading ||
     isActiveChatMissing ||
+    !hasConfiguredProvider ||
     (!currentUser && !publicSiteConfig.features.allowGuestResponses);
 
   return (
@@ -816,11 +911,14 @@ export default function Home() {
                 id="chat-model-provider"
                 value={selectedModelProvider}
                 onChange={handleModelProviderChange}
-                className="rounded-md border border-white/12 bg-white/[0.04] px-2 py-1 text-xs text-[color:var(--text-primary)] outline-none"
+                className="rounded-md border border-white/12 bg-white/[0.04] px-2 py-1 text-xs text-[color:var(--text-primary)] outline-none disabled:opacity-70"
+                disabled={isAssistantTyping || providerAvailability.length === 0}
               >
-                {OPENCHAT_MODEL_PROVIDER_OPTIONS.map((providerOption) => (
-                  <option key={providerOption.id} value={providerOption.id}>
-                    {providerOption.label}
+                {providerAvailability.map((providerOption) => (
+                  <option key={providerOption.id} value={providerOption.id} disabled={!providerOption.configured}>
+                    {providerOption.configured
+                      ? providerOption.label
+                      : `${providerOption.label} (Not configured)`}
                   </option>
                 ))}
               </select>

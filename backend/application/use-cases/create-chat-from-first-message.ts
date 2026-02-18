@@ -1,9 +1,16 @@
-import { UnauthorizedError, ValidationError } from "@/backend/application/errors";
+import {
+  UnauthorizedError,
+  UpstreamServiceError,
+  ValidationError,
+} from "@/backend/application/errors";
 import type { Principal } from "@/backend/domain/principal";
+import {
+  ModelProviderConfigurationError,
+  ModelProviderRequestError,
+  type ModelProviderClient,
+} from "@/backend/ports/model-provider-client";
 import type { UnitOfWork } from "@/backend/ports/unit-of-work";
 import type { ModelProviderId } from "@/shared/model-providers";
-
-import { buildTemporaryAssistantResponse } from "@/shared/temporary-assistant-response";
 
 export interface CreateChatFromFirstMessageInput {
   message: string;
@@ -11,7 +18,10 @@ export interface CreateChatFromFirstMessageInput {
 }
 
 export class CreateChatFromFirstMessageUseCase {
-  constructor(private readonly unitOfWork: UnitOfWork) {}
+  constructor(
+    private readonly unitOfWork: UnitOfWork,
+    private readonly modelProviderClient: ModelProviderClient,
+  ) {}
 
   async execute(principal: Principal, input: CreateChatFromFirstMessageInput) {
     if (!principal.userId) {
@@ -23,7 +33,30 @@ export class CreateChatFromFirstMessageUseCase {
       throw new ValidationError("Message must be between 1 and 8000 characters");
     }
 
-    const assistantMessage = buildTemporaryAssistantResponse(message, input.modelProvider);
+    let assistantMessage: string;
+    try {
+      const generation = await this.modelProviderClient.generateText({
+        modelProvider: input.modelProvider,
+        messages: [
+          {
+            role: "user",
+            content: message,
+          },
+        ],
+      });
+
+      assistantMessage = generation.text;
+    } catch (error) {
+      if (error instanceof ModelProviderConfigurationError) {
+        throw new ValidationError(error.message);
+      }
+
+      if (error instanceof ModelProviderRequestError) {
+        throw new UpstreamServiceError(error.message);
+      }
+
+      throw error;
+    }
 
     return this.unitOfWork.run(async ({ chats }) => {
       return chats.createWithInitialMessages({

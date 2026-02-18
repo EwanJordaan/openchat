@@ -36,3 +36,10 @@ export class ValidationError extends ApplicationError {
     this.name = "ValidationError";
   }
 }
+
+export class UpstreamServiceError extends ApplicationError {
+  constructor(message = "Upstream provider request failed") {
+    super("upstream_error", message, 502);
+    this.name = "UpstreamServiceError";
+  }
+}
