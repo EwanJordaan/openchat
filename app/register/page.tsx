@@ -1,53 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-
-interface AuthProviderView {
-  name: string;
-  loginUrl: string;
-  registerUrl: string;
-}
-
-interface ProvidersResponse {
-  data?: AuthProviderView[];
-}
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo } from "react";
 
 export default function RegisterPage() {
-  const [providers, setProviders] = useState<AuthProviderView[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [returnTo, setReturnTo] = useState("/");
+  return (
+    <Suspense fallback={<RegisterFallback />}>
+      <RegisterContent />
+    </Suspense>
+  );
+}
+
+function RegisterContent() {
+  const searchParams = useSearchParams();
+  const returnTo = useMemo(() => sanitizeReturnTo(searchParams.get("returnTo")), [searchParams]);
+  const startUrl = useMemo(
+    () => `/api/v1/auth/start?mode=register&returnTo=${encodeURIComponent(returnTo)}`,
+    [returnTo],
+  );
 
   useEffect(() => {
-    const controller = new AbortController();
-    setReturnTo(sanitizeReturnTo(new URLSearchParams(window.location.search).get("returnTo")));
-
-    async function loadProviders() {
-      try {
-        const response = await fetch("/api/v1/auth/providers", {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          setProviders([]);
-          return;
-        }
-
-        const payload = (await response.json()) as ProvidersResponse;
-        setProviders(Array.isArray(payload.data) ? payload.data : []);
-      } catch {
-        setProviders([]);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    void loadProviders();
-
-    return () => {
-      controller.abort();
-    };
-  }, []);
+    window.location.replace(startUrl);
+  }, [startUrl]);
 
   return (
     <main className="relative flex min-h-screen items-center justify-center p-6">
@@ -55,47 +30,39 @@ export default function RegisterPage() {
       <div className="ambient-orb ambient-orb-b" aria-hidden="true" />
 
       <section className="surface relative z-10 w-full max-w-lg p-7 sm:p-9">
-        <div className="mb-6 flex items-center justify-between">
-          <div className="brand-chip h-9 w-9">OC</div>
+        <h1 className="text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">
+          Redirecting to registration...
+        </h1>
+        <p className="mt-2 text-sm text-[color:var(--text-muted)]">
+          You are being redirected to the configured default provider.
+        </p>
+
+        <div className="mt-6 flex flex-wrap items-center gap-2">
+          <a
+            href={startUrl}
+            className="rounded-lg border border-[var(--accent-primary)]/45 px-3 py-2 text-sm font-medium text-[color:var(--accent-primary-strong)] transition hover:bg-[var(--accent-primary)]/15"
+          >
+            Continue
+          </a>
           <Link
             href={`/login?returnTo=${encodeURIComponent(returnTo)}`}
-            className="text-sm text-[color:var(--text-muted)] transition hover:text-[color:var(--text-primary)]"
+            className="rounded-lg border border-white/15 px-3 py-2 text-sm text-[color:var(--text-muted)] transition hover:text-[color:var(--text-primary)]"
           >
-            Already have an account?
+            Back to login
           </Link>
         </div>
+      </section>
+    </main>
+  );
+}
 
-        <h1 className="text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">Create account</h1>
-        <p className="mt-2 text-sm text-[color:var(--text-muted)]">
-          Pick a provider to register. We provision your local account after successful callback.
-        </p>
-
-        <div className="mt-7 space-y-3">
-          {isLoading ? (
-            <p className="surface-soft px-4 py-3 text-sm text-[color:var(--text-muted)]">
-              Loading providers...
-            </p>
-          ) : providers.length > 0 ? (
-            providers.map((provider) => (
-              <Link
-                key={provider.name}
-                href={`${provider.registerUrl}&returnTo=${encodeURIComponent(returnTo)}`}
-                className="surface-soft block w-full px-4 py-3 text-left text-sm font-medium text-[color:var(--text-primary)] transition hover:border-white/25 hover:text-[color:var(--accent-secondary-strong)]"
-              >
-                Register with {provider.name}
-              </Link>
-            ))
-          ) : (
-            <p className="surface-soft px-4 py-3 text-sm text-[color:var(--text-muted)]">
-              No interactive auth providers are configured. Add `oidc` settings under
-              `BACKEND_AUTH_ISSUERS`.
-            </p>
-          )}
-        </div>
-
-        <p className="mt-6 text-xs text-[color:var(--text-dim)]">
-          New identities are linked through JIT provisioning keyed by issuer + subject.
-        </p>
+function RegisterFallback() {
+  return (
+    <main className="relative flex min-h-screen items-center justify-center p-6">
+      <div className="ambient-orb ambient-orb-a" aria-hidden="true" />
+      <div className="ambient-orb ambient-orb-b" aria-hidden="true" />
+      <section className="surface relative z-10 w-full max-w-lg p-7 sm:p-9">
+        <p className="text-sm text-[color:var(--text-muted)]">Loading registration...</p>
       </section>
     </main>
   );

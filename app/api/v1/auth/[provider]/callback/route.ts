@@ -55,16 +55,18 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
       codeVerifier: flow.codeVerifier,
     });
 
-    const principal = await container.authContextProvider.getPrincipal(`Bearer ${tokens.accessToken}`);
+    const jwtForSession = resolveJwtForSession(tokens.accessToken, tokens.idToken, issuerConfig.tokenUse);
+
+    const principal = await container.authContextProvider.getPrincipal(`Bearer ${jwtForSession}`);
     if (!principal) {
       throw new ApiError(401, "invalid_token", "Token did not resolve to an authenticated principal");
     }
 
     const sessionCookie = createSessionCookie(
       {
-        accessToken: tokens.accessToken,
+        accessToken: jwtForSession,
         providerName: issuerConfig.name,
-        expiresAt: resolveSessionExpiry(tokens.accessToken, tokens.expiresInSeconds),
+        expiresAt: resolveSessionExpiry(jwtForSession, tokens.expiresInSeconds),
       },
       container.config.session,
     );
@@ -83,6 +85,38 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
       headers,
     });
   });
+}
+
+function resolveJwtForSession(
+  accessToken: string | undefined,
+  idToken: string | undefined,
+  tokenUse: "access" | "id" | "any",
+): string {
+  if (tokenUse === "id") {
+    if (!idToken) {
+      throw new ApiError(401, "missing_id_token", "Provider callback did not include an id_token");
+    }
+
+    return idToken;
+  }
+
+  if (tokenUse === "access") {
+    if (!accessToken) {
+      throw new ApiError(401, "missing_access_token", "Provider callback did not include an access_token");
+    }
+
+    return accessToken;
+  }
+
+  if (accessToken) {
+    return accessToken;
+  }
+
+  if (idToken) {
+    return idToken;
+  }
+
+  throw new ApiError(401, "missing_token", "Provider callback did not include a usable token");
 }
 
 function resolveSessionExpiry(accessToken: string, expiresInSeconds: number | undefined): string {

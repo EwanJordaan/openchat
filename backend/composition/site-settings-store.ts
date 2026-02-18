@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { z } from "zod";
 
+import { OPENCHAT_MODEL_PROVIDER_IDS } from "@/shared/model-providers";
 import { OPENCHAT_THEME_IDS } from "@/shared/themes";
 import { openChatConfig, type OpenChatConfig } from "@/openchat.config";
 
@@ -19,6 +20,9 @@ const siteSettingsConfigSchema = z
     }),
     features: z.object({
       allowGuestResponses: z.boolean(),
+    }),
+    ai: z.object({
+      defaultModelProvider: z.enum(OPENCHAT_MODEL_PROVIDER_IDS),
     }),
     ui: z.object({
       defaultTheme: z.enum(OPENCHAT_THEME_IDS),
@@ -45,6 +49,11 @@ const siteSettingsOverridesSchema = z
     features: z
       .object({
         allowGuestResponses: z.boolean().optional(),
+      })
+      .optional(),
+    ai: z
+      .object({
+        defaultModelProvider: z.enum(OPENCHAT_MODEL_PROVIDER_IDS).optional(),
       })
       .optional(),
     ui: z
@@ -157,6 +166,10 @@ function applySiteSettingsOverrides(
       allowGuestResponses:
         overrides.features?.allowGuestResponses ?? baseConfig.features.allowGuestResponses,
     },
+    ai: {
+      defaultModelProvider:
+        overrides.ai?.defaultModelProvider ?? baseConfig.ai.defaultModelProvider,
+    },
     ui: {
       defaultTheme: overrides.ui?.defaultTheme ?? baseConfig.ui.defaultTheme,
     },
@@ -194,6 +207,12 @@ function deriveSiteSettingsOverrides(
   if (nextConfig.features.allowGuestResponses !== baseConfig.features.allowGuestResponses) {
     overrides.features = {
       allowGuestResponses: nextConfig.features.allowGuestResponses,
+    };
+  }
+
+  if (nextConfig.ai.defaultModelProvider !== baseConfig.ai.defaultModelProvider) {
+    overrides.ai = {
+      defaultModelProvider: nextConfig.ai.defaultModelProvider,
     };
   }
 

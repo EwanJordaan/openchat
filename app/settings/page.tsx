@@ -6,9 +6,15 @@ import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from "r
 
 import { clearChatCache } from "@/app/lib/chats";
 import { clearCurrentUserCache, type CurrentUserData, fetchCurrentUser, getDisplayName, setCurrentUserCache } from "@/app/lib/current-user";
+import { initializeModelProvider, setModelProviderPreference } from "@/app/lib/model-provider";
 import { getPublicSiteConfig } from "@/app/lib/site-config";
 import { initializeTheme, setThemePreference } from "@/app/lib/theme";
 import { ProfileAvatar } from "@/components/profile-avatar";
+import {
+  OPENCHAT_MODEL_PROVIDER_OPTIONS,
+  resolveModelProviderId,
+  type ModelProviderId,
+} from "@/shared/model-providers";
 import { OPENCHAT_THEME_OPTIONS, resolveThemeId, type ThemeId } from "@/shared/themes";
 
 interface UserPayloadResponse {
@@ -33,13 +39,19 @@ export default function SettingsPage() {
   const [nameDraft, setNameDraft] = useState("");
   const [activeSection, setActiveSection] = useState<SettingsSection>("general");
   const [selectedTheme, setSelectedTheme] = useState<ThemeId>(publicSiteConfig.ui.defaultTheme);
+  const [selectedModelProvider, setSelectedModelProvider] = useState<ModelProviderId>(
+    publicSiteConfig.ai.defaultModelProvider,
+  );
   const [generalStatusMessage, setGeneralStatusMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const initialTheme = initializeTheme(publicSiteConfig.ui.defaultTheme);
+    const initialModelProvider = initializeModelProvider(publicSiteConfig.ai.defaultModelProvider);
+
     setSelectedTheme(initialTheme);
+    setSelectedModelProvider(initialModelProvider);
   }, []);
 
   useEffect(() => {
@@ -224,6 +236,17 @@ export default function SettingsPage() {
     setGeneralStatusMessage(`Theme updated to ${nextThemeOption?.label ?? nextTheme}.`);
   }
 
+  function handleModelProviderChange(event: ChangeEvent<HTMLSelectElement>) {
+    const nextProvider = resolveModelProviderId(event.target.value, publicSiteConfig.ai.defaultModelProvider);
+    const nextProviderOption = OPENCHAT_MODEL_PROVIDER_OPTIONS.find((option) => option.id === nextProvider);
+
+    setSelectedModelProvider(nextProvider);
+    setModelProviderPreference(nextProvider);
+    setGeneralStatusMessage(
+      `Model provider updated to ${nextProviderOption?.label ?? nextProvider}.`,
+    );
+  }
+
   if (isLoading) {
     return (
       <main className="relative flex min-h-screen items-center justify-center p-6">
@@ -252,6 +275,9 @@ export default function SettingsPage() {
     },
   ];
   const selectedThemeOption = OPENCHAT_THEME_OPTIONS.find((option) => option.id === selectedTheme);
+  const selectedProviderOption = OPENCHAT_MODEL_PROVIDER_OPTIONS.find(
+    (option) => option.id === selectedModelProvider,
+  );
 
   return (
     <main className="relative min-h-screen p-4 sm:p-6">
@@ -379,13 +405,30 @@ export default function SettingsPage() {
 
                   <div className="mt-3 flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <p className="text-sm font-medium text-[color:var(--text-primary)]">Chat behavior</p>
-                      <p className="text-xs text-[color:var(--text-dim)]">Composer shortcuts and response preferences.</p>
+                      <p className="text-sm font-medium text-[color:var(--text-primary)]">Model provider</p>
+                      <p className="text-xs text-[color:var(--text-dim)]">Choose which provider to target for chat responses.</p>
                     </div>
-                    <span className="rounded-md border border-white/12 bg-white/[0.04] px-2 py-1 text-xs text-[color:var(--text-muted)]">
-                      Coming soon
-                    </span>
+                    <label className="sr-only" htmlFor="model-provider-select">
+                      Model provider
+                    </label>
+                    <select
+                      id="model-provider-select"
+                      value={selectedModelProvider}
+                      onChange={handleModelProviderChange}
+                      className="rounded-md border border-white/12 bg-white/[0.04] px-2.5 py-1.5 text-xs text-[color:var(--text-primary)] outline-none"
+                    >
+                      {OPENCHAT_MODEL_PROVIDER_OPTIONS.map((providerOption) => (
+                        <option key={providerOption.id} value={providerOption.id}>
+                          {providerOption.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
+
+                  <p className="mt-2 text-xs text-[color:var(--text-dim)]">
+                    {selectedProviderOption?.description} Config default: {publicSiteConfig.ai.defaultModelProvider}.
+                  </p>
+
                 </div>
               </section>
             ) : (
@@ -471,6 +514,11 @@ export default function SettingsPage() {
                           <p>
                             Provider issuer: <span className="text-[color:var(--text-primary)]">{currentUser.principal.issuer}</span>
                           </p>
+                          {currentUser.principal.providerName ? (
+                            <p className="mt-1">
+                              Provider: <span className="text-[color:var(--text-primary)]">{currentUser.principal.providerName}</span>
+                            </p>
+                          ) : null}
                           <p className="mt-1">
                             Roles: <span className="text-[color:var(--text-primary)]">{currentUser.principal.roles.join(", ") || "none"}</span>
                           </p>

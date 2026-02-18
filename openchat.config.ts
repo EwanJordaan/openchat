@@ -1,4 +1,5 @@
 import type { ThemeId } from "@/shared/themes";
+import type { ModelProviderId } from "@/shared/model-providers";
 
 export interface OpenChatConfig {
   backend: {
@@ -11,6 +12,9 @@ export interface OpenChatConfig {
   };
   features: {
     allowGuestResponses: boolean;
+  };
+  ai: {
+    defaultModelProvider: ModelProviderId;
   };
   ui: {
     defaultTheme: ThemeId;
@@ -28,6 +32,9 @@ export const openChatConfig: OpenChatConfig = {
   },
   features: {
     allowGuestResponses: false,
+  },
+  ai: {
+    defaultModelProvider: "openrouter",
   },
   ui: {
     defaultTheme: "default",

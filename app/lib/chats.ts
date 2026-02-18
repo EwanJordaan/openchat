@@ -1,4 +1,5 @@
 import type { Chat, ChatWithMessages } from "@/backend/domain/chat";
+import type { ModelProviderId } from "@/shared/model-providers";
 
 interface ApiResponse<TData> {
   data?: TData;
@@ -88,14 +89,17 @@ export async function fetchChatById(chatId: string, _signal?: AbortSignal): Prom
   }
 }
 
-export async function createChatFromMessage(message: string): Promise<ChatWithMessages> {
+export async function createChatFromMessage(
+  message: string,
+  modelProvider: ModelProviderId,
+): Promise<ChatWithMessages> {
   const response = await fetch("/api/v1/chats", {
     method: "POST",
     credentials: "include",
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, modelProvider }),
   });
 
   if (!response.ok) {
@@ -111,14 +115,18 @@ export async function createChatFromMessage(message: string): Promise<ChatWithMe
   return cloneChatWithMessages(payload.data);
 }
 
-export async function appendChatMessage(chatId: string, message: string): Promise<ChatWithMessages> {
+export async function appendChatMessage(
+  chatId: string,
+  message: string,
+  modelProvider: ModelProviderId,
+): Promise<ChatWithMessages> {
   const response = await fetch(`/api/v1/chats/${encodeURIComponent(chatId)}/messages`, {
     method: "POST",
     credentials: "include",
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, modelProvider }),
   });
 
   if (!response.ok) {

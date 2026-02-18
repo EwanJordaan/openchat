@@ -32,6 +32,7 @@ export function mapVerifiedJwtToPrincipal(verifiedJwt: VerifiedJwt): Principal {
   return {
     subject: payload.sub,
     issuer: payload.iss,
+    providerName: issuerConfig.name,
     email,
     name,
     orgId,

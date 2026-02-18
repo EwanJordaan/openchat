@@ -17,6 +17,8 @@ export interface CurrentUserView {
   principal: {
     subject: string;
     issuer: string;
+    providerName?: string;
+    authMethod?: "oidc";
     orgId?: string;
     roles: string[];
     permissions: string[];
@@ -44,6 +46,8 @@ export class GetCurrentUserUseCase {
       principal: {
         subject: principal.subject,
         issuer: principal.issuer,
+        providerName: principal.providerName,
+        authMethod: principal.authMethod,
         orgId: principal.orgId,
         roles: principal.roles,
         permissions: principal.permissions,

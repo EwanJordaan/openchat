@@ -5,11 +5,12 @@ import { decodeJwt } from "jose";
 import type { AuthFlowMode } from "@/backend/adapters/auth/types";
 import type { BackendConfig } from "@/backend/composition/config";
 
-export interface BrowserSession {
+export interface OidcBrowserSession {
   accessToken: string;
   providerName: string;
   expiresAt: string;
 }
+export type BrowserSession = OidcBrowserSession;
 
 export interface AuthFlowSession {
   providerName: string;
@@ -109,7 +110,7 @@ export function createSessionCookie(
 ): string {
   const secret = requireSessionSecret(config.secret);
   const value = encodeSignedValue(session, secret);
-  const ttlSeconds = resolveSessionTtlSeconds(session.accessToken, session.expiresAt);
+  const ttlSeconds = resolveSessionTtlSeconds(session);
 
   return serializeCookie(config.cookieName, value, {
     httpOnly: true,
@@ -250,7 +251,8 @@ function requireSessionSecret(secret: string | undefined): string {
   return secret;
 }
 
-function resolveSessionTtlSeconds(accessToken: string, expiresAtIso: string): number {
+function resolveSessionTtlSeconds(session: BrowserSession): number {
+  const expiresAtIso = session.expiresAt;
   const parsedExpiresAt = Date.parse(expiresAtIso);
   if (Number.isFinite(parsedExpiresAt)) {
     const seconds = Math.floor((parsedExpiresAt - Date.now()) / 1000);
@@ -260,7 +262,7 @@ function resolveSessionTtlSeconds(accessToken: string, expiresAtIso: string): nu
   }
 
   try {
-    const payload = decodeJwt(accessToken);
+    const payload = decodeJwt(session.accessToken);
     if (typeof payload.exp === "number") {
       const seconds = Math.floor(payload.exp - Date.now() / 1000);
       if (seconds >= MIN_SESSION_MAX_AGE_SECONDS) {

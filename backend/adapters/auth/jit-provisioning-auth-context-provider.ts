@@ -56,12 +56,20 @@ export class JitProvisioningAuthContextProvider implements AuthContextProvider {
 
       const now = new Date().toISOString();
       await users.touchLastSeen(user.id, now);
+      await users.upsertExternalIdentityMetadata(user.id, principal.issuer, principal.subject, {
+        providerName: principal.providerName ?? principal.issuer,
+        email: principal.email ?? null,
+        name: principal.name ?? null,
+        rawClaims: principal.rawClaims,
+        lastAuthenticatedAtIso: now,
+      });
 
       const roleNames = await roles.listRoleNamesForUser(user.id);
 
       return {
         ...principal,
         userId: user.id,
+        authMethod: "oidc" as const,
         roles: roleNames.length > 0 ? roleNames : principal.roles,
       };
     });

@@ -4,6 +4,7 @@ import type { User } from "@/backend/domain/user";
 import type {
   CreateUserInput,
   SetUserAvatarInput,
+  UpsertExternalIdentityMetadataInput,
   UpdateUserProfileInput,
   UserAvatar,
   UserRepository,
@@ -208,6 +209,51 @@ export class PostgresUserRepository implements UserRepository {
       ON CONFLICT (issuer, subject) DO NOTHING
       `,
       [crypto.randomUUID(), userId, issuer, subject],
+    );
+  }
+
+  async upsertExternalIdentityMetadata(
+    userId: string,
+    issuer: string,
+    subject: string,
+    input: UpsertExternalIdentityMetadataInput,
+  ): Promise<void> {
+    await this.db.query(
+      `
+      INSERT INTO external_identities (
+        id,
+        user_id,
+        issuer,
+        subject,
+        provider_name,
+        email,
+        name,
+        raw_claims_json,
+        last_authenticated_at,
+        updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, NOW())
+      ON CONFLICT (issuer, subject)
+      DO UPDATE SET
+        user_id = EXCLUDED.user_id,
+        provider_name = EXCLUDED.provider_name,
+        email = EXCLUDED.email,
+        name = EXCLUDED.name,
+        raw_claims_json = EXCLUDED.raw_claims_json,
+        last_authenticated_at = EXCLUDED.last_authenticated_at,
+        updated_at = NOW()
+      `,
+      [
+        crypto.randomUUID(),
+        userId,
+        issuer,
+        subject,
+        input.providerName,
+        input.email ?? null,
+        input.name ?? null,
+        JSON.stringify(input.rawClaims ?? {}),
+        input.lastAuthenticatedAtIso,
+      ],
     );
   }
 

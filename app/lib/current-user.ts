@@ -13,6 +13,8 @@ export interface CurrentUserData {
   principal: {
     subject: string;
     issuer: string;
+    providerName?: string;
+    authMethod?: "oidc";
     orgId?: string;
     roles: string[];
     permissions: string[];
@@ -83,6 +85,12 @@ export function getCachedCurrentUser(): CurrentUserData | null | undefined {
 }
 
 export function setCurrentUserCache(value: CurrentUserData | null): void {
+  if (!value) {
+    currentUserCache = null;
+    clearPersistedCurrentUser();
+    return;
+  }
+
   const snapshot = cloneCurrentUserData(value);
 
   currentUserCache = {
@@ -132,6 +140,11 @@ function getMemoryCachedCurrentUser(): CurrentUserData | null | undefined {
     return undefined;
   }
 
+  if (!currentUserCache.value) {
+    currentUserCache = null;
+    return undefined;
+  }
+
   return currentUserCache.value;
 }
 
@@ -169,6 +182,11 @@ function readPersistedCurrentUser(): CurrentUserCacheEntry | null {
 
     const parsed = JSON.parse(raw) as CurrentUserCacheEntry;
     if (!parsed || typeof parsed.expiresAt !== "number") {
+      return null;
+    }
+
+    if (!parsed.value) {
+      clearPersistedCurrentUser();
       return null;
     }
 

@@ -318,6 +318,17 @@ body {
   backdrop-filter: blur(var(--surface-soft-backdrop-blur));
 }
 
+.admin-select {
+  background-color: color-mix(in srgb, var(--bg-panel-soft) 92%, black 8%) !important;
+  color: var(--text-primary);
+}
+
+.admin-select option,
+.admin-select optgroup {
+  background-color: color-mix(in srgb, var(--bg-panel) 94%, black 6%);
+  color: var(--text-primary);
+}
+
 .brand-chip {
   display: inline-flex;
   align-items: center;

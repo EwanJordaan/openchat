@@ -4,19 +4,21 @@ import {
   siteSettingsConfigSchema,
 } from "@/backend/composition/site-settings-store";
 import {
+  requireAdminPasswordRotation,
+  requireAdminSession,
+} from "@/backend/transport/rest/admin-auth";
+import {
   handleApiRoute,
   jsonResponse,
   parseJsonBody,
-  requirePermission,
-  requirePrincipal,
 } from "@/backend/transport/rest/pipeline";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request): Promise<Response> {
   return handleApiRoute(request, async ({ container, requestId }) => {
-    const principal = await requirePrincipal(request, container);
-    await requirePermission(container, principal, "admin.settings.manage", { type: "global" });
+    const session = requireAdminSession(request, container);
+    requireAdminPasswordRotation(session);
 
     const settings = await getSiteSettingsSnapshot();
     return jsonResponse(requestId, { data: settings });
@@ -25,8 +27,8 @@ export async function GET(request: Request): Promise<Response> {
 
 export async function PUT(request: Request): Promise<Response> {
   return handleApiRoute(request, async ({ container, requestId }) => {
-    const principal = await requirePrincipal(request, container);
-    await requirePermission(container, principal, "admin.settings.manage", { type: "global" });
+    const session = requireAdminSession(request, container);
+    requireAdminPasswordRotation(session);
 
     const payload = await parseJsonBody(request, siteSettingsConfigSchema);
     const settings = await saveSiteSettingsConfig(payload);

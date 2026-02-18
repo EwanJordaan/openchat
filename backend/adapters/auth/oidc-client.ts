@@ -22,14 +22,18 @@ const oidcDiscoverySchema = z.object({
   end_session_endpoint: z.string().url().optional(),
 });
 
-const oidcTokenResponseSchema = z.object({
-  access_token: z.string().min(1),
-  token_type: z.string().optional(),
-  expires_in: z.coerce.number().int().positive().optional(),
-  id_token: z.string().optional(),
-  refresh_token: z.string().optional(),
-  scope: z.string().optional(),
-});
+const oidcTokenResponseSchema = z
+  .object({
+    access_token: z.string().min(1).optional(),
+    token_type: z.string().optional(),
+    expires_in: z.coerce.number().int().positive().optional(),
+    id_token: z.string().optional(),
+    refresh_token: z.string().optional(),
+    scope: z.string().optional(),
+  })
+  .refine((value) => Boolean(value.access_token || value.id_token), {
+    message: "Token response must include access_token or id_token",
+  });
 
 interface OidcDiscoveryDocument {
   issuer?: string;
@@ -39,7 +43,7 @@ interface OidcDiscoveryDocument {
 }
 
 export interface OidcTokenResult {
-  accessToken: string;
+  accessToken?: string;
   tokenType?: string;
   expiresInSeconds?: number;
   idToken?: string;
@@ -77,6 +81,25 @@ export function getInteractiveAuthIssuerByName(
   }
 
   return match;
+}
+
+export function getDefaultInteractiveAuthIssuer(
+  issuers: AuthIssuerConfig[],
+  preferredProviderName: string | undefined,
+): AuthIssuerConfig | null {
+  const interactiveIssuers = listInteractiveAuthIssuers(issuers);
+  if (interactiveIssuers.length === 0) {
+    return null;
+  }
+
+  if (preferredProviderName) {
+    const preferred = interactiveIssuers.find((issuer) => issuer.name === preferredProviderName);
+    if (preferred) {
+      return preferred;
+    }
+  }
+
+  return interactiveIssuers[0];
 }
 
 export async function buildAuthorizationUrl(input: BuildAuthorizationUrlInput): Promise<URL> {

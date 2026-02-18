@@ -1,12 +1,14 @@
 import { NotFoundError, UnauthorizedError, ValidationError } from "@/backend/application/errors";
 import type { Principal } from "@/backend/domain/principal";
 import type { UnitOfWork } from "@/backend/ports/unit-of-work";
+import type { ModelProviderId } from "@/shared/model-providers";
 
 import { buildTemporaryAssistantResponse } from "@/shared/temporary-assistant-response";
 
 export interface AppendChatMessageInput {
   chatId: string;
   message: string;
+  modelProvider: ModelProviderId;
 }
 
 export class AppendChatMessageUseCase {
@@ -22,7 +24,7 @@ export class AppendChatMessageUseCase {
       throw new ValidationError("Message must be between 1 and 8000 characters");
     }
 
-    const assistantMessage = buildTemporaryAssistantResponse(message);
+    const assistantMessage = buildTemporaryAssistantResponse(message, input.modelProvider);
 
     const updatedChat = await this.unitOfWork.run(async ({ chats }) => {
       return chats.appendMessages({

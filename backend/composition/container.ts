@@ -175,8 +175,12 @@ function createConfigFingerprint(config: BackendConfig): string {
     auth: {
       clockSkewSeconds: config.auth.clockSkewSeconds,
       issuers: config.auth.issuers,
+      defaultProviderName: config.auth.defaultProviderName,
     },
     session: config.session,
+    ai: config.ai,
+    adminSetup: config.adminSetup,
+    adminAuth: config.adminAuth,
   });
 }
 

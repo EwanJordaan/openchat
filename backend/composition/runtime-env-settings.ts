@@ -1,0 +1,231 @@
+import { existsSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+const ENV_FILE_PATH = path.join(process.cwd(), ".env");
+
+export interface RuntimeEnvSettings {
+  database: {
+    adapter: "postgres" | "convex";
+    databaseUrl: string;
+  };
+  auth: {
+    defaultProviderName: string;
+    clockSkewSeconds: number;
+    sessionSecureCookiesMode: "auto" | "true" | "false";
+    sessionCookieName: string;
+    flowCookieName: string;
+    issuersJson: string;
+  };
+}
+
+export interface RuntimeEnvSettingsUpdate {
+  database: {
+    adapter: "postgres" | "convex";
+    databaseUrl: string;
+  };
+  auth: {
+    defaultProviderName: string;
+    clockSkewSeconds: number;
+    sessionSecureCookiesMode: "auto" | "true" | "false";
+    sessionCookieName: string;
+    flowCookieName: string;
+    issuersJson: string;
+  };
+}
+
+type EnvPatch = Record<string, string | null>;
+
+export function getRuntimeEnvSettingsFromEnv(env: NodeJS.ProcessEnv = process.env): RuntimeEnvSettings {
+  return {
+    database: {
+      adapter: parseDbAdapter(env.BACKEND_DB_ADAPTER),
+      databaseUrl: env.DATABASE_URL?.trim() ?? "",
+    },
+    auth: {
+      defaultProviderName: env.BACKEND_AUTH_DEFAULT_PROVIDER?.trim() ?? "",
+      clockSkewSeconds: parseClockSkewSeconds(env.BACKEND_AUTH_CLOCK_SKEW_SECONDS),
+      sessionSecureCookiesMode: parseSessionSecureCookiesMode(env.BACKEND_SESSION_SECURE_COOKIES),
+      sessionCookieName: env.BACKEND_SESSION_COOKIE_NAME?.trim() || "openchat_session",
+      flowCookieName: env.BACKEND_AUTH_FLOW_COOKIE_NAME?.trim() || "openchat_auth_flow",
+      issuersJson: formatIssuersJson(env.BACKEND_AUTH_ISSUERS),
+    },
+  };
+}
+
+export async function updateRuntimeEnvSettings(
+  input: RuntimeEnvSettingsUpdate,
+): Promise<{ filePath: string; patch: EnvPatch }> {
+  const issuersJson = normalizeIssuersJson(input.auth.issuersJson);
+
+  const patch: EnvPatch = {
+    BACKEND_DB_ADAPTER: input.database.adapter,
+    DATABASE_URL: input.database.databaseUrl.trim() || null,
+    BACKEND_AUTH_DEFAULT_PROVIDER: input.auth.defaultProviderName.trim() || null,
+    BACKEND_AUTH_CLOCK_SKEW_SECONDS: String(input.auth.clockSkewSeconds),
+    BACKEND_SESSION_SECURE_COOKIES:
+      input.auth.sessionSecureCookiesMode === "auto" ? null : input.auth.sessionSecureCookiesMode,
+    BACKEND_SESSION_COOKIE_NAME: input.auth.sessionCookieName.trim(),
+    BACKEND_AUTH_FLOW_COOKIE_NAME: input.auth.flowCookieName.trim(),
+    BACKEND_AUTH_ISSUERS: issuersJson,
+  };
+
+  await applyEnvPatch(patch);
+
+  return {
+    filePath: ENV_FILE_PATH,
+    patch,
+  };
+}
+
+export function applyRuntimeEnvPatchToProcessEnv(patch: EnvPatch): void {
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
+
+function parseDbAdapter(raw: string | undefined): "postgres" | "convex" {
+  const value = raw?.trim().toLowerCase();
+  if (value === "convex") {
+    return "convex";
+  }
+
+  return "postgres";
+}
+
+function parseClockSkewSeconds(raw: string | undefined): number {
+  const value = raw?.trim();
+  if (!value) {
+    return 60;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 300) {
+    return 60;
+  }
+
+  return parsed;
+}
+
+function parseSessionSecureCookiesMode(raw: string | undefined): "auto" | "true" | "false" {
+  const value = raw?.trim().toLowerCase();
+  if (!value) {
+    return "auto";
+  }
+
+  if (value === "true" || value === "1") {
+    return "true";
+  }
+
+  if (value === "false" || value === "0") {
+    return "false";
+  }
+
+  return "auto";
+}
+
+function formatIssuersJson(raw: string | undefined): string {
+  const value = raw?.trim();
+  if (!value) {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeIssuersJson(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error("BACKEND_AUTH_ISSUERS must be valid JSON");
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("BACKEND_AUTH_ISSUERS must be a JSON array");
+  }
+
+  return JSON.stringify(parsed);
+}
+
+async function applyEnvPatch(patch: EnvPatch): Promise<void> {
+  const existingRaw = existsSync(ENV_FILE_PATH) ? await readFile(ENV_FILE_PATH, "utf8") : "";
+  const newline = existingRaw.includes("\r\n") ? "\r\n" : "\n";
+  const lines = existingRaw.length > 0 ? existingRaw.split(/\r?\n/) : [];
+  const seenKeys = new Set<string>();
+  const nextLines: string[] = [];
+
+  for (const line of lines) {
+    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (!match) {
+      nextLines.push(line);
+      continue;
+    }
+
+    const key = match[1];
+    if (!(key in patch)) {
+      nextLines.push(line);
+      continue;
+    }
+
+    if (seenKeys.has(key)) {
+      continue;
+    }
+
+    seenKeys.add(key);
+
+    const nextValue = patch[key];
+    if (nextValue === null) {
+      continue;
+    }
+
+    nextLines.push(`${key}=${serializeEnvValue(nextValue)}`);
+  }
+
+  for (const [key, value] of Object.entries(patch)) {
+    if (seenKeys.has(key) || value === null) {
+      continue;
+    }
+
+    nextLines.push(`${key}=${serializeEnvValue(value)}`);
+  }
+
+  const sanitizedLines = trimTrailingEmptyLines(nextLines);
+  const nextRaw = `${sanitizedLines.join(newline)}${newline}`;
+  await writeFile(ENV_FILE_PATH, nextRaw, "utf8");
+}
+
+function serializeEnvValue(value: string): string {
+  if (/^[A-Za-z0-9_./:@$-]+$/.test(value)) {
+    return value;
+  }
+
+  return JSON.stringify(value);
+}
+
+function trimTrailingEmptyLines(lines: string[]): string[] {
+  let endIndex = lines.length;
+  while (endIndex > 0 && lines[endIndex - 1].trim().length === 0) {
+    endIndex -= 1;
+  }
+
+  if (endIndex === 0) {
+    return [];
+  }
+
+  return lines.slice(0, endIndex);
+}

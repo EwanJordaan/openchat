@@ -11,6 +11,7 @@ import type {
   RepositoryBundle,
   RoleRepository,
   SetUserAvatarInput,
+  UpsertExternalIdentityMetadataInput,
   UpdateUserProfileInput,
   UserAvatar,
   UserRepository,
@@ -21,9 +22,22 @@ interface InMemoryUserRecord extends User {
   avatarBytes: Uint8Array | null;
 }
 
+interface InMemoryExternalIdentityMetadata {
+  userId: string;
+  issuer: string;
+  subject: string;
+  providerName: string;
+  email: string | null;
+  name: string | null;
+  rawClaims: Record<string, unknown>;
+  lastAuthenticatedAt: string;
+  updatedAt: string;
+}
+
 interface InMemoryStore {
   users: Map<string, InMemoryUserRecord>;
   externalIdentities: Map<string, string>;
+  externalIdentityMetadata: Map<string, InMemoryExternalIdentityMetadata>;
   rolesByName: Map<string, string>;
   userRoles: Map<string, Set<string>>;
   projects: Map<string, Project>;
@@ -154,6 +168,30 @@ class InMemoryUserRepository implements UserRepository {
     if (!this.store.externalIdentities.has(key)) {
       this.store.externalIdentities.set(key, userId);
     }
+  }
+
+  async upsertExternalIdentityMetadata(
+    userId: string,
+    issuer: string,
+    subject: string,
+    input: UpsertExternalIdentityMetadataInput,
+  ): Promise<void> {
+    this.requireUser(userId, "upsert external identity metadata");
+    const key = buildExternalIdentityKey(issuer, subject);
+    const now = new Date().toISOString();
+
+    this.store.externalIdentities.set(key, userId);
+    this.store.externalIdentityMetadata.set(key, {
+      userId,
+      issuer,
+      subject,
+      providerName: input.providerName,
+      email: input.email ?? null,
+      name: input.name ?? null,
+      rawClaims: input.rawClaims ?? {},
+      lastAuthenticatedAt: input.lastAuthenticatedAtIso,
+      updatedAt: now,
+    });
   }
 
   private requireUser(userId: string, action: string): InMemoryUserRecord {
@@ -330,6 +368,7 @@ function createStore(): InMemoryStore {
   return {
     users: new Map(),
     externalIdentities: new Map(),
+    externalIdentityMetadata: new Map(),
     rolesByName: new Map([
       ["admin", "role-admin"],
       ["member", "role-member"],

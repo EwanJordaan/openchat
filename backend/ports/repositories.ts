@@ -23,6 +23,14 @@ export interface SetUserAvatarInput {
   bytes: Uint8Array;
 }
 
+export interface UpsertExternalIdentityMetadataInput {
+  providerName: string;
+  email?: string | null;
+  name?: string | null;
+  rawClaims?: Record<string, unknown>;
+  lastAuthenticatedAtIso: string;
+}
+
 export interface UserRepository {
   getById(userId: string): Promise<User | null>;
   getAvatar(userId: string): Promise<UserAvatar | null>;
@@ -33,6 +41,12 @@ export interface UserRepository {
   clearAvatar(userId: string): Promise<User>;
   touchLastSeen(userId: string, lastSeenAtIso: string): Promise<void>;
   linkExternalIdentity(userId: string, issuer: string, subject: string): Promise<void>;
+  upsertExternalIdentityMetadata(
+    userId: string,
+    issuer: string,
+    subject: string,
+    input: UpsertExternalIdentityMetadataInput,
+  ): Promise<void>;
 }
 
 export interface RoleRepository {

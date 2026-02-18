@@ -2,18 +2,26 @@ import { z } from "zod";
 
 import type { AuthIssuerConfig } from "@/backend/adapters/auth/types";
 import { getEffectiveOpenChatConfigSync } from "@/backend/composition/site-settings-store";
+import type { ModelProviderId } from "@/shared/model-providers";
 
 const envSchema = z.object({
   BACKEND_DB_ADAPTER: z.enum(["postgres", "convex"]).optional(),
   DATABASE_URL: z.string().optional(),
   BACKEND_AUTH_ISSUERS: z.string().optional(),
+  BACKEND_AUTH_DEFAULT_PROVIDER: z.string().optional(),
   BACKEND_AUTH_CLOCK_SKEW_SECONDS: z.string().optional(),
   BACKEND_SESSION_SECRET: z.string().optional(),
   BACKEND_SESSION_COOKIE_NAME: z.string().optional(),
   BACKEND_AUTH_FLOW_COOKIE_NAME: z.string().optional(),
   BACKEND_SESSION_SECURE_COOKIES: z.string().optional(),
+  BACKEND_ADMIN_COOKIE_NAME: z.string().optional(),
+  BACKEND_ADMIN_PASSWORD_HASH: z.string().optional(),
+  BACKEND_ADMIN_SETUP_PASSWORD: z.string().optional(),
+  BACKEND_ADMIN_REQUIRED_EMAIL: z.string().optional(),
   NODE_ENV: z.string().optional(),
 });
+
+const DEFAULT_ADMIN_SETUP_PASSWORD = "admin";
 
 const kvParamsSchema = z.record(z.string(), z.string());
 
@@ -57,12 +65,24 @@ export interface BackendConfig {
   auth: {
     clockSkewSeconds: number;
     issuers: AuthIssuerConfig[];
+    defaultProviderName?: string;
   };
   session: {
     secret?: string;
     cookieName: string;
     flowCookieName: string;
     secureCookies: boolean;
+  };
+  ai: {
+    defaultModelProvider: ModelProviderId;
+  };
+  adminSetup: {
+    password?: string;
+    requiredEmail?: string;
+  };
+  adminAuth: {
+    cookieName: string;
+    passwordHash?: string;
   };
 }
 
@@ -73,9 +93,14 @@ export function loadBackendConfig(): BackendConfig {
   const dbAdapter = env.BACKEND_DB_ADAPTER ?? siteConfig.backend.database.defaultAdapter;
   const clockSkewSeconds = parseClockSkew(env.BACKEND_AUTH_CLOCK_SKEW_SECONDS);
   const issuers = parseIssuerConfig(env.BACKEND_AUTH_ISSUERS);
+  const defaultProviderName = parseDefaultProviderName(env.BACKEND_AUTH_DEFAULT_PROVIDER);
   const sessionCookieName = parseCookieName(env.BACKEND_SESSION_COOKIE_NAME, "openchat_session");
   const flowCookieName = parseCookieName(env.BACKEND_AUTH_FLOW_COOKIE_NAME, "openchat_auth_flow");
   const secureCookies = parseSecureCookies(env.BACKEND_SESSION_SECURE_COOKIES, env.NODE_ENV);
+  const adminCookieName = parseCookieName(env.BACKEND_ADMIN_COOKIE_NAME, "openchat_admin_session");
+  const adminPasswordHash = parseAdminPasswordHash(env.BACKEND_ADMIN_PASSWORD_HASH);
+  const adminSetupPassword = parseAdminSetupPassword(env.BACKEND_ADMIN_SETUP_PASSWORD);
+  const adminRequiredEmail = parseRequiredAdminEmail(env.BACKEND_ADMIN_REQUIRED_EMAIL);
 
   if (dbAdapter === "postgres" && !env.DATABASE_URL) {
     throw new Error(
@@ -91,6 +116,7 @@ export function loadBackendConfig(): BackendConfig {
     auth: {
       clockSkewSeconds,
       issuers,
+      defaultProviderName,
     },
     session: {
       secret: env.BACKEND_SESSION_SECRET,
@@ -98,7 +124,31 @@ export function loadBackendConfig(): BackendConfig {
       flowCookieName,
       secureCookies,
     },
+    ai: {
+      defaultModelProvider: siteConfig.ai.defaultModelProvider,
+    },
+    adminSetup: {
+      password: adminSetupPassword,
+      requiredEmail: adminRequiredEmail,
+    },
+    adminAuth: {
+      cookieName: adminCookieName,
+      passwordHash: adminPasswordHash,
+    },
   };
+}
+
+function parseDefaultProviderName(raw: string | undefined): string | undefined {
+  const value = raw?.trim();
+  if (!value) {
+    return undefined;
+  }
+
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new Error("BACKEND_AUTH_DEFAULT_PROVIDER may only contain letters, numbers, underscores, and dashes");
+  }
+
+  return value;
 }
 
 function parseIssuerConfig(issuerJson: string | undefined): AuthIssuerConfig[] {
@@ -158,4 +208,36 @@ function parseSecureCookies(raw: string | undefined, nodeEnv: string | undefined
   }
 
   throw new Error("BACKEND_SESSION_SECURE_COOKIES must be a boolean string (true/false/1/0)");
+}
+
+function parseAdminSetupPassword(raw: string | undefined): string | undefined {
+  const value = raw?.trim();
+  if (!value) {
+    return DEFAULT_ADMIN_SETUP_PASSWORD;
+  }
+
+  return value;
+}
+
+function parseAdminPasswordHash(raw: string | undefined): string | undefined {
+  const value = raw?.trim();
+  if (!value) {
+    return undefined;
+  }
+
+  return value;
+}
+
+function parseRequiredAdminEmail(raw: string | undefined): string | undefined {
+  const value = raw?.trim().toLowerCase();
+  if (!value) {
+    return undefined;
+  }
+
+  const parsedEmail = z.string().email().safeParse(value);
+  if (!parsedEmail.success) {
+    throw new Error("BACKEND_ADMIN_REQUIRED_EMAIL must be a valid email address when set");
+  }
+
+  return parsedEmail.data;
 }

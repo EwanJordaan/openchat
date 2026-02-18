@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
 import { type Chat, type ChatWithMessages } from "@/backend/domain/chat";
+import { getModelProviderPreference, setModelProviderPreference } from "@/app/lib/model-provider";
 import {
   appendChatMessage,
   ChatApiError,
@@ -15,6 +16,11 @@ import {
   fetchChats,
   getCachedChatsSnapshot,
 } from "@/app/lib/chats";
+import {
+  OPENCHAT_MODEL_PROVIDER_OPTIONS,
+  resolveModelProviderId,
+  type ModelProviderId,
+} from "@/shared/model-providers";
 import {
   clearCurrentUserCache,
   type CurrentUserData,
@@ -170,28 +176,23 @@ export default function Home() {
   const router = useRouter();
 
   const activeChatId = useMemo(() => getChatIdFromPathname(pathname), [pathname]);
-  const cachedCurrentUser = useMemo(() => getCachedCurrentUser(), []);
-  const cachedChats = useMemo(() => {
-    if (!cachedCurrentUser) {
-      return [];
-    }
-
-    return getCachedChatsSnapshot(cachedCurrentUser.user.id) ?? [];
-  }, [cachedCurrentUser]);
 
   const [openMenuChatId, setOpenMenuChatId] = useState<string | null>(null);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSidebarContentVisible, setIsSidebarContentVisible] = useState(true);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
-  const [chats, setChats] = useState<Chat[]>(cachedChats);
+  const [chats, setChats] = useState<Chat[]>([]);
   const [draft, setDraft] = useState("");
   const [isAssistantTyping, setIsAssistantTyping] = useState(false);
   const [isChatListLoading, setIsChatListLoading] = useState(false);
   const [isActiveChatLoading, setIsActiveChatLoading] = useState(false);
   const [isActiveChatMissing, setIsActiveChatMissing] = useState(false);
-  const [currentUser, setCurrentUser] = useState<CurrentUserData | null>(cachedCurrentUser ?? null);
-  const [isAuthLoading, setIsAuthLoading] = useState(cachedCurrentUser === undefined);
+  const [currentUser, setCurrentUser] = useState<CurrentUserData | null>(null);
+  const [selectedModelProvider, setSelectedModelProvider] = useState<ModelProviderId>(
+    publicSiteConfig.ai.defaultModelProvider,
+  );
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
 
   const sidebarContentTimerRef = useRef<number | null>(null);
@@ -199,11 +200,21 @@ export default function Home() {
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (cachedCurrentUser !== undefined) {
-      return;
-    }
+    const cachedProvider = getModelProviderPreference(publicSiteConfig.ai.defaultModelProvider);
+    setSelectedModelProvider(cachedProvider);
+  }, []);
 
+  useEffect(() => {
     let isDisposed = false;
+    const cachedCurrentUser = getCachedCurrentUser();
+
+    if (cachedCurrentUser !== undefined) {
+      setCurrentUser(cachedCurrentUser);
+      setIsAuthLoading(false);
+      return () => {
+        isDisposed = true;
+      };
+    }
 
     async function resolveSession() {
       try {
@@ -232,7 +243,7 @@ export default function Home() {
     return () => {
       isDisposed = true;
     };
-  }, [cachedCurrentUser]);
+  }, []);
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
@@ -338,7 +349,7 @@ export default function Home() {
     return () => {
       isDisposed = true;
     };
-  }, [currentUser]);
+  }, [currentUser, pathname, router]);
 
   useEffect(() => {
     const requestedChatId = activeChatId;
@@ -410,7 +421,7 @@ export default function Home() {
     return () => {
       isDisposed = true;
     };
-  }, [activeChatId, currentUser, isAuthLoading]);
+  }, [activeChatId, currentUser, isAuthLoading, pathname, router]);
 
   function toggleSidebar() {
     setOpenMenuChatId(null);
@@ -468,7 +479,7 @@ export default function Home() {
         const assistantMessage: Message = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: buildTemporaryAssistantResponse(trimmedDraft),
+          content: buildTemporaryAssistantResponse(trimmedDraft, selectedModelProvider),
           time: getCurrentTimeLabel(),
         };
 
@@ -495,7 +506,7 @@ export default function Home() {
 
     try {
       if (!activeChatId) {
-        const createdChat = await createChatFromMessage(trimmedDraft);
+        const createdChat = await createChatFromMessage(trimmedDraft, selectedModelProvider);
         setChats((previous) => upsertChat(previous, createdChat.chat));
         setChatMessages(mapChatMessages(createdChat));
         router.push(`/c/${createdChat.chat.id}`);
@@ -503,7 +514,7 @@ export default function Home() {
       }
 
       const targetChatId = activeChatId;
-      const updatedChat = await appendChatMessage(targetChatId, trimmedDraft);
+      const updatedChat = await appendChatMessage(targetChatId, trimmedDraft, selectedModelProvider);
       setChats((previous) => upsertChat(previous, updatedChat.chat));
       setChatMessages(mapChatMessages(updatedChat));
     } catch (error) {
@@ -542,6 +553,12 @@ export default function Home() {
       setAuthNotice("Signed out. Sign in again to access account features.");
       router.push("/");
     }
+  }
+
+  function handleModelProviderChange(event: ChangeEvent<HTMLSelectElement>) {
+    const nextProvider = resolveModelProviderId(event.target.value, publicSiteConfig.ai.defaultModelProvider);
+    setSelectedModelProvider(nextProvider);
+    setModelProviderPreference(nextProvider);
   }
 
   const userDisplayName = currentUser
@@ -792,6 +809,22 @@ export default function Home() {
                       : "Browsing in guest mode"}
               </p>
             </div>
+
+            <label className="flex shrink-0 items-center gap-2 text-xs text-[color:var(--text-dim)]" htmlFor="chat-model-provider">
+              <span className="hidden sm:inline">Model</span>
+              <select
+                id="chat-model-provider"
+                value={selectedModelProvider}
+                onChange={handleModelProviderChange}
+                className="rounded-md border border-white/12 bg-white/[0.04] px-2 py-1 text-xs text-[color:var(--text-primary)] outline-none"
+              >
+                {OPENCHAT_MODEL_PROVIDER_OPTIONS.map((providerOption) => (
+                  <option key={providerOption.id} value={providerOption.id}>
+                    {providerOption.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </header>
 
           <div
@@ -882,7 +915,7 @@ export default function Home() {
                 type="submit"
                 aria-label="Send message"
                 disabled={composerDisabled || draft.trim().length === 0}
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--send-button-bg)] text-[var(--send-button-fg)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--send-button-bg)] text-[var(--send-button-fg)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <SendIcon />
               </button>

@@ -73,7 +73,7 @@ This file helps coding agents quickly understand and safely modify this reposito
   - `BACKEND_DB_ADAPTER=postgres`
   - `DATABASE_URL=<postgres connection string>`
 - Auth issuer config:
-  - `BACKEND_AUTH_ISSUERS` as JSON array.
+- `BACKEND_AUTH_ISSUERS` as JSON array.
   - each item supports:
     - `name`
     - `issuer`
@@ -83,11 +83,24 @@ This file helps coding agents quickly understand and safely modify this reposito
     - optional for browser auth flows: `oidc.clientId`, `oidc.clientSecret`, `oidc.redirectUri`, `oidc.scopes`, `oidc.authorizationParams`, `oidc.loginParams`, `oidc.registerParams`.
 - Clock skew:
   - `BACKEND_AUTH_CLOCK_SKEW_SECONDS` (default `60`, allowed `0-300`).
+- Default interactive auth provider:
+  - `BACKEND_AUTH_DEFAULT_PROVIDER` (optional provider `name`; used by `/api/v1/auth/start`).
 - Cookie session config:
   - `BACKEND_SESSION_SECRET` (required for login/register flows, min 32 chars)
   - `BACKEND_SESSION_COOKIE_NAME` (default `openchat_session`)
   - `BACKEND_AUTH_FLOW_COOKIE_NAME` (default `openchat_auth_flow`)
   - `BACKEND_SESSION_SECURE_COOKIES` (`true`/`false`, defaults by environment)
+- Local admin password auth:
+  - local admin username is fixed to `admin`
+  - `BACKEND_ADMIN_COOKIE_NAME` (default `openchat_admin_session`)
+  - `BACKEND_ADMIN_PASSWORD_HASH` (optional `pbkdf2_sha512$...`)
+  - if hash is missing, local admin defaults to `admin/admin`
+  - in production, default password login is allowed once but protected actions require immediate password change
+- Optional model provider API keys:
+  - `OPENROUTER_API_KEY`
+  - `OPENAI_API_KEY`
+  - `ANTHROPIC_API_KEY`
+  - `GOOGLE_API_KEY`
 
 ### Auth0 issuer example
 
@@ -117,6 +130,7 @@ Auth0 requirements:
 - Apply `backend/adapters/db/postgres/migrations/001_initial.sql` before using protected endpoints.
 - Apply `backend/adapters/db/postgres/migrations/002_user_profile_avatar.sql` for account avatar support.
 - Apply `backend/adapters/db/postgres/migrations/003_chats.sql` for persisted chats/messages.
+- Apply `backend/adapters/db/postgres/migrations/004_external_identity_metadata.sql` for persisted provider identity metadata.
 - Neon uses the same schema/queries as local Postgres (swap only `DATABASE_URL`).
 
 ## MVP API routes
@@ -135,8 +149,17 @@ Auth0 requirements:
 - `GET /api/v1/chats/:id`
 - `POST /api/v1/chats/:id/messages`
 - `GET /api/v1/auth/providers`
+- `GET /api/v1/auth/start?mode=login|register`
 - `GET /api/v1/auth/:provider/start?mode=login|register`
 - `GET /api/v1/auth/:provider/callback`
+- `POST /api/v1/admin/auth/login`
+- `POST /api/v1/admin/auth/change-password`
+- `POST /api/v1/admin/auth/logout`
+- `GET /api/v1/admin/auth/session`
+- `GET /api/v1/admin/api-keys`
+- `PUT /api/v1/admin/api-keys`
+- `GET /api/v1/admin/runtime-settings`
+- `PUT /api/v1/admin/runtime-settings`
 - `POST /api/v1/auth/logout`
 
 Notes:
@@ -145,6 +168,8 @@ Notes:
 - `/me` and `/projects*` require Bearer JWT.
 - Protected requests run JIT user provisioning keyed by `(issuer, subject)`.
 - Browser requests can authenticate via signed HTTP-only cookie session (fallback when `Authorization` header is absent).
+- Admin settings use a separate local admin cookie session (not tied to provider auth).
+- `/login` and `/register` auto-start auth using `BACKEND_AUTH_DEFAULT_PROVIDER` (or first interactive provider).
 
 ## Bring-up checklist (what must work)
 

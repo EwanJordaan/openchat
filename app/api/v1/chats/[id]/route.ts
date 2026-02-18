@@ -1,4 +1,9 @@
-import { handleApiRoute, jsonResponse, requirePrincipal } from "@/backend/transport/rest/pipeline";
+import {
+  handleApiRoute,
+  jsonResponse,
+  requirePermission,
+  requirePrincipal,
+} from "@/backend/transport/rest/pipeline";
 
 export const runtime = "nodejs";
 
@@ -11,6 +16,10 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
     const principal = await requirePrincipal(request, container);
 
     const { id } = await context.params;
+    await requirePermission(container, principal, "chat.read", {
+      type: "chat",
+      chatId: id,
+    });
 
     const chat = await container.useCases.getChatById.execute(principal, id);
     return jsonResponse(requestId, { data: chat });
