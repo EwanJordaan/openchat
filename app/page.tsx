@@ -150,14 +150,6 @@ function getChatIdFromPathname(pathname: string): string | null {
   }
 }
 
-function resolveAccessTier(currentUser: CurrentUserData | null): "guest" | "member" | "admin" {
-  if (!currentUser) {
-    return "guest";
-  }
-
-  return currentUser.principal.roles.includes("admin") ? "admin" : "member";
-}
-
 function SparkIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
@@ -244,11 +236,6 @@ export default function Home() {
   const [providerAvailability, setProviderAvailability] = useState<ModelProviderAvailability[]>(
     getDefaultProviderAvailability(),
   );
-  const [openRouterRateLimits, setOpenRouterRateLimits] = useState({
-    guestRequestsPerDay: 0,
-    memberRequestsPerDay: 0,
-    adminRequestsPerDay: 0,
-  });
   const [modelPresetByProvider, setModelPresetByProvider] = useState<
     Partial<Record<ModelProviderId, string>>
   >(() => getDefaultModelPresetByProvider(getDefaultProviderAvailability()));
@@ -284,7 +271,6 @@ export default function Home() {
 
         setDefaultModelProvider(payload.defaultModelProvider);
         setProviderAvailability(payload.providers);
-        setOpenRouterRateLimits(payload.openrouterRateLimits);
       } catch {
         if (isDisposed) {
           return;
@@ -924,13 +910,6 @@ export default function Home() {
     (providerOption) => providerOption.id === defaultModelProvider,
   );
   const selectedProviderModels = selectedProviderOption?.models ?? [];
-  const accessTier = resolveAccessTier(currentUser);
-  const openRouterLimitForTier =
-    accessTier === "admin"
-      ? openRouterRateLimits.adminRequestsPerDay
-      : accessTier === "member"
-        ? openRouterRateLimits.memberRequestsPerDay
-        : openRouterRateLimits.guestRequestsPerDay;
   const selectedPresetModel =
     modelPresetByProvider[defaultModelProvider] ??
     selectedProviderOption?.defaultModel ??
@@ -1357,36 +1336,6 @@ export default function Home() {
           </div>
 
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-3 pb-3 sm:px-5 sm:pb-4">
-            <div className="pointer-events-auto mb-2 rounded-lg border border-white/12 bg-[var(--bg-root)]/95 px-2.5 py-2 backdrop-blur">
-              <div className="grid gap-2">
-                <label className="flex min-w-0 items-center gap-2" htmlFor="chat-model-preset">
-                  <span className="w-14 shrink-0 text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-dim)]">
-                    Model
-                  </span>
-                  <select
-                    id="chat-model-preset"
-                    value={selectedPresetModel}
-                    onChange={handleModelPresetChange}
-                    className="ai-select min-w-0 flex-1 rounded-md border border-white/12 bg-white/[0.04] px-2 py-1.5 text-xs text-[color:var(--text-primary)] outline-none disabled:opacity-70"
-                    disabled={isAssistantTyping || selectedProviderModels.length === 0}
-                  >
-                    {selectedProviderModels.map((modelOption) => (
-                      <option key={modelOption.id} value={modelOption.id}>
-                        {modelOption.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <p className="mt-1.5 text-[11px] text-[color:var(--text-dim)]">
-                {`Provider is managed by admin policy (${selectedProviderOption?.label ?? defaultModelProvider}).`}
-                {defaultModelProvider === "openrouter"
-                  ? ` ${accessTier} daily request limit: ${openRouterLimitForTier}.`
-                  : ""}
-              </p>
-            </div>
-
             <form
               onSubmit={handleSendMessage}
               className="composer-shell pointer-events-auto flex items-center gap-1 rounded-lg border border-white/12 bg-[var(--bg-root)] px-1.5 py-1"
@@ -1410,6 +1359,21 @@ export default function Home() {
                 onChange={(event) => setDraft(event.target.value)}
                 disabled={composerDisabled}
               />
+              <select
+                id="chat-model-preset"
+                aria-label="Select model"
+                value={selectedPresetModel}
+                onChange={handleModelPresetChange}
+                className="ai-select h-7 w-[7.5rem] shrink-0 rounded-md border border-white/12 bg-white/[0.04] px-1.5 text-[11px] text-[color:var(--text-primary)] outline-none sm:w-[8.75rem]"
+                disabled={isAssistantTyping || selectedProviderModels.length === 0}
+                title={selectedProviderOption?.label ?? defaultModelProvider}
+              >
+                {selectedProviderModels.map((modelOption) => (
+                  <option key={modelOption.id} value={modelOption.id}>
+                    {modelOption.label}
+                  </option>
+                ))}
+              </select>
               <button
                 type="submit"
                 aria-label="Send message"
