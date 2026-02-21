@@ -1228,8 +1228,22 @@ export default function Home() {
         <section className="workspace-main surface relative flex min-w-0 flex-1 flex-col overflow-hidden">
           <header className="flex items-center justify-between border-b border-white/10 px-3 py-2.5 sm:px-5 sm:py-3">
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-[color:var(--text-primary)]">{userDisplayName}</p>
-              <p className="truncate text-xs text-[color:var(--text-dim)]">
+              <select
+                id="chat-model-picker"
+                aria-label="Select model"
+                value={selectedPresetModel}
+                onChange={handleModelPresetChange}
+                className="ai-select h-8 w-[9rem] rounded-md border border-white/12 bg-white/[0.04] px-2 text-xs text-[color:var(--text-primary)] outline-none sm:w-[11rem]"
+                disabled={isAssistantTyping || selectedProviderModels.length === 0}
+                title={selectedProviderOption?.label ?? defaultModelProvider}
+              >
+                {selectedProviderModels.map((modelOption) => (
+                  <option key={modelOption.id} value={modelOption.id}>
+                    {modelOption.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 truncate text-xs text-[color:var(--text-dim)]">
                 {isActiveChatMissing
                   ? "Chat not found"
                   : activeChatId
@@ -1239,6 +1253,9 @@ export default function Home() {
                       : "Browsing in guest mode"}
               </p>
             </div>
+            <p className="ml-3 max-w-32 truncate text-xs text-[color:var(--text-muted)] sm:max-w-none">
+              {userDisplayName}
+            </p>
           </header>
 
           <div
@@ -1359,21 +1376,6 @@ export default function Home() {
                 onChange={(event) => setDraft(event.target.value)}
                 disabled={composerDisabled}
               />
-              <select
-                id="chat-model-preset"
-                aria-label="Select model"
-                value={selectedPresetModel}
-                onChange={handleModelPresetChange}
-                className="ai-select h-7 w-[7.5rem] shrink-0 rounded-md border border-white/12 bg-white/[0.04] px-1.5 text-[11px] text-[color:var(--text-primary)] outline-none sm:w-[8.75rem]"
-                disabled={isAssistantTyping || selectedProviderModels.length === 0}
-                title={selectedProviderOption?.label ?? defaultModelProvider}
-              >
-                {selectedProviderModels.map((modelOption) => (
-                  <option key={modelOption.id} value={modelOption.id}>
-                    {modelOption.label}
-                  </option>
-                ))}
-              </select>
               <button
                 type="submit"
                 aria-label="Send message"
