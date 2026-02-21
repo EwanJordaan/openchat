@@ -1,3 +1,10 @@
 import { defineCloudflareConfig } from "@opennextjs/cloudflare";
 
-export default defineCloudflareConfig();
+const config = defineCloudflareConfig();
+
+config.default.minify = true;
+if (config.middleware && "external" in config.middleware && config.middleware.external) {
+  config.middleware.minify = true;
+}
+
+export default config;

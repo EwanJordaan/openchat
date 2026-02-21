@@ -2,6 +2,7 @@ name = "openchat"
 main = ".open-next/worker.js"
 compatibility_date = "2026-02-21"
 compatibility_flags = ["nodejs_compat"]
+minify = true
 
 [assets]
 directory = ".open-next/assets"
