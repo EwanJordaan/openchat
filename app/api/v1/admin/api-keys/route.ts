@@ -8,8 +8,9 @@ import {
   requireAdminPasswordRotation,
   requireAdminSession,
 } from "@/backend/transport/rest/admin-auth";
+import { handleAdminApiRoute } from "@/backend/transport/rest/admin-pipeline";
 import { ApiError } from "@/backend/transport/rest/api-error";
-import { handleApiRoute, jsonResponse, parseJsonBody } from "@/backend/transport/rest/pipeline";
+import { jsonResponse, parseJsonBody } from "@/backend/transport/rest/pipeline";
 
 export const runtime = "nodejs";
 
@@ -23,8 +24,8 @@ const updateApiKeysSchema = z
   .strict();
 
 export async function GET(request: Request): Promise<Response> {
-  return handleApiRoute(request, async ({ container, requestId }) => {
-    const session = requireAdminSession(request, container);
+  return handleAdminApiRoute(request, async ({ config, requestId }) => {
+    const session = requireAdminSession(request, config);
     requireAdminPasswordRotation(session);
 
     return jsonResponse(requestId, {
@@ -36,8 +37,8 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function PUT(request: Request): Promise<Response> {
-  return handleApiRoute(request, async ({ container, requestId }) => {
-    const session = requireAdminSession(request, container);
+  return handleAdminApiRoute(request, async ({ config, requestId }) => {
+    const session = requireAdminSession(request, config);
     requireAdminPasswordRotation(session);
 
     const payload = await parseJsonBody(request, updateApiKeysSchema);

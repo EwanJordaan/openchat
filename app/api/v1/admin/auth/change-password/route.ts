@@ -11,8 +11,9 @@ import {
 } from "@/backend/adapters/auth/admin-session";
 import { updateAdminAuthEnv } from "@/backend/composition/admin-auth-env";
 import { requireAdminSession } from "@/backend/transport/rest/admin-auth";
+import { handleAdminApiRoute } from "@/backend/transport/rest/admin-pipeline";
 import { ApiError } from "@/backend/transport/rest/api-error";
-import { handleApiRoute, jsonResponse, parseJsonBody } from "@/backend/transport/rest/pipeline";
+import { jsonResponse, parseJsonBody } from "@/backend/transport/rest/pipeline";
 
 export const runtime = "nodejs";
 
@@ -22,12 +23,12 @@ const changePasswordSchema = z.object({
 });
 
 export async function POST(request: Request): Promise<Response> {
-  return handleApiRoute(request, async ({ container, requestId }) => {
-    requireAdminSession(request, container);
+  return handleAdminApiRoute(request, async ({ config, requestId }) => {
+    requireAdminSession(request, config);
 
     const payload = await parseJsonBody(request, changePasswordSchema);
 
-    if (!verifyAdminPassword(payload.currentPassword, container.config.adminAuth.passwordHash)) {
+    if (!verifyAdminPassword(payload.currentPassword, config.adminAuth.passwordHash)) {
       throw new ApiError(401, "invalid_current_password", "Current password is incorrect");
     }
 
@@ -43,7 +44,7 @@ export async function POST(request: Request): Promise<Response> {
 
     process.env.BACKEND_ADMIN_PASSWORD_HASH = nextHash;
 
-    const currentSession = readAdminSessionFromCookie(request.headers.get("cookie"), container.config);
+    const currentSession = readAdminSessionFromCookie(request.headers.get("cookie"), config);
     const refreshedCookie = createAdminSessionCookie(
       {
         username: "admin",
@@ -51,7 +52,7 @@ export async function POST(request: Request): Promise<Response> {
         issuedAt: new Date().toISOString(),
         expiresAt: currentSession?.expiresAt ?? new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
       },
-      container.config,
+      config,
     );
 
     const response = jsonResponse(requestId, {

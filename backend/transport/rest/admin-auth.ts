@@ -1,9 +1,12 @@
-import { readAdminSessionFromCookie, type AdminSession } from "@/backend/adapters/auth/admin-session";
-import type { ApplicationContainer } from "@/backend/composition/container";
+import {
+  readAdminSessionFromCookie,
+  type AdminSession,
+  type AdminSessionCookieConfig,
+} from "@/backend/adapters/auth/admin-session";
 import { ApiError } from "@/backend/transport/rest/api-error";
 
-export function requireAdminSession(request: Request, container: ApplicationContainer): AdminSession {
-  const session = readAdminSessionFromCookie(request.headers.get("cookie"), container.config);
+export function requireAdminSession(request: Request, config: AdminSessionCookieConfig): AdminSession {
+  const session = readAdminSessionFromCookie(request.headers.get("cookie"), config);
   if (!session) {
     throw new ApiError(401, "admin_unauthorized", "Admin authentication is required");
   }

@@ -7,8 +7,8 @@ import {
   requireAdminPasswordRotation,
   requireAdminSession,
 } from "@/backend/transport/rest/admin-auth";
+import { handleAdminApiRoute } from "@/backend/transport/rest/admin-pipeline";
 import {
-  handleApiRoute,
   jsonResponse,
   parseJsonBody,
 } from "@/backend/transport/rest/pipeline";
@@ -16,8 +16,8 @@ import {
 export const runtime = "nodejs";
 
 export async function GET(request: Request): Promise<Response> {
-  return handleApiRoute(request, async ({ container, requestId }) => {
-    const session = requireAdminSession(request, container);
+  return handleAdminApiRoute(request, async ({ config, requestId }) => {
+    const session = requireAdminSession(request, config);
     requireAdminPasswordRotation(session);
 
     const settings = await getSiteSettingsSnapshot();
@@ -26,8 +26,8 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function PUT(request: Request): Promise<Response> {
-  return handleApiRoute(request, async ({ container, requestId }) => {
-    const session = requireAdminSession(request, container);
+  return handleAdminApiRoute(request, async ({ config, requestId }) => {
+    const session = requireAdminSession(request, config);
     requireAdminPasswordRotation(session);
 
     const payload = await parseJsonBody(request, siteSettingsConfigSchema);

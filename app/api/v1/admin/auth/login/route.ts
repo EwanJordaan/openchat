@@ -6,8 +6,9 @@ import {
   verifyAdminPassword,
 } from "@/backend/adapters/auth/admin-password";
 import { createAdminSessionCookie } from "@/backend/adapters/auth/admin-session";
+import { handleAdminApiRoute } from "@/backend/transport/rest/admin-pipeline";
 import { ApiError } from "@/backend/transport/rest/api-error";
-import { handleApiRoute, jsonResponse, parseJsonBody } from "@/backend/transport/rest/pipeline";
+import { jsonResponse, parseJsonBody } from "@/backend/transport/rest/pipeline";
 
 export const runtime = "nodejs";
 
@@ -17,16 +18,16 @@ const adminLoginSchema = z.object({
 });
 
 export async function POST(request: Request): Promise<Response> {
-  return handleApiRoute(request, async ({ container, requestId }) => {
+  return handleAdminApiRoute(request, async ({ config, requestId }) => {
     const payload = await parseJsonBody(request, adminLoginSchema);
 
-    if (!verifyAdminPassword(payload.password, container.config.adminAuth.passwordHash)) {
+    if (!verifyAdminPassword(payload.password, config.adminAuth.passwordHash)) {
       throw new ApiError(401, "invalid_credentials", "Invalid admin password");
     }
 
     const mustChangePassword =
       process.env.NODE_ENV === "production" &&
-      isDefaultAdminPasswordConfigured(container.config.adminAuth.passwordHash);
+      isDefaultAdminPasswordConfigured(config.adminAuth.passwordHash);
 
     const sessionCookie = createAdminSessionCookie(
       {
@@ -35,7 +36,7 @@ export async function POST(request: Request): Promise<Response> {
         issuedAt: new Date().toISOString(),
         expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
       },
-      container.config,
+      config,
     );
 
     const response = jsonResponse(requestId, {

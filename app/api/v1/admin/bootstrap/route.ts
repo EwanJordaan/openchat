@@ -3,8 +3,8 @@ import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
 import { updateAdminSetupEnv } from "@/backend/composition/admin-setup-env";
+import { handleAdminApiRoute } from "@/backend/transport/rest/admin-pipeline";
 import {
-  handleApiRoute,
   jsonResponse,
   parseJsonBody,
 } from "@/backend/transport/rest/pipeline";
@@ -19,10 +19,10 @@ const updateAdminBootstrapSchema = z.object({
 });
 
 export async function POST(request: Request): Promise<Response> {
-  return handleApiRoute(request, async ({ container, requestId }) => {
+  return handleAdminApiRoute(request, async ({ config, requestId }) => {
     const payload = await parseJsonBody(request, updateAdminBootstrapSchema);
 
-    const configuredPassword = container.config.adminSetup.password;
+    const configuredPassword = config.adminSetup.password;
     if (!configuredPassword) {
       throw new ApiError(
         503,

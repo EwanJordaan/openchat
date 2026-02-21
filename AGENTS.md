@@ -210,6 +210,7 @@ Notes:
 - Protected requests run JIT user provisioning keyed by `(issuer, subject)`.
 - Browser requests can authenticate via signed HTTP-only cookie session (fallback when `Authorization` header is absent).
 - Admin settings use a separate local admin cookie session (not tied to provider auth).
+- Admin routes are bootstrap-safe and do not depend on Postgres wiring, so runtime database/auth env settings can be configured before `DATABASE_URL` is available.
 - `/login` and `/register` auto-start only when exactly one redirect provider is available and local auth is disabled.
 
 ## Bring-up checklist (what must work)

@@ -202,6 +202,25 @@ export default function AdminSettingsPage() {
           return;
         }
 
+        if (!isDisposed) {
+          setAuthState("authenticated");
+        }
+
+        await Promise.all([
+          loadSiteSettings(),
+          loadProviderApiKeys(),
+          loadRuntimeSettings(),
+        ]);
+      } catch (error) {
+        if (!isDisposed) {
+          setErrorMessage(error instanceof Error ? error.message : "Could not load admin settings session.");
+          setAuthState("unauthenticated");
+        }
+      }
+    }
+
+    async function loadSiteSettings() {
+      try {
         const response = await fetch("/api/v1/admin/settings", {
           method: "GET",
           credentials: "include",
@@ -238,36 +257,93 @@ export default function AdminSettingsPage() {
         setDraft(cloneConfig(payload.data.config));
         setConfigPath(payload.data.filePath);
         setIsUsingDefaults(payload.data.usingDefaults);
-
-        const apiKeysResponse = await fetch("/api/v1/admin/api-keys", {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        });
-        const apiKeysPayload = (await apiKeysResponse.json()) as AdminApiKeysApiResponse;
-
-        if (apiKeysResponse.ok && apiKeysPayload.data) {
-          setApiKeysStatus(apiKeysPayload.data.keys);
-        }
-
-        const runtimeSettingsResponse = await fetch("/api/v1/admin/runtime-settings", {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        });
-        const runtimeSettingsPayload =
-          (await runtimeSettingsResponse.json()) as AdminRuntimeSettingsApiResponse;
-
-        if (runtimeSettingsResponse.ok && runtimeSettingsPayload.data) {
-          setRuntimeSettingsPath(runtimeSettingsPayload.data.filePath);
-          setRuntimeSettingsDraft(runtimeSettingsPayload.data.settings);
-        }
-
-        setAuthState("authenticated");
+        setErrorMessage(null);
       } catch (error) {
         if (!isDisposed) {
-          setErrorMessage(error instanceof Error ? error.message : "Could not load admin settings.");
-          setAuthState("authenticated");
+          setErrorMessage(error instanceof Error ? error.message : "Could not load site settings.");
+        }
+      }
+    }
+
+    async function loadProviderApiKeys() {
+      try {
+        const response = await fetch("/api/v1/admin/api-keys", {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as AdminApiKeysApiResponse;
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            if (!isDisposed) {
+              setAuthState("unauthenticated");
+            }
+            return;
+          }
+
+          if (payload.error?.code === "admin_password_change_required") {
+            if (!isDisposed) {
+              setAuthState("password_change_required");
+            }
+            return;
+          }
+
+          throw new Error(payload.error?.message ?? `Unable to load API key settings (${response.status})`);
+        }
+
+        if (!payload.data || isDisposed) {
+          return;
+        }
+
+        setApiKeysStatus(payload.data.keys);
+        setApiKeysErrorMessage(null);
+      } catch (error) {
+        if (!isDisposed) {
+          setApiKeysErrorMessage(error instanceof Error ? error.message : "Could not load API key settings.");
+        }
+      }
+    }
+
+    async function loadRuntimeSettings() {
+      try {
+        const response = await fetch("/api/v1/admin/runtime-settings", {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as AdminRuntimeSettingsApiResponse;
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            if (!isDisposed) {
+              setAuthState("unauthenticated");
+            }
+            return;
+          }
+
+          if (payload.error?.code === "admin_password_change_required") {
+            if (!isDisposed) {
+              setAuthState("password_change_required");
+            }
+            return;
+          }
+
+          throw new Error(payload.error?.message ?? `Unable to load runtime settings (${response.status})`);
+        }
+
+        if (!payload.data || isDisposed) {
+          return;
+        }
+
+        setRuntimeSettingsPath(payload.data.filePath);
+        setRuntimeSettingsDraft(payload.data.settings);
+        setRuntimeSettingsErrorMessage(null);
+      } catch (error) {
+        if (!isDisposed) {
+          setRuntimeSettingsErrorMessage(
+            error instanceof Error ? error.message : "Could not load runtime settings.",
+          );
         }
       }
     }
@@ -571,9 +647,9 @@ export default function AdminSettingsPage() {
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4 sm:pb-5">
           <div>
             <p className="text-xs uppercase tracking-[0.14em] text-[color:var(--text-dim)]">Admin</p>
-            <h1 className="mt-1 text-2xl font-semibold text-[color:var(--text-primary)]">Site Settings</h1>
+            <h1 className="mt-1 text-2xl font-semibold text-[color:var(--text-primary)]">Site and Runtime Settings</h1>
             <p className="mt-1 text-sm text-[color:var(--text-muted)]">
-              Local admin configuration panel (separate from user/provider auth).
+              Local admin control plane for sitewide behavior and runtime environment configuration.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -596,35 +672,11 @@ export default function AdminSettingsPage() {
 
         <form onSubmit={handleSave} className="mt-5 space-y-4">
           <section className="surface-soft px-4 py-4 sm:px-5">
-            <p className="text-xs uppercase tracking-[0.14em] text-[color:var(--text-dim)]">Backend</p>
+            <p className="text-xs uppercase tracking-[0.14em] text-[color:var(--text-dim)]">Sitewide Access Policy</p>
+            <p className="mt-1 text-sm text-[color:var(--text-muted)]">
+              Runtime database/auth wiring is managed in the Runtime Database and Auth section below.
+            </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1 text-sm text-[color:var(--text-primary)]" htmlFor="db-adapter">
-                <span className="block">Default database adapter</span>
-                <select
-                  id="db-adapter"
-                  value={draft?.backend.database.defaultAdapter ?? openChatConfig.backend.database.defaultAdapter}
-                  onChange={(event) =>
-                    setDraft((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            backend: {
-                              ...prev.backend,
-                              database: {
-                                defaultAdapter: event.target.value as OpenChatConfig["backend"]["database"]["defaultAdapter"],
-                              },
-                            },
-                          }
-                        : prev,
-                    )
-                  }
-                  className="admin-select w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-sm outline-none"
-                >
-                  <option value="postgres">postgres</option>
-                  <option value="convex">convex</option>
-                </select>
-              </label>
-
               <label className="surface-soft flex items-center gap-3 rounded-lg border border-white/10 px-3 py-2 text-sm text-[color:var(--text-primary)]">
                 <input
                   type="checkbox"

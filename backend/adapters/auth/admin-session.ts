@@ -1,7 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-import type { BackendConfig } from "@/backend/composition/config";
-
 export interface AdminSession {
   username: "admin";
   mustChangePassword: boolean;
@@ -27,9 +25,19 @@ interface CookieOptions {
 
 const DEFAULT_SAME_SITE: SameSite = "Lax";
 
+export interface AdminSessionCookieConfig {
+  session: {
+    secret?: string;
+    secureCookies: boolean;
+  };
+  adminAuth: {
+    cookieName: string;
+  };
+}
+
 export function readAdminSessionFromCookie(
   cookieHeader: string | null,
-  config: BackendConfig,
+  config: AdminSessionCookieConfig,
 ): AdminSession | null {
   const secret = resolveSessionSecret(config);
   if (!secret) {
@@ -63,7 +71,7 @@ export function readAdminSessionFromCookie(
   };
 }
 
-export function createAdminSessionCookie(session: AdminSession, config: BackendConfig): string {
+export function createAdminSessionCookie(session: AdminSession, config: AdminSessionCookieConfig): string {
   const secret = requireSessionSecret(config);
   const value = encodeSignedValue(session, secret);
 
@@ -81,7 +89,7 @@ export function createAdminSessionCookie(session: AdminSession, config: BackendC
   });
 }
 
-export function createClearedAdminSessionCookie(config: BackendConfig): string {
+export function createClearedAdminSessionCookie(config: AdminSessionCookieConfig): string {
   return serializeCookie(config.adminAuth.cookieName, "", {
     httpOnly: true,
     secure: config.session.secureCookies,
@@ -92,7 +100,7 @@ export function createClearedAdminSessionCookie(config: BackendConfig): string {
   });
 }
 
-function requireSessionSecret(config: BackendConfig): string {
+function requireSessionSecret(config: AdminSessionCookieConfig): string {
   const secret = resolveSessionSecret(config);
   if (!secret) {
     throw new Error("BACKEND_SESSION_SECRET is required and must be at least 32 characters");
@@ -101,7 +109,7 @@ function requireSessionSecret(config: BackendConfig): string {
   return secret;
 }
 
-function resolveSessionSecret(config: BackendConfig): string | null {
+function resolveSessionSecret(config: AdminSessionCookieConfig): string | null {
   const secret = config.session.secret?.trim();
   if (!secret || secret.length < 32) {
     return null;

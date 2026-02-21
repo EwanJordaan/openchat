@@ -69,6 +69,7 @@ Local admin password behavior:
 - In production, first local admin login with the default password is allowed but protected actions are blocked until password rotation.
 - `POST /api/v1/admin/auth/change-password` rotates and persists `BACKEND_ADMIN_PASSWORD_HASH` in `.env`.
 - Admin auth uses a separate HTTP-only cookie and is not tied to user/provider auth.
+- Admin routes under `/api/v1/admin/*` are bootstrap-safe and can load without Postgres wiring, so runtime DB/auth settings can be configured before `DATABASE_URL` is set.
 
 Admin bootstrap behavior (legacy helper):
 

@@ -1,11 +1,12 @@
 import { readAdminSessionFromCookie } from "@/backend/adapters/auth/admin-session";
-import { handleApiRoute, jsonResponse } from "@/backend/transport/rest/pipeline";
+import { handleAdminApiRoute } from "@/backend/transport/rest/admin-pipeline";
+import { jsonResponse } from "@/backend/transport/rest/pipeline";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request): Promise<Response> {
-  return handleApiRoute(request, async ({ container, requestId }) => {
-    const session = readAdminSessionFromCookie(request.headers.get("cookie"), container.config);
+  return handleAdminApiRoute(request, async ({ config, requestId }) => {
+    const session = readAdminSessionFromCookie(request.headers.get("cookie"), config);
 
     return jsonResponse(requestId, {
       data: {

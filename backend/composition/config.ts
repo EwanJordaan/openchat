@@ -104,7 +104,7 @@ export function loadBackendConfig(): BackendConfig {
   const env = envSchema.parse(process.env);
   const siteConfig = getEffectiveOpenChatConfigSync();
 
-  const dbAdapter = env.BACKEND_DB_ADAPTER ?? siteConfig.backend.database.defaultAdapter;
+  const dbAdapter = env.BACKEND_DB_ADAPTER ?? "postgres";
   const clockSkewSeconds = parseClockSkew(env.BACKEND_AUTH_CLOCK_SKEW_SECONDS);
   const issuers = parseIssuerConfig(env.BACKEND_AUTH_ISSUERS);
   const defaultProviderName = parseDefaultProviderName(env.BACKEND_AUTH_DEFAULT_PROVIDER);
