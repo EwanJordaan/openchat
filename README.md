@@ -77,6 +77,7 @@ Local admin password behavior:
 - `POST /api/v1/admin/auth/change-password` rotates and persists `BACKEND_ADMIN_PASSWORD_HASH` in `.env`.
 - Admin auth uses a separate HTTP-only cookie and is not tied to user/provider auth.
 - Admin routes under `/api/v1/admin/*` are bootstrap-safe and can load without Postgres wiring, so runtime DB/auth settings can be configured before `DATABASE_URL` is set.
+- Use `/admin/dashboard` for guided runtime setup; use `/admin/settings` for advanced editing.
 
 Admin bootstrap behavior (legacy helper):
 
@@ -169,6 +170,7 @@ Use the exact `iss` claim from your Clerk session token for `issuer`.
 - `GET /api/v1/admin/auth/session`
 - `GET /api/v1/admin/api-keys`
 - `PUT /api/v1/admin/api-keys`
+- `GET /api/v1/admin/dashboard`
 - `GET /api/v1/admin/runtime-settings`
 - `PUT /api/v1/admin/runtime-settings`
 - `POST /api/v1/auth/logout`

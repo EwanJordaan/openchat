@@ -44,7 +44,7 @@ export async function POST(request: Request): Promise<Response> {
         authenticated: true,
         username: getDefaultAdminUsername(),
         mustChangePassword,
-        returnTo: sanitizeReturnTo(payload.returnTo ?? "/admin/settings"),
+        returnTo: sanitizeReturnTo(payload.returnTo ?? "/admin/dashboard"),
       },
     });
     response.headers.append("set-cookie", sessionCookie);
@@ -55,7 +55,7 @@ export async function POST(request: Request): Promise<Response> {
 
 function sanitizeReturnTo(raw: string): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) {
-    return "/admin/settings";
+    return "/admin/dashboard";
   }
 
   return raw;
