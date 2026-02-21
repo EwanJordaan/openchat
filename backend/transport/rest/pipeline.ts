@@ -5,6 +5,7 @@ import type { AuthorizationResource } from "@/backend/ports/permission-checker";
 
 import type { ApplicationContainer } from "@/backend/composition/container";
 import { readSessionFromCookie } from "@/backend/adapters/auth/cookie-session";
+import { resolvePrincipalFromLocalSession } from "@/backend/adapters/auth/local-auth";
 import { getApplicationContainer } from "@/backend/composition/container";
 import { ApiError, toErrorResponse } from "@/backend/transport/rest/api-error";
 
@@ -70,11 +71,16 @@ export async function requirePrincipal(
 
   const principal = await container.authContextProvider.getPrincipal(authorizationHeader);
 
-  if (!principal) {
-    throw new ApiError(401, "unauthorized", "Missing or invalid Bearer token");
+  if (principal) {
+    return principal;
   }
 
-  return principal;
+  const localPrincipal = await resolvePrincipalFromLocalSession(request, container);
+  if (localPrincipal) {
+    return localPrincipal;
+  }
+
+  throw new ApiError(401, "unauthorized", "Missing or invalid authentication session");
 }
 
 export async function requirePermission(

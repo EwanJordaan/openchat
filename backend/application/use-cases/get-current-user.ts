@@ -18,7 +18,7 @@ export interface CurrentUserView {
     subject: string;
     issuer: string;
     providerName?: string;
-    authMethod?: "oidc";
+    authMethod?: "oidc" | "local";
     orgId?: string;
     roles: string[];
     permissions: string[];

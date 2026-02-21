@@ -6,7 +6,7 @@ This file helps coding agents quickly understand and safely modify this reposito
 
 - Name: `openchat`
 - Type: Next.js App Router app with UI + REST backend scaffold
-- Current state: polished frontend demo plus backend MVP architecture (multi-issuer auth + adapter-based data layer), with login/register, account settings/profile avatar flows, and persisted owner-scoped chats
+- Current state: polished frontend demo plus backend MVP architecture (multi-issuer auth + adapter-based data layer), with login/register, account settings/profile avatar flows, persisted owner-scoped chats, and optional local credentials auth backed by Postgres
 - Goal: provide a baseline chat experience with portable backend foundations (Auth + DB adapters)
 
 ## Tech stack
@@ -17,6 +17,7 @@ This file helps coding agents quickly understand and safely modify this reposito
 - Linting: ESLint via `eslint-config-next`
 - Backend auth/JWT: `jose`
 - Backend Postgres driver: `pg`
+- Local auth persistence: `drizzle-orm` (with existing Postgres database)
 - Runtime config validation: `zod`
 
 ## Code map
@@ -62,6 +63,14 @@ This file helps coding agents quickly understand and safely modify this reposito
 - Lint: `npm run lint`
 - Production build: `npm run build`
 - Start production build: `npm run start`
+- Preview in local Workers runtime: `npm run preview`
+- Deploy to Cloudflare Workers via OpenNext: `npm run deploy`
+
+Cloudflare deployment notes:
+
+- Uses `@opennextjs/cloudflare` adapter (not `@cloudflare/next-on-pages`).
+- Config files: `open-next.config.ts` and `wrangler.toml`.
+- Wrangler `nodejs_compat` is enabled to support backend Node APIs.
 
 ## Backend runtime configuration
 
@@ -90,6 +99,10 @@ This file helps coding agents quickly understand and safely modify this reposito
   - `BACKEND_SESSION_COOKIE_NAME` (default `openchat_session`)
   - `BACKEND_AUTH_FLOW_COOKIE_NAME` (default `openchat_auth_flow`)
   - `BACKEND_SESSION_SECURE_COOKIES` (`true`/`false`, defaults by environment)
+- Optional local credentials auth (alongside OIDC):
+  - `BACKEND_AUTH_LOCAL_ENABLED` (`true`/`false`, default `false`)
+  - `BACKEND_AUTH_LOCAL_COOKIE_NAME` (default `openchat_local_session`)
+  - `BACKEND_AUTH_LOCAL_SESSION_MAX_AGE_SECONDS` (default `2592000`, min `300`, max `7776000`)
 - Local admin password auth:
   - local admin username is fixed to `admin`
   - `BACKEND_ADMIN_COOKIE_NAME` (default `openchat_admin_session`)
@@ -125,12 +138,36 @@ Auth0 requirements:
 - Keep `issuer` exact (usually includes trailing slash).
 - Send `Authorization: Bearer <access_token>` to protected endpoints.
 
+### Clerk issuer example
+
+Use this shape in `BACKEND_AUTH_ISSUERS`:
+
+```json
+[
+  {
+    "name": "clerk",
+    "issuer": "https://YOUR_CLERK_FRONTEND_API",
+    "audience": "https://api.openchat.local",
+    "jwksUri": "https://api.clerk.com/v1/jwks",
+    "tokenUse": "access"
+  }
+]
+```
+
+Clerk requirements:
+
+- Use the exact `iss` from Clerk session tokens for `issuer`.
+- Configure `oidc.clientId` and `oidc.redirectUri` for browser login/register.
+- Send `Authorization: Bearer <access_token>` to protected endpoints.
+
 ## Database migration
 
 - Apply `backend/adapters/db/postgres/migrations/001_initial.sql` before using protected endpoints.
 - Apply `backend/adapters/db/postgres/migrations/002_user_profile_avatar.sql` for account avatar support.
 - Apply `backend/adapters/db/postgres/migrations/003_chats.sql` for persisted chats/messages.
 - Apply `backend/adapters/db/postgres/migrations/004_external_identity_metadata.sql` for persisted provider identity metadata.
+- Apply `backend/adapters/db/postgres/migrations/005_ai_usage_daily.sql` for provider daily rate-limit counters.
+- Apply `backend/adapters/db/postgres/migrations/006_local_auth.sql` for local credentials/sessions tables.
 - Neon uses the same schema/queries as local Postgres (swap only `DATABASE_URL`).
 
 ## MVP API routes
@@ -151,9 +188,11 @@ Auth0 requirements:
 - `POST /api/v1/chat/guest`
 - `GET /api/v1/model-providers`
 - `GET /api/v1/auth/providers`
-- `GET /api/v1/auth/start?mode=login|register`
+- `GET /api/v1/auth/start?mode=login|register[&provider=name]`
 - `GET /api/v1/auth/:provider/start?mode=login|register`
 - `GET /api/v1/auth/:provider/callback`
+- `POST /api/v1/auth/local/login`
+- `POST /api/v1/auth/local/register`
 - `POST /api/v1/admin/auth/login`
 - `POST /api/v1/admin/auth/change-password`
 - `POST /api/v1/admin/auth/logout`
@@ -171,7 +210,7 @@ Notes:
 - Protected requests run JIT user provisioning keyed by `(issuer, subject)`.
 - Browser requests can authenticate via signed HTTP-only cookie session (fallback when `Authorization` header is absent).
 - Admin settings use a separate local admin cookie session (not tied to provider auth).
-- `/login` and `/register` auto-start auth using `BACKEND_AUTH_DEFAULT_PROVIDER` (or first interactive provider).
+- `/login` and `/register` auto-start only when exactly one redirect provider is available and local auth is disabled.
 
 ## Bring-up checklist (what must work)
 
@@ -239,7 +278,7 @@ Notes:
 - Live assistant replies require at least one configured provider API key.
 - Convex mode is an in-memory fallback adapter (not a persisted Convex backend).
 - No repository contract tests yet.
-- No rate limiting/audit logging/idempotency yet.
+- No audit logging/idempotency yet.
 
 ## Troubleshooting
 

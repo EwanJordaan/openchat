@@ -53,6 +53,9 @@ interface RuntimeEnvSettings {
   auth: {
     defaultProviderName: string;
     clockSkewSeconds: number;
+    localEnabled: boolean;
+    localCookieName: string;
+    localSessionMaxAgeSeconds: number;
     sessionSecureCookiesMode: "auto" | "true" | "false";
     sessionCookieName: string;
     flowCookieName: string;
@@ -110,11 +113,33 @@ function cloneConfig(config: OpenChatConfig): OpenChatConfig {
     },
     ai: {
       defaultModelProvider: config.ai.defaultModelProvider,
+      allowUserModelProviderSelection: config.ai.allowUserModelProviderSelection,
+      openrouter: {
+        allowedModels: [...config.ai.openrouter.allowedModels],
+        rateLimits: {
+          guestRequestsPerDay: config.ai.openrouter.rateLimits.guestRequestsPerDay,
+          memberRequestsPerDay: config.ai.openrouter.rateLimits.memberRequestsPerDay,
+          adminRequestsPerDay: config.ai.openrouter.rateLimits.adminRequestsPerDay,
+        },
+      },
     },
     ui: {
       defaultTheme: config.ui.defaultTheme,
     },
   };
+}
+
+function parseOpenRouterAllowedModels(raw: string): string[] {
+  const uniqueModels = new Set<string>();
+
+  for (const line of raw.split(/\r?\n/)) {
+    const normalized = line.trim();
+    if (normalized.length > 0) {
+      uniqueModels.add(normalized);
+    }
+  }
+
+  return [...uniqueModels];
 }
 
 export default function AdminSettingsPage() {
@@ -648,6 +673,27 @@ export default function AdminSettingsPage() {
                 Allow guest responses
               </label>
 
+              <label className="surface-soft flex items-center gap-3 rounded-lg border border-white/10 px-3 py-2 text-sm text-[color:var(--text-primary)]">
+                <input
+                  type="checkbox"
+                  checked={draft?.ai.allowUserModelProviderSelection ?? true}
+                  onChange={(event) =>
+                    setDraft((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            ai: {
+                              ...prev.ai,
+                              allowUserModelProviderSelection: event.target.checked,
+                            },
+                          }
+                        : prev,
+                    )
+                  }
+                />
+                Allow users to choose model provider
+              </label>
+
               <label className="space-y-1 text-sm text-[color:var(--text-primary)]" htmlFor="default-theme">
                 <span className="block">Default theme</span>
                 <select
@@ -686,13 +732,14 @@ export default function AdminSettingsPage() {
                         ? {
                             ...prev,
                             ai: {
+                              ...prev.ai,
                               defaultModelProvider: event.target.value as OpenChatConfig["ai"]["defaultModelProvider"],
                             },
                           }
                         : prev,
                     )
                   }
-                  className="admin-select w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-sm outline-none"
+                  className="admin-select ai-select w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-sm outline-none"
                 >
                   {OPENCHAT_MODEL_PROVIDER_OPTIONS.map((providerOption) => (
                     <option key={providerOption.id} value={providerOption.id}>
@@ -701,6 +748,160 @@ export default function AdminSettingsPage() {
                   ))}
                 </select>
               </label>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-3">
+              <p className="text-sm font-medium text-[color:var(--text-primary)]">OpenRouter policy</p>
+              <p className="mt-1 text-xs text-[color:var(--text-dim)]">
+                Admin-managed allowlist and daily request limits by role.
+              </p>
+
+              <div className="mt-3 grid gap-3">
+                <label
+                  className="block space-y-1 text-sm text-[color:var(--text-primary)]"
+                  htmlFor="openrouter-allowed-models"
+                >
+                  <span className="block">Allowed models (one per line)</span>
+                  <textarea
+                    id="openrouter-allowed-models"
+                    rows={6}
+                    value={draft?.ai.openrouter.allowedModels.join("\n") ?? ""}
+                    onChange={(event) => {
+                      const nextModels = parseOpenRouterAllowedModels(event.target.value);
+                      setDraft((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              ai: {
+                                ...prev.ai,
+                                openrouter: {
+                                  ...prev.ai.openrouter,
+                                  allowedModels: nextModels,
+                                },
+                              },
+                            }
+                          : prev,
+                      );
+                    }}
+                    className="w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 font-mono text-xs outline-none"
+                    placeholder="openai/gpt-4o-mini"
+                    spellCheck={false}
+                  />
+                </label>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label
+                    className="space-y-1 text-sm text-[color:var(--text-primary)]"
+                    htmlFor="openrouter-limit-guest"
+                  >
+                    <span className="block">Guest requests/day</span>
+                    <input
+                      id="openrouter-limit-guest"
+                      type="number"
+                      min={0}
+                      max={1_000_000}
+                      value={draft?.ai.openrouter.rateLimits.guestRequestsPerDay ?? 0}
+                      onChange={(event) => {
+                        const parsed = Number(event.target.value);
+                        setDraft((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                ai: {
+                                  ...prev.ai,
+                                  openrouter: {
+                                    ...prev.ai.openrouter,
+                                    rateLimits: {
+                                      ...prev.ai.openrouter.rateLimits,
+                                      guestRequestsPerDay: Number.isFinite(parsed)
+                                        ? Math.max(0, Math.floor(parsed))
+                                        : 0,
+                                    },
+                                  },
+                                },
+                              }
+                            : prev,
+                        );
+                      }}
+                      className="w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-sm outline-none"
+                    />
+                  </label>
+
+                  <label
+                    className="space-y-1 text-sm text-[color:var(--text-primary)]"
+                    htmlFor="openrouter-limit-member"
+                  >
+                    <span className="block">Member requests/day</span>
+                    <input
+                      id="openrouter-limit-member"
+                      type="number"
+                      min={0}
+                      max={1_000_000}
+                      value={draft?.ai.openrouter.rateLimits.memberRequestsPerDay ?? 0}
+                      onChange={(event) => {
+                        const parsed = Number(event.target.value);
+                        setDraft((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                ai: {
+                                  ...prev.ai,
+                                  openrouter: {
+                                    ...prev.ai.openrouter,
+                                    rateLimits: {
+                                      ...prev.ai.openrouter.rateLimits,
+                                      memberRequestsPerDay: Number.isFinite(parsed)
+                                        ? Math.max(0, Math.floor(parsed))
+                                        : 0,
+                                    },
+                                  },
+                                },
+                              }
+                            : prev,
+                        );
+                      }}
+                      className="w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-sm outline-none"
+                    />
+                  </label>
+
+                  <label
+                    className="space-y-1 text-sm text-[color:var(--text-primary)]"
+                    htmlFor="openrouter-limit-admin"
+                  >
+                    <span className="block">Admin requests/day</span>
+                    <input
+                      id="openrouter-limit-admin"
+                      type="number"
+                      min={0}
+                      max={1_000_000}
+                      value={draft?.ai.openrouter.rateLimits.adminRequestsPerDay ?? 0}
+                      onChange={(event) => {
+                        const parsed = Number(event.target.value);
+                        setDraft((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                ai: {
+                                  ...prev.ai,
+                                  openrouter: {
+                                    ...prev.ai.openrouter,
+                                    rateLimits: {
+                                      ...prev.ai.openrouter.rateLimits,
+                                      adminRequestsPerDay: Number.isFinite(parsed)
+                                        ? Math.max(0, Math.floor(parsed))
+                                        : 0,
+                                    },
+                                  },
+                                },
+                              }
+                            : prev,
+                        );
+                      }}
+                      className="w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-sm outline-none"
+                    />
+                  </label>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -959,6 +1160,80 @@ export default function AdminSettingsPage() {
                                 auth: {
                                   ...previous.auth,
                                   clockSkewSeconds: Number.isFinite(parsed) ? parsed : 60,
+                                },
+                              }
+                            : previous,
+                        );
+                      }}
+                      className="w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-sm outline-none"
+                    />
+                  </label>
+
+                  <label className="space-y-1 text-sm text-[color:var(--text-primary)]" htmlFor="runtime-auth-local-enabled">
+                    <span className="block">Enable local auth (BACKEND_AUTH_LOCAL_ENABLED)</span>
+                    <select
+                      id="runtime-auth-local-enabled"
+                      value={runtimeSettingsDraft.auth.localEnabled ? "true" : "false"}
+                      onChange={(event) =>
+                        setRuntimeSettingsDraft((previous) =>
+                          previous
+                            ? {
+                                ...previous,
+                                auth: {
+                                  ...previous.auth,
+                                  localEnabled: event.target.value === "true",
+                                },
+                              }
+                            : previous,
+                        )
+                      }
+                      className="admin-select w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-sm outline-none"
+                    >
+                      <option value="false">false</option>
+                      <option value="true">true</option>
+                    </select>
+                  </label>
+
+                  <label className="space-y-1 text-sm text-[color:var(--text-primary)]" htmlFor="runtime-auth-local-cookie-name">
+                    <span className="block">Local auth cookie name (BACKEND_AUTH_LOCAL_COOKIE_NAME)</span>
+                    <input
+                      id="runtime-auth-local-cookie-name"
+                      type="text"
+                      value={runtimeSettingsDraft.auth.localCookieName}
+                      onChange={(event) =>
+                        setRuntimeSettingsDraft((previous) =>
+                          previous
+                            ? {
+                                ...previous,
+                                auth: {
+                                  ...previous.auth,
+                                  localCookieName: event.target.value,
+                                },
+                              }
+                            : previous,
+                        )
+                      }
+                      className="w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-sm outline-none"
+                    />
+                  </label>
+
+                  <label className="space-y-1 text-sm text-[color:var(--text-primary)]" htmlFor="runtime-auth-local-max-age">
+                    <span className="block">Local session max age (BACKEND_AUTH_LOCAL_SESSION_MAX_AGE_SECONDS)</span>
+                    <input
+                      id="runtime-auth-local-max-age"
+                      type="number"
+                      min={300}
+                      max={60 * 60 * 24 * 90}
+                      value={runtimeSettingsDraft.auth.localSessionMaxAgeSeconds}
+                      onChange={(event) => {
+                        const parsed = Number(event.target.value);
+                        setRuntimeSettingsDraft((previous) =>
+                          previous
+                            ? {
+                                ...previous,
+                                auth: {
+                                  ...previous.auth,
+                                  localSessionMaxAgeSeconds: Number.isFinite(parsed) ? Math.max(300, Math.floor(parsed)) : 300,
                                 },
                               }
                             : previous,

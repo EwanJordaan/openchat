@@ -12,6 +12,9 @@ export interface RuntimeEnvSettings {
   auth: {
     defaultProviderName: string;
     clockSkewSeconds: number;
+    localEnabled: boolean;
+    localCookieName: string;
+    localSessionMaxAgeSeconds: number;
     sessionSecureCookiesMode: "auto" | "true" | "false";
     sessionCookieName: string;
     flowCookieName: string;
@@ -27,6 +30,9 @@ export interface RuntimeEnvSettingsUpdate {
   auth: {
     defaultProviderName: string;
     clockSkewSeconds: number;
+    localEnabled: boolean;
+    localCookieName: string;
+    localSessionMaxAgeSeconds: number;
     sessionSecureCookiesMode: "auto" | "true" | "false";
     sessionCookieName: string;
     flowCookieName: string;
@@ -45,6 +51,11 @@ export function getRuntimeEnvSettingsFromEnv(env: NodeJS.ProcessEnv = process.en
     auth: {
       defaultProviderName: env.BACKEND_AUTH_DEFAULT_PROVIDER?.trim() ?? "",
       clockSkewSeconds: parseClockSkewSeconds(env.BACKEND_AUTH_CLOCK_SKEW_SECONDS),
+      localEnabled: parseBooleanFlag(env.BACKEND_AUTH_LOCAL_ENABLED, false),
+      localCookieName: env.BACKEND_AUTH_LOCAL_COOKIE_NAME?.trim() || "openchat_local_session",
+      localSessionMaxAgeSeconds: parseLocalAuthSessionMaxAgeSeconds(
+        env.BACKEND_AUTH_LOCAL_SESSION_MAX_AGE_SECONDS,
+      ),
       sessionSecureCookiesMode: parseSessionSecureCookiesMode(env.BACKEND_SESSION_SECURE_COOKIES),
       sessionCookieName: env.BACKEND_SESSION_COOKIE_NAME?.trim() || "openchat_session",
       flowCookieName: env.BACKEND_AUTH_FLOW_COOKIE_NAME?.trim() || "openchat_auth_flow",
@@ -63,6 +74,9 @@ export async function updateRuntimeEnvSettings(
     DATABASE_URL: input.database.databaseUrl.trim() || null,
     BACKEND_AUTH_DEFAULT_PROVIDER: input.auth.defaultProviderName.trim() || null,
     BACKEND_AUTH_CLOCK_SKEW_SECONDS: String(input.auth.clockSkewSeconds),
+    BACKEND_AUTH_LOCAL_ENABLED: input.auth.localEnabled ? "true" : "false",
+    BACKEND_AUTH_LOCAL_COOKIE_NAME: input.auth.localCookieName.trim(),
+    BACKEND_AUTH_LOCAL_SESSION_MAX_AGE_SECONDS: String(input.auth.localSessionMaxAgeSeconds),
     BACKEND_SESSION_SECURE_COOKIES:
       input.auth.sessionSecureCookiesMode === "auto" ? null : input.auth.sessionSecureCookiesMode,
     BACKEND_SESSION_COOKIE_NAME: input.auth.sessionCookieName.trim(),
@@ -76,6 +90,37 @@ export async function updateRuntimeEnvSettings(
     filePath: ENV_FILE_PATH,
     patch,
   };
+}
+
+function parseBooleanFlag(raw: string | undefined, fallback: boolean): boolean {
+  const value = raw?.trim().toLowerCase();
+  if (!value) {
+    return fallback;
+  }
+
+  if (value === "true" || value === "1") {
+    return true;
+  }
+
+  if (value === "false" || value === "0") {
+    return false;
+  }
+
+  return fallback;
+}
+
+function parseLocalAuthSessionMaxAgeSeconds(raw: string | undefined): number {
+  const value = raw?.trim();
+  if (!value) {
+    return 60 * 60 * 24 * 30;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 300 || parsed > 60 * 60 * 24 * 90) {
+    return 60 * 60 * 24 * 30;
+  }
+
+  return parsed;
 }
 
 export function applyRuntimeEnvPatchToProcessEnv(patch: EnvPatch): void {

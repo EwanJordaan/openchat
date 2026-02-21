@@ -3,6 +3,10 @@ import { z } from "zod";
 import type { AuthIssuerConfig } from "@/backend/adapters/auth/types";
 import { getEffectiveOpenChatConfigSync } from "@/backend/composition/site-settings-store";
 import type { ModelProviderId } from "@/shared/model-providers";
+import type {
+  OpenRouterPolicyConfig,
+  OpenRouterRateLimitsConfig,
+} from "@/openchat.config";
 
 const envSchema = z.object({
   BACKEND_DB_ADAPTER: z.enum(["postgres", "convex"]).optional(),
@@ -10,6 +14,9 @@ const envSchema = z.object({
   BACKEND_AUTH_ISSUERS: z.string().optional(),
   BACKEND_AUTH_DEFAULT_PROVIDER: z.string().optional(),
   BACKEND_AUTH_CLOCK_SKEW_SECONDS: z.string().optional(),
+  BACKEND_AUTH_LOCAL_ENABLED: z.string().optional(),
+  BACKEND_AUTH_LOCAL_COOKIE_NAME: z.string().optional(),
+  BACKEND_AUTH_LOCAL_SESSION_MAX_AGE_SECONDS: z.string().optional(),
   BACKEND_SESSION_SECRET: z.string().optional(),
   BACKEND_SESSION_COOKIE_NAME: z.string().optional(),
   BACKEND_AUTH_FLOW_COOKIE_NAME: z.string().optional(),
@@ -66,6 +73,11 @@ export interface BackendConfig {
     clockSkewSeconds: number;
     issuers: AuthIssuerConfig[];
     defaultProviderName?: string;
+    local: {
+      enabled: boolean;
+      cookieName: string;
+      sessionMaxAgeSeconds: number;
+    };
   };
   session: {
     secret?: string;
@@ -75,6 +87,8 @@ export interface BackendConfig {
   };
   ai: {
     defaultModelProvider: ModelProviderId;
+    allowUserModelProviderSelection: boolean;
+    openrouter: OpenRouterPolicyConfig;
   };
   adminSetup: {
     password?: string;
@@ -94,6 +108,14 @@ export function loadBackendConfig(): BackendConfig {
   const clockSkewSeconds = parseClockSkew(env.BACKEND_AUTH_CLOCK_SKEW_SECONDS);
   const issuers = parseIssuerConfig(env.BACKEND_AUTH_ISSUERS);
   const defaultProviderName = parseDefaultProviderName(env.BACKEND_AUTH_DEFAULT_PROVIDER);
+  const localAuthEnabled = parseBooleanFlag(env.BACKEND_AUTH_LOCAL_ENABLED, false);
+  const localAuthCookieName = parseCookieName(
+    env.BACKEND_AUTH_LOCAL_COOKIE_NAME,
+    "openchat_local_session",
+  );
+  const localAuthSessionMaxAgeSeconds = parseLocalAuthSessionMaxAgeSeconds(
+    env.BACKEND_AUTH_LOCAL_SESSION_MAX_AGE_SECONDS,
+  );
   const sessionCookieName = parseCookieName(env.BACKEND_SESSION_COOKIE_NAME, "openchat_session");
   const flowCookieName = parseCookieName(env.BACKEND_AUTH_FLOW_COOKIE_NAME, "openchat_auth_flow");
   const secureCookies = parseSecureCookies(env.BACKEND_SESSION_SECURE_COOKIES, env.NODE_ENV);
@@ -117,6 +139,11 @@ export function loadBackendConfig(): BackendConfig {
       clockSkewSeconds,
       issuers,
       defaultProviderName,
+      local: {
+        enabled: localAuthEnabled,
+        cookieName: localAuthCookieName,
+        sessionMaxAgeSeconds: localAuthSessionMaxAgeSeconds,
+      },
     },
     session: {
       secret: env.BACKEND_SESSION_SECRET,
@@ -126,6 +153,11 @@ export function loadBackendConfig(): BackendConfig {
     },
     ai: {
       defaultModelProvider: siteConfig.ai.defaultModelProvider,
+      allowUserModelProviderSelection: siteConfig.ai.allowUserModelProviderSelection,
+      openrouter: {
+        allowedModels: [...siteConfig.ai.openrouter.allowedModels],
+        rateLimits: normalizeOpenRouterRateLimits(siteConfig.ai.openrouter.rateLimits),
+      },
     },
     adminSetup: {
       password: adminSetupPassword,
@@ -136,6 +168,53 @@ export function loadBackendConfig(): BackendConfig {
       passwordHash: adminPasswordHash,
     },
   };
+}
+
+function parseBooleanFlag(raw: string | undefined, fallback: boolean): boolean {
+  const value = raw?.trim().toLowerCase();
+  if (!value) {
+    return fallback;
+  }
+
+  if (value === "true" || value === "1") {
+    return true;
+  }
+
+  if (value === "false" || value === "0") {
+    return false;
+  }
+
+  throw new Error("Boolean flags must use true/false/1/0");
+}
+
+function parseLocalAuthSessionMaxAgeSeconds(raw: string | undefined): number {
+  const value = raw?.trim();
+  if (!value) {
+    return 60 * 60 * 24 * 30;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 300 || parsed > 60 * 60 * 24 * 90) {
+    throw new Error("BACKEND_AUTH_LOCAL_SESSION_MAX_AGE_SECONDS must be an integer between 300 and 7776000");
+  }
+
+  return parsed;
+}
+
+function normalizeOpenRouterRateLimits(input: OpenRouterRateLimitsConfig): OpenRouterRateLimitsConfig {
+  return {
+    guestRequestsPerDay: normalizeDailyLimit(input.guestRequestsPerDay),
+    memberRequestsPerDay: normalizeDailyLimit(input.memberRequestsPerDay),
+    adminRequestsPerDay: normalizeDailyLimit(input.adminRequestsPerDay),
+  };
+}
+
+function normalizeDailyLimit(value: number): number {
+  if (!Number.isInteger(value) || value < 0 || value > 1_000_000) {
+    throw new Error("OpenRouter rate limits must be integers between 0 and 1000000");
+  }
+
+  return value;
 }
 
 function parseDefaultProviderName(raw: string | undefined): string | undefined {

@@ -1,6 +1,7 @@
 import type { Chat, ChatMessageRole, ChatWithMessages } from "@/backend/domain/chat";
 import type { Project } from "@/backend/domain/project";
 import type { User } from "@/backend/domain/user";
+import type { ModelProviderId } from "@/shared/model-providers";
 
 export interface CreateUserInput {
   email?: string | null;
@@ -99,9 +100,66 @@ export interface ChatRepository {
   appendMessages(input: AppendChatMessagesInput): Promise<ChatWithMessages | null>;
 }
 
+export interface ConsumeDailyRequestAllowanceInput {
+  providerId: ModelProviderId;
+  usageDate: string;
+  subjectType: "user" | "guest";
+  subjectId: string;
+  limit: number;
+}
+
+export interface ConsumeDailyRequestAllowanceResult {
+  allowed: boolean;
+  requestCount: number;
+}
+
+export interface AiUsageRepository {
+  consumeDailyRequestAllowance(
+    input: ConsumeDailyRequestAllowanceInput,
+  ): Promise<ConsumeDailyRequestAllowanceResult>;
+}
+
+export interface LocalAuthCredential {
+  userId: string;
+  email: string;
+  passwordHash: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LocalAuthSession {
+  id: string;
+  userId: string;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateLocalAuthCredentialInput {
+  userId: string;
+  email: string;
+  passwordHash: string;
+}
+
+export interface CreateLocalAuthSessionInput {
+  id: string;
+  userId: string;
+  expiresAt: string;
+}
+
+export interface LocalAuthRepository {
+  getCredentialByEmail(email: string): Promise<LocalAuthCredential | null>;
+  createCredential(input: CreateLocalAuthCredentialInput): Promise<LocalAuthCredential>;
+  createSession(input: CreateLocalAuthSessionInput): Promise<LocalAuthSession>;
+  getSessionById(sessionId: string): Promise<LocalAuthSession | null>;
+  revokeSession(sessionId: string): Promise<void>;
+}
+
 export interface RepositoryBundle {
   users: UserRepository;
   roles: RoleRepository;
   projects: ProjectRepository;
   chats: ChatRepository;
+  aiUsage: AiUsageRepository;
+  localAuth: LocalAuthRepository;
 }

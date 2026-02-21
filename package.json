@@ -12,6 +12,7 @@
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
+    "drizzle-orm": "^0.45.1",
     "jose": "^6.1.3",
     "next": "16.1.6",
     "pg": "^8.18.0",

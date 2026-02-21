@@ -7,7 +7,7 @@ export interface Principal {
   orgId?: string;
   roles: string[];
   permissions: string[];
-  authMethod?: "oidc";
+  authMethod?: "oidc" | "local";
   rawClaims: Record<string, unknown>;
   userId?: string;
 }

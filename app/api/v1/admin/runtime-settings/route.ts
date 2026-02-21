@@ -23,6 +23,9 @@ const runtimeSettingsSchema = z
     auth: z.object({
       defaultProviderName: z.string().max(128),
       clockSkewSeconds: z.number().int().min(0).max(300),
+      localEnabled: z.boolean(),
+      localCookieName: z.string().trim().min(1).max(128),
+      localSessionMaxAgeSeconds: z.number().int().min(300).max(60 * 60 * 24 * 90),
       sessionSecureCookiesMode: z.enum(["auto", "true", "false"]),
       sessionCookieName: z.string().trim().min(1).max(128),
       flowCookieName: z.string().trim().min(1).max(128),

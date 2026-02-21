@@ -9,6 +9,7 @@ OpenChat is a Next.js chat product template with an in-progress REST backend sca
 - REST backend in App Router route handlers (`app/api/v1/*`)
 - Auth verification with `jose` (OIDC/JWT, multi-issuer)
 - Persistence adapters (Postgres/Neon implemented, Convex mode uses an in-memory adapter fallback)
+- Optional local credentials auth persistence with `drizzle-orm`
 - Central typed app config in `openchat.config.ts`
 
 ## Quick start
@@ -20,7 +21,7 @@ npm install
 ```
 
 2. Create `.env` from `.env.example` and set values.
-3. Run SQL migrations in `backend/adapters/db/postgres/migrations/001_initial.sql`, `backend/adapters/db/postgres/migrations/002_user_profile_avatar.sql`, `backend/adapters/db/postgres/migrations/003_chats.sql`, and `backend/adapters/db/postgres/migrations/004_external_identity_metadata.sql`.
+3. Run SQL migrations in `backend/adapters/db/postgres/migrations/001_initial.sql`, `backend/adapters/db/postgres/migrations/002_user_profile_avatar.sql`, `backend/adapters/db/postgres/migrations/003_chats.sql`, `backend/adapters/db/postgres/migrations/004_external_identity_metadata.sql`, `backend/adapters/db/postgres/migrations/005_ai_usage_daily.sql`, and `backend/adapters/db/postgres/migrations/006_local_auth.sql`.
 4. Start the app:
 
 ```bash
@@ -45,6 +46,9 @@ Set these environment variables:
 - `BACKEND_SESSION_COOKIE_NAME`: optional, default `openchat_session`
 - `BACKEND_AUTH_FLOW_COOKIE_NAME`: optional, default `openchat_auth_flow`
 - `BACKEND_SESSION_SECURE_COOKIES`: optional (`true`/`false`), defaults by `NODE_ENV`
+- `BACKEND_AUTH_LOCAL_ENABLED`: optional (`true`/`false`), default `false`
+- `BACKEND_AUTH_LOCAL_COOKIE_NAME`: optional, default `openchat_local_session`
+- `BACKEND_AUTH_LOCAL_SESSION_MAX_AGE_SECONDS`: optional integer (`300-7776000`), default `2592000`
 - `BACKEND_ADMIN_COOKIE_NAME`: optional, default `openchat_admin_session`
 - `BACKEND_ADMIN_PASSWORD_HASH`: optional local admin password hash (`pbkdf2_sha512$...`)
 - `OPENROUTER_API_KEY`: optional provider key (editable in admin settings)
@@ -56,6 +60,7 @@ Set these environment variables:
 - `NEXT_PUBLIC_ALLOW_GUEST_RESPONSES`: optional (`true`/`false`), defaults from `openchat.config.ts`
 - `NEXT_PUBLIC_DEFAULT_THEME`: optional (`default` | `galaxy` | `aurora` | `sunset` | `midnight`), defaults from `openchat.config.ts`
 - `NEXT_PUBLIC_DEFAULT_MODEL_PROVIDER`: optional (`openrouter` | `openai` | `gemini` | `anthropic`), defaults from `openchat.config.ts`
+- `NEXT_PUBLIC_ALLOW_USER_MODEL_PROVIDER_SELECTION`: optional (`true`/`false`), defaults from `openchat.config.ts`
 
 Local admin password behavior:
 
@@ -105,6 +110,28 @@ Example issuer config:
 ]
 ```
 
+Clerk issuer example:
+
+```json
+[
+  {
+    "name": "clerk",
+    "issuer": "https://YOUR_CLERK_FRONTEND_API",
+    "audience": "https://api.openchat.local",
+    "jwksUri": "https://api.clerk.com/v1/jwks",
+    "tokenUse": "access",
+    "oidc": {
+      "clientId": "your-clerk-client-id",
+      "clientSecret": "your-clerk-client-secret",
+      "redirectUri": "http://localhost:3000/api/v1/auth/clerk/callback",
+      "scopes": ["openid", "profile", "email"]
+    }
+  }
+]
+```
+
+Use the exact `iss` claim from your Clerk session token for `issuer`.
+
 ## API endpoints (MVP)
 
 - `GET /api/v1/health`
@@ -123,9 +150,11 @@ Example issuer config:
 - `POST /api/v1/chat/guest`
 - `GET /api/v1/model-providers`
 - `GET /api/v1/auth/providers`
-- `GET /api/v1/auth/start?mode=login|register`
+- `GET /api/v1/auth/start?mode=login|register[&provider=name]`
 - `GET /api/v1/auth/:provider/start?mode=login|register`
 - `GET /api/v1/auth/:provider/callback`
+- `POST /api/v1/auth/local/login`
+- `POST /api/v1/auth/local/register`
 - `POST /api/v1/admin/auth/login`
 - `POST /api/v1/admin/auth/change-password`
 - `POST /api/v1/admin/auth/logout`
@@ -145,7 +174,7 @@ For browser sessions, the backend also accepts an HTTP-only cookie session and r
 Interactive auth provider support:
 
 - Any standards-compliant OIDC provider can be configured in `BACKEND_AUTH_ISSUERS`.
-- Common production setups: Auth0, Google Identity, Microsoft Entra ID (Azure AD), Okta, AWS Cognito, and Keycloak.
+- Common production setups: Auth0, Clerk, Google Identity, Microsoft Entra ID (Azure AD), Okta, AWS Cognito, and Keycloak.
 - Provider-specific behavior should be handled via `oidc.authorizationParams`, `oidc.loginParams`, and `oidc.registerParams`.
 
 Chat behavior:
@@ -153,7 +182,9 @@ Chat behavior:
 - `/` starts as a new empty chat draft.
 - The first message creates a saved chat and navigates to `/c/:chatId`.
 - Chat access is owner-scoped; non-owner or unknown chat IDs return not found.
-- You can choose a model provider in Settings and in the chat header.
+- Model-provider selection can be admin-managed via site settings.
+- Model/provider selection is in a dedicated box near the chat composer.
+- OpenRouter model allowlists and daily role-based request limits are enforced server-side.
 - Guest responses (when enabled) call live model providers but are not persisted.
 
 ## Current backend design
@@ -173,3 +204,45 @@ Chat behavior:
 - `npm run build`
 - `npm run start`
 - `npm run lint`
+- `npm run preview` (build and run in local Workers runtime)
+- `npm run deploy` (build and deploy to Cloudflare Workers)
+- `npm run cf-typegen` (generate Wrangler env types)
+
+## Cloudflare deployment (OpenNext)
+
+This project targets Cloudflare Workers via OpenNext, not `@cloudflare/next-on-pages`.
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Authenticate Wrangler:
+
+```bash
+npx wrangler login
+```
+
+3. (Optional) Generate Cloudflare binding types:
+
+```bash
+npm run cf-typegen
+```
+
+4. Preview locally in the Workers runtime:
+
+```bash
+npm run preview
+```
+
+5. Deploy to Cloudflare Workers:
+
+```bash
+npm run deploy
+```
+
+Cloudflare adapter/config files:
+
+- `open-next.config.ts`
+- `wrangler.toml`

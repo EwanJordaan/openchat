@@ -2,11 +2,19 @@ import type { Chat, ChatMessage, ChatWithMessages } from "@/backend/domain/chat"
 import type { Project } from "@/backend/domain/project";
 import type { User } from "@/backend/domain/user";
 import type {
+  AiUsageRepository,
   AppendChatMessagesInput,
   ChatRepository,
+  ConsumeDailyRequestAllowanceInput,
+  ConsumeDailyRequestAllowanceResult,
   CreateChatWithMessagesInput,
+  CreateLocalAuthCredentialInput,
+  CreateLocalAuthSessionInput,
   CreateProjectInput,
   CreateUserInput,
+  LocalAuthCredential,
+  LocalAuthRepository,
+  LocalAuthSession,
   ProjectRepository,
   RepositoryBundle,
   RoleRepository,
@@ -43,6 +51,9 @@ interface InMemoryStore {
   projects: Map<string, Project>;
   chats: Map<string, Chat>;
   chatMessagesByChatId: Map<string, ChatMessage[]>;
+  aiUsageDaily: Map<string, number>;
+  localAuthCredentialsByEmail: Map<string, LocalAuthCredential>;
+  localAuthSessionsById: Map<string, LocalAuthSession>;
 }
 
 export function createConvexRepositories(): RepositoryBundle {
@@ -53,6 +64,8 @@ export function createConvexRepositories(): RepositoryBundle {
     roles: new InMemoryRoleRepository(store),
     projects: new InMemoryProjectRepository(store),
     chats: new InMemoryChatRepository(store),
+    aiUsage: new InMemoryAiUsageRepository(store),
+    localAuth: new InMemoryLocalAuthRepository(store),
   };
 }
 
@@ -364,6 +377,112 @@ class InMemoryChatRepository implements ChatRepository {
   }
 }
 
+class InMemoryAiUsageRepository implements AiUsageRepository {
+  constructor(private readonly store: InMemoryStore) {}
+
+  async consumeDailyRequestAllowance(
+    input: ConsumeDailyRequestAllowanceInput,
+  ): Promise<ConsumeDailyRequestAllowanceResult> {
+    const key = buildUsageDailyKey(
+      input.providerId,
+      input.usageDate,
+      input.subjectType,
+      input.subjectId,
+    );
+    const currentCount = this.store.aiUsageDaily.get(key) ?? 0;
+
+    if (currentCount >= input.limit) {
+      return {
+        allowed: false,
+        requestCount: currentCount,
+      };
+    }
+
+    const nextCount = currentCount + 1;
+    this.store.aiUsageDaily.set(key, nextCount);
+
+    return {
+      allowed: true,
+      requestCount: nextCount,
+    };
+  }
+}
+
+class InMemoryLocalAuthRepository implements LocalAuthRepository {
+  constructor(private readonly store: InMemoryStore) {}
+
+  async getCredentialByEmail(email: string): Promise<LocalAuthCredential | null> {
+    const credential = this.store.localAuthCredentialsByEmail.get(normalizeEmail(email));
+    if (!credential) {
+      return null;
+    }
+
+    return {
+      ...credential,
+    };
+  }
+
+  async createCredential(input: CreateLocalAuthCredentialInput): Promise<LocalAuthCredential> {
+    const email = normalizeEmail(input.email);
+    if (this.store.localAuthCredentialsByEmail.has(email)) {
+      throw new Error("Local auth credential already exists for this email");
+    }
+
+    const now = new Date().toISOString();
+    const created: LocalAuthCredential = {
+      userId: input.userId,
+      email,
+      passwordHash: input.passwordHash,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.store.localAuthCredentialsByEmail.set(email, created);
+
+    return {
+      ...created,
+    };
+  }
+
+  async createSession(input: CreateLocalAuthSessionInput): Promise<LocalAuthSession> {
+    const now = new Date().toISOString();
+    const created: LocalAuthSession = {
+      id: input.id,
+      userId: input.userId,
+      expiresAt: input.expiresAt,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.store.localAuthSessionsById.set(created.id, created);
+
+    return {
+      ...created,
+    };
+  }
+
+  async getSessionById(sessionId: string): Promise<LocalAuthSession | null> {
+    const session = this.store.localAuthSessionsById.get(sessionId);
+    if (!session) {
+      return null;
+    }
+
+    const expiresAt = Date.parse(session.expiresAt);
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      this.store.localAuthSessionsById.delete(sessionId);
+      return null;
+    }
+
+    return {
+      ...session,
+    };
+  }
+
+  async revokeSession(sessionId: string): Promise<void> {
+    this.store.localAuthSessionsById.delete(sessionId);
+  }
+}
+
 function createStore(): InMemoryStore {
   return {
     users: new Map(),
@@ -377,7 +496,23 @@ function createStore(): InMemoryStore {
     projects: new Map(),
     chats: new Map(),
     chatMessagesByChatId: new Map(),
+    aiUsageDaily: new Map(),
+    localAuthCredentialsByEmail: new Map(),
+    localAuthSessionsById: new Map(),
   };
+}
+
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function buildUsageDailyKey(
+  providerId: string,
+  usageDate: string,
+  subjectType: "user" | "guest",
+  subjectId: string,
+): string {
+  return `${providerId}::${usageDate}::${subjectType}::${subjectId}`;
 }
 
 function buildExternalIdentityKey(issuer: string, subject: string): string {

@@ -26,7 +26,7 @@ import type { UnitOfWork } from "@/backend/ports/unit-of-work";
 
 import { loadBackendConfig, type BackendConfig } from "@/backend/composition/config";
 
-const CONTAINER_SHAPE_VERSION = 3;
+const CONTAINER_SHAPE_VERSION = 5;
 
 interface ContainerState {
   fingerprint: string;
@@ -181,6 +181,7 @@ function createConfigFingerprint(config: BackendConfig): string {
       clockSkewSeconds: config.auth.clockSkewSeconds,
       issuers: config.auth.issuers,
       defaultProviderName: config.auth.defaultProviderName,
+      local: config.auth.local,
     },
     session: config.session,
     ai: config.ai,
@@ -192,7 +193,7 @@ function createConfigFingerprint(config: BackendConfig): string {
 function isContainerCompatible(container: ApplicationContainer): boolean {
   const candidate = container as unknown as {
     modelProviderClient?: unknown;
-    repositories?: { chats?: unknown };
+    repositories?: { chats?: unknown; aiUsage?: unknown; localAuth?: unknown };
     useCases?: {
       listChats?: unknown;
       getChatById?: unknown;
@@ -204,6 +205,8 @@ function isContainerCompatible(container: ApplicationContainer): boolean {
   return Boolean(
     candidate.modelProviderClient &&
     candidate.repositories?.chats &&
+      candidate.repositories?.aiUsage &&
+      candidate.repositories?.localAuth &&
       candidate.useCases?.listChats &&
       candidate.useCases?.getChatById &&
       candidate.useCases?.createChatFromFirstMessage &&
