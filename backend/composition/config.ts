@@ -124,6 +124,12 @@ export function loadBackendConfig(): BackendConfig {
   const adminSetupPassword = parseAdminSetupPassword(env.BACKEND_ADMIN_SETUP_PASSWORD);
   const adminRequiredEmail = parseRequiredAdminEmail(env.BACKEND_ADMIN_REQUIRED_EMAIL);
 
+  assertSingleAuthMode({
+    issuers,
+    localAuthEnabled,
+    defaultProviderName,
+  });
+
   if (dbAdapter === "postgres" && !env.DATABASE_URL) {
     throw new Error(
       "DATABASE_URL is required when BACKEND_DB_ADAPTER is 'postgres'. Set BACKEND_DB_ADAPTER='convex' to bypass Postgres wiring.",
@@ -168,6 +174,38 @@ export function loadBackendConfig(): BackendConfig {
       passwordHash: adminPasswordHash,
     },
   };
+}
+
+function assertSingleAuthMode(input: {
+  issuers: AuthIssuerConfig[];
+  localAuthEnabled: boolean;
+  defaultProviderName: string | undefined;
+}): void {
+  const { issuers, localAuthEnabled, defaultProviderName } = input;
+
+  if (localAuthEnabled && issuers.length > 0) {
+    throw new Error(
+      "Only one authentication mode can be active. Disable BACKEND_AUTH_LOCAL_ENABLED or clear BACKEND_AUTH_ISSUERS.",
+    );
+  }
+
+  if (issuers.length > 1) {
+    throw new Error("Only one OIDC issuer is supported at a time in BACKEND_AUTH_ISSUERS.");
+  }
+
+  if (localAuthEnabled && defaultProviderName) {
+    throw new Error(
+      "BACKEND_AUTH_DEFAULT_PROVIDER cannot be set when BACKEND_AUTH_LOCAL_ENABLED is true.",
+    );
+  }
+
+  if (defaultProviderName && issuers.length === 0) {
+    throw new Error("BACKEND_AUTH_DEFAULT_PROVIDER requires a configured issuer in BACKEND_AUTH_ISSUERS.");
+  }
+
+  if (defaultProviderName && issuers.length === 1 && issuers[0]?.name !== defaultProviderName) {
+    throw new Error("BACKEND_AUTH_DEFAULT_PROVIDER must match the configured issuer name.");
+  }
 }
 
 function parseBooleanFlag(raw: string | undefined, fallback: boolean): boolean {

@@ -24,7 +24,6 @@ export async function GET(request: Request): Promise<Response> {
             loginUrl: "/api/v1/auth/local/login",
             registerUrl: "/api/v1/auth/local/register",
           },
-          ...redirectProviders,
         ]
       : redirectProviders;
 

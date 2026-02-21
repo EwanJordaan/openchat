@@ -60,24 +60,35 @@ export async function requirePrincipal(
   request: Request,
   container: ApplicationContainer,
 ): Promise<Principal> {
-  let authorizationHeader = request.headers.get("authorization");
+  const explicitAuthorizationHeader = request.headers.get("authorization");
 
-  if (!authorizationHeader) {
-    const browserSession = readSessionFromCookie(request.headers.get("cookie"), container.config.session);
-    if (browserSession?.accessToken) {
-      authorizationHeader = `Bearer ${browserSession.accessToken}`;
+  if (explicitAuthorizationHeader) {
+    const principal = await container.authContextProvider.getPrincipal(explicitAuthorizationHeader);
+    if (principal) {
+      return principal;
     }
+
+    throw new ApiError(401, "unauthorized", "Missing or invalid authentication session");
   }
 
-  const principal = await container.authContextProvider.getPrincipal(authorizationHeader);
+  if (container.config.auth.local.enabled) {
+    const localPrincipal = await resolvePrincipalFromLocalSession(request, container);
+    if (localPrincipal) {
+      return localPrincipal;
+    }
+
+    throw new ApiError(401, "unauthorized", "Missing or invalid authentication session");
+  }
+
+  const browserSession = readSessionFromCookie(request.headers.get("cookie"), container.config.session);
+  if (!browserSession?.accessToken) {
+    throw new ApiError(401, "unauthorized", "Missing or invalid authentication session");
+  }
+
+  const principal = await container.authContextProvider.getPrincipal(`Bearer ${browserSession.accessToken}`);
 
   if (principal) {
     return principal;
-  }
-
-  const localPrincipal = await resolvePrincipalFromLocalSession(request, container);
-  if (localPrincipal) {
-    return localPrincipal;
   }
 
   throw new ApiError(401, "unauthorized", "Missing or invalid authentication session");

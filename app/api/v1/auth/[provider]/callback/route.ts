@@ -5,6 +5,11 @@ import {
   createSessionCookie,
   readAuthFlowFromCookie,
 } from "@/backend/adapters/auth/cookie-session";
+import {
+  createClearedLocalAuthSessionCookie,
+  readLocalAuthSessionFromCookie,
+} from "@/backend/adapters/auth/local-session";
+import type { ApplicationContainer } from "@/backend/composition/container";
 import { exchangeAuthorizationCode, getInteractiveAuthIssuerByName } from "@/backend/adapters/auth/oidc-client";
 import { ApiError } from "@/backend/transport/rest/api-error";
 import { handleApiRoute } from "@/backend/transport/rest/pipeline";
@@ -71,6 +76,8 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
       container.config.session,
     );
 
+    await revokeLocalSessionIfPresent(request, container);
+
     const clearFlowCookie = createClearedAuthFlowCookie(container.config.session);
     const redirectTo = new URL(sanitizeReturnTo(flow.returnTo), request.url).toString();
 
@@ -79,6 +86,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
     headers.set("x-request-id", requestId);
     headers.append("set-cookie", sessionCookie);
     headers.append("set-cookie", clearFlowCookie);
+    headers.append("set-cookie", createClearedLocalAuthSessionCookie(container.config));
 
     return new Response(null, {
       status: 302,
@@ -142,4 +150,22 @@ function sanitizeReturnTo(raw: string): string {
   }
 
   return raw;
+}
+
+async function revokeLocalSessionIfPresent(
+  request: Request,
+  container: ApplicationContainer,
+): Promise<void> {
+  if (!container.config.auth.local.enabled) {
+    return;
+  }
+
+  const localSession = readLocalAuthSessionFromCookie(request.headers.get("cookie"), container.config);
+  if (!localSession) {
+    return;
+  }
+
+  await container.unitOfWork.run(async ({ localAuth }) => {
+    await localAuth.revokeSession(localSession.sessionId);
+  });
 }

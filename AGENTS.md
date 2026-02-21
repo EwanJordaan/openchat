@@ -99,10 +99,14 @@ Cloudflare deployment notes:
   - `BACKEND_SESSION_COOKIE_NAME` (default `openchat_session`)
   - `BACKEND_AUTH_FLOW_COOKIE_NAME` (default `openchat_auth_flow`)
   - `BACKEND_SESSION_SECURE_COOKIES` (`true`/`false`, defaults by environment)
-- Optional local credentials auth (alongside OIDC):
+- Optional local credentials auth (mutually exclusive with OIDC issuers):
   - `BACKEND_AUTH_LOCAL_ENABLED` (`true`/`false`, default `false`)
   - `BACKEND_AUTH_LOCAL_COOKIE_NAME` (default `openchat_local_session`)
   - `BACKEND_AUTH_LOCAL_SESSION_MAX_AGE_SECONDS` (default `2592000`, min `300`, max `7776000`)
+- Auth mode constraints:
+  - only one auth mode can be active at a time
+  - if local auth is enabled, `BACKEND_AUTH_ISSUERS` must be empty
+  - `BACKEND_AUTH_ISSUERS` supports at most one issuer entry
 - Local admin password auth:
   - local admin username is fixed to `admin`
   - `BACKEND_ADMIN_COOKIE_NAME` (default `openchat_admin_session`)

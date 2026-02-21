@@ -67,7 +67,15 @@ export function getRuntimeEnvSettingsFromEnv(env: NodeJS.ProcessEnv = process.en
 export async function updateRuntimeEnvSettings(
   input: RuntimeEnvSettingsUpdate,
 ): Promise<{ filePath: string; patch: EnvPatch }> {
-  const issuersJson = normalizeIssuersJson(input.auth.issuersJson);
+  const normalizedIssuers = parseIssuersJsonArray(input.auth.issuersJson);
+
+  assertSingleAuthMode({
+    localEnabled: input.auth.localEnabled,
+    issuers: normalizedIssuers,
+    defaultProviderName: input.auth.defaultProviderName,
+  });
+
+  const issuersJson = normalizedIssuers.length > 0 ? JSON.stringify(normalizedIssuers) : null;
 
   const patch: EnvPatch = {
     BACKEND_DB_ADAPTER: input.database.adapter,
@@ -187,10 +195,10 @@ function formatIssuersJson(raw: string | undefined): string {
   }
 }
 
-function normalizeIssuersJson(raw: string): string | null {
+function parseIssuersJsonArray(raw: string): unknown[] {
   const trimmed = raw.trim();
   if (!trimmed) {
-    return null;
+    return [];
   }
 
   let parsed: unknown;
@@ -204,7 +212,50 @@ function normalizeIssuersJson(raw: string): string | null {
     throw new Error("BACKEND_AUTH_ISSUERS must be a JSON array");
   }
 
-  return JSON.stringify(parsed);
+  return parsed;
+}
+
+function assertSingleAuthMode(input: {
+  localEnabled: boolean;
+  issuers: unknown[];
+  defaultProviderName: string;
+}): void {
+  const issuersCount = input.issuers.length;
+  const defaultProviderName = input.defaultProviderName.trim();
+
+  if (input.localEnabled && issuersCount > 0) {
+    throw new Error(
+      "Only one authentication mode can be active. Disable local auth or clear auth issuers JSON.",
+    );
+  }
+
+  if (issuersCount > 1) {
+    throw new Error("Only one OIDC issuer is supported at a time in auth issuers JSON.");
+  }
+
+  if (input.localEnabled && defaultProviderName.length > 0) {
+    throw new Error("Default provider must be empty when local auth is enabled.");
+  }
+
+  if (!input.localEnabled && issuersCount === 0 && defaultProviderName.length > 0) {
+    throw new Error("Default provider requires a configured auth issuer.");
+  }
+
+  if (issuersCount === 1 && defaultProviderName.length > 0) {
+    const configuredName = readIssuerName(input.issuers[0]);
+    if (configuredName && configuredName !== defaultProviderName) {
+      throw new Error("Default provider must match the configured issuer name.");
+    }
+  }
+}
+
+function readIssuerName(value: unknown): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const issuer = value as { name?: unknown };
+  return typeof issuer.name === "string" ? issuer.name : null;
 }
 
 async function applyEnvPatch(patch: EnvPatch): Promise<void> {

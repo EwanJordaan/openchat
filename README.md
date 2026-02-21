@@ -62,6 +62,13 @@ Set these environment variables:
 - `NEXT_PUBLIC_DEFAULT_MODEL_PROVIDER`: optional (`openrouter` | `openai` | `gemini` | `anthropic`), defaults from `openchat.config.ts`
 - `NEXT_PUBLIC_ALLOW_USER_MODEL_PROVIDER_SELECTION`: optional (`true`/`false`), defaults from `openchat.config.ts`
 
+Auth mode constraints:
+
+- Only one auth mode can be active at a time.
+- If `BACKEND_AUTH_LOCAL_ENABLED=true`, `BACKEND_AUTH_ISSUERS` must be empty.
+- `BACKEND_AUTH_ISSUERS` supports at most one issuer entry.
+- `BACKEND_AUTH_DEFAULT_PROVIDER` must be empty for local auth, and when set for OIDC it must match the configured issuer name.
+
 Local admin password behavior:
 
 - Local admin username is fixed to `admin`.

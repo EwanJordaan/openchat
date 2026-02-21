@@ -142,6 +142,64 @@ function parseOpenRouterAllowedModels(raw: string): string[] {
   return [...uniqueModels];
 }
 
+function validateSingleAuthModeDraft(draft: RuntimeEnvSettings): void {
+  const issuers = parseIssuerArray(draft.auth.issuersJson);
+  const issuersCount = issuers.length;
+  const defaultProviderName = draft.auth.defaultProviderName.trim();
+
+  if (draft.auth.localEnabled && issuersCount > 0) {
+    throw new Error("Only one auth mode can be active. Disable local auth or clear auth issuers JSON.");
+  }
+
+  if (issuersCount > 1) {
+    throw new Error("Only one OIDC issuer is supported at a time.");
+  }
+
+  if (draft.auth.localEnabled && defaultProviderName.length > 0) {
+    throw new Error("Default provider must be empty when local auth is enabled.");
+  }
+
+  if (!draft.auth.localEnabled && issuersCount === 0 && defaultProviderName.length > 0) {
+    throw new Error("Default provider requires a configured auth issuer.");
+  }
+
+  if (issuersCount === 1 && defaultProviderName.length > 0) {
+    const configuredName = readIssuerName(issuers[0]);
+    if (configuredName && configuredName !== defaultProviderName) {
+      throw new Error("Default provider must match the configured issuer name.");
+    }
+  }
+}
+
+function parseIssuerArray(raw: string): unknown[] {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error("Auth issuers JSON must be valid JSON.");
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("Auth issuers JSON must be a JSON array.");
+  }
+
+  return parsed;
+}
+
+function readIssuerName(value: unknown): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const issuer = value as { name?: unknown };
+  return typeof issuer.name === "string" ? issuer.name : null;
+}
+
 export default function AdminSettingsPage() {
   const router = useRouter();
 
@@ -525,6 +583,16 @@ export default function AdminSettingsPage() {
 
     setRuntimeSettingsErrorMessage(null);
     setRuntimeSettingsStatusMessage(null);
+
+    try {
+      validateSingleAuthModeDraft(runtimeSettingsDraft);
+    } catch (error) {
+      setRuntimeSettingsErrorMessage(
+        error instanceof Error ? error.message : "Could not validate runtime settings.",
+      );
+      return;
+    }
+
     setIsSavingRuntimeSettings(true);
 
     try {
@@ -1096,7 +1164,7 @@ export default function AdminSettingsPage() {
               Runtime Database and Auth (.env)
             </p>
             <p className="mt-1 text-sm text-[color:var(--text-muted)]">
-              Edit server runtime settings for database and auth providers.
+              Edit server runtime settings for database and auth providers. Only one auth mode can be active at a time.
             </p>
 
             {runtimeSettingsDraft ? (
@@ -1175,6 +1243,7 @@ export default function AdminSettingsPage() {
                       }
                       className="w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-sm outline-none"
                       placeholder="auth0"
+                      disabled={runtimeSettingsDraft.auth.localEnabled}
                     />
                   </label>
 
@@ -1354,6 +1423,9 @@ export default function AdminSettingsPage() {
 
                 <label className="block space-y-1 text-sm text-[color:var(--text-primary)]" htmlFor="runtime-auth-issuers-json">
                   <span className="block">Auth issuers JSON (BACKEND_AUTH_ISSUERS)</span>
+                  <span className="block text-xs text-[color:var(--text-dim)]">
+                    Leave empty for local auth, or set exactly one issuer for OIDC.
+                  </span>
                   <textarea
                     id="runtime-auth-issuers-json"
                     rows={8}
