@@ -24,7 +24,17 @@ export async function GET(request: Request): Promise<Response> {
     const principal = await requirePrincipal(request, container);
     await requirePermission(container, principal, "chat.read", { type: "global" });
 
-    const chats = await container.useCases.listChats.execute(principal);
+    const searchParams = new URL(request.url).searchParams;
+    const includeArchived = searchParams.get("includeArchived") !== "false";
+    const query = searchParams.get("q")?.trim() || undefined;
+    const rawLimit = Number.parseInt(searchParams.get("limit") ?? "", 10);
+    const limit = Number.isFinite(rawLimit) ? rawLimit : undefined;
+
+    const chats = await container.useCases.listChats.execute(principal, {
+      includeArchived,
+      query,
+      limit,
+    });
     return jsonResponse(requestId, { data: chats });
   });
 }

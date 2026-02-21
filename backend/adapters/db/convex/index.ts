@@ -8,6 +8,8 @@ import type {
   ConsumeDailyRequestAllowanceInput,
   ConsumeDailyRequestAllowanceResult,
   CreateChatWithMessagesInput,
+  DeleteChatMessageInput,
+  ListChatsForUserInput,
   CreateLocalAuthCredentialInput,
   CreateLocalAuthSessionInput,
   CreateProjectInput,
@@ -19,6 +21,7 @@ import type {
   RepositoryBundle,
   RoleRepository,
   SetUserAvatarInput,
+  UpdateChatMetadataInput,
   UpsertExternalIdentityMetadataInput,
   UpdateUserProfileInput,
   UserAvatar,
@@ -278,10 +281,40 @@ class InMemoryProjectRepository implements ProjectRepository {
 class InMemoryChatRepository implements ChatRepository {
   constructor(private readonly store: InMemoryStore) {}
 
-  async listForUser(userId: string): Promise<Chat[]> {
+  async listForUser(userId: string, input?: ListChatsForUserInput): Promise<Chat[]> {
+    const includeArchived = input?.includeArchived ?? true;
+    const query = input?.query?.trim().toLowerCase() ?? "";
+    const limit = normalizeListLimit(input?.limit);
+
     return [...this.store.chats.values()]
-      .filter((chat) => chat.ownerUserId === userId)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .filter((chat) => {
+        if (chat.ownerUserId !== userId) {
+          return false;
+        }
+
+        if (!includeArchived && chat.isArchived) {
+          return false;
+        }
+
+        if (!query) {
+          return true;
+        }
+
+        if (chat.title.toLowerCase().includes(query)) {
+          return true;
+        }
+
+        const messages = this.store.chatMessagesByChatId.get(chat.id) ?? [];
+        return messages.some((message) => message.content.toLowerCase().includes(query));
+      })
+      .sort((a, b) => {
+        if (a.isPinned !== b.isPinned) {
+          return a.isPinned ? -1 : 1;
+        }
+
+        return b.updatedAt.localeCompare(a.updatedAt);
+      })
+      .slice(0, limit)
       .map((chat) => ({ ...chat }));
   }
 
@@ -306,6 +339,8 @@ class InMemoryChatRepository implements ChatRepository {
       id: input.chatId,
       ownerUserId: input.ownerUserId,
       title: input.title,
+      isPinned: false,
+      isArchived: false,
       createdAt: now,
       updatedAt: now,
     };
@@ -375,6 +410,59 @@ class InMemoryChatRepository implements ChatRepository {
       messages: nextMessages.map((message) => ({ ...message })),
     };
   }
+
+  async updateMetadata(input: UpdateChatMetadataInput): Promise<Chat | null> {
+    const existing = this.store.chats.get(input.chatId);
+    if (!existing || existing.ownerUserId !== input.ownerUserId) {
+      return null;
+    }
+
+    const updated: Chat = {
+      ...existing,
+      title: input.title ?? existing.title,
+      isPinned: input.isPinned ?? existing.isPinned,
+      isArchived: input.isArchived ?? existing.isArchived,
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.store.chats.set(updated.id, updated);
+    return { ...updated };
+  }
+
+  async deleteMessage(input: DeleteChatMessageInput): Promise<ChatWithMessages | null> {
+    const chat = this.store.chats.get(input.chatId);
+    if (!chat || chat.ownerUserId !== input.ownerUserId) {
+      return null;
+    }
+
+    const existingMessages = this.store.chatMessagesByChatId.get(input.chatId) ?? [];
+    const nextMessages = existingMessages.filter((message) => message.id !== input.messageId);
+    if (nextMessages.length === existingMessages.length) {
+      return null;
+    }
+
+    this.store.chatMessagesByChatId.set(input.chatId, nextMessages);
+
+    const updatedChat: Chat = {
+      ...chat,
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.store.chats.set(updatedChat.id, updatedChat);
+
+    return {
+      chat: { ...updatedChat },
+      messages: nextMessages.map((message) => ({ ...message })),
+    };
+  }
+}
+
+function normalizeListLimit(rawLimit: number | undefined): number {
+  if (typeof rawLimit !== "number" || !Number.isFinite(rawLimit)) {
+    return 200;
+  }
+
+  return Math.max(1, Math.min(500, Math.floor(rawLimit)));
 }
 
 class InMemoryAiUsageRepository implements AiUsageRepository {

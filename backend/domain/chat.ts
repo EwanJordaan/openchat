@@ -4,6 +4,8 @@ export interface Chat {
   id: string;
   ownerUserId: string;
   title: string;
+  isPinned: boolean;
+  isArchived: boolean;
   createdAt: string;
   updatedAt: string;
 }

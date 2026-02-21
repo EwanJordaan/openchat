@@ -77,6 +77,26 @@ export interface CreateChatWithMessagesInput {
   assistantMessageContent: string;
 }
 
+export interface ListChatsForUserInput {
+  includeArchived?: boolean;
+  query?: string;
+  limit?: number;
+}
+
+export interface UpdateChatMetadataInput {
+  chatId: string;
+  ownerUserId: string;
+  title?: string;
+  isPinned?: boolean;
+  isArchived?: boolean;
+}
+
+export interface DeleteChatMessageInput {
+  chatId: string;
+  ownerUserId: string;
+  messageId: string;
+}
+
 export interface AppendChatMessagesInput {
   chatId: string;
   ownerUserId: string;
@@ -94,10 +114,12 @@ export interface CreateChatMessageInput {
 }
 
 export interface ChatRepository {
-  listForUser(userId: string): Promise<Chat[]>;
+  listForUser(userId: string, input?: ListChatsForUserInput): Promise<Chat[]>;
   getByIdForUser(chatId: string, userId: string): Promise<ChatWithMessages | null>;
   createWithInitialMessages(input: CreateChatWithMessagesInput): Promise<ChatWithMessages>;
   appendMessages(input: AppendChatMessagesInput): Promise<ChatWithMessages | null>;
+  updateMetadata(input: UpdateChatMetadataInput): Promise<Chat | null>;
+  deleteMessage(input: DeleteChatMessageInput): Promise<ChatWithMessages | null>;
 }
 
 export interface ConsumeDailyRequestAllowanceInput {

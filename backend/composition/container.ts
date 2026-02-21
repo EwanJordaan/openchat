@@ -1,6 +1,7 @@
 import { AppendChatMessageUseCase } from "@/backend/application/use-cases/append-chat-message";
 import { CreateChatFromFirstMessageUseCase } from "@/backend/application/use-cases/create-chat-from-first-message";
 import { CreateProjectUseCase } from "@/backend/application/use-cases/create-project";
+import { DeleteChatMessageUseCase } from "@/backend/application/use-cases/delete-chat-message";
 import { GetChatByIdUseCase } from "@/backend/application/use-cases/get-chat-by-id";
 import { GetCurrentUserUseCase } from "@/backend/application/use-cases/get-current-user";
 import { GetCurrentUserAvatarUseCase } from "@/backend/application/use-cases/get-current-user-avatar";
@@ -8,6 +9,7 @@ import { GetProjectByIdUseCase } from "@/backend/application/use-cases/get-proje
 import { ListChatsUseCase } from "@/backend/application/use-cases/list-chats";
 import { ListProjectsUseCase } from "@/backend/application/use-cases/list-projects";
 import { RemoveCurrentUserAvatarUseCase } from "@/backend/application/use-cases/remove-current-user-avatar";
+import { UpdateChatUseCase } from "@/backend/application/use-cases/update-chat";
 import { UpdateCurrentUserProfileUseCase } from "@/backend/application/use-cases/update-current-user-profile";
 import { UploadCurrentUserAvatarUseCase } from "@/backend/application/use-cases/upload-current-user-avatar";
 import { JitProvisioningAuthContextProvider } from "@/backend/adapters/auth/jit-provisioning-auth-context-provider";
@@ -56,6 +58,8 @@ export interface ApplicationContainer {
     getChatById: GetChatByIdUseCase;
     createChatFromFirstMessage: CreateChatFromFirstMessageUseCase;
     appendChatMessage: AppendChatMessageUseCase;
+    updateChat: UpdateChatUseCase;
+    deleteChatMessage: DeleteChatMessageUseCase;
   };
 }
 
@@ -109,6 +113,8 @@ function createApplicationContainerState(config: BackendConfig, fingerprint: str
     getChatById: new GetChatByIdUseCase(adapter.repositories.chats),
     createChatFromFirstMessage: new CreateChatFromFirstMessageUseCase(adapter.unitOfWork, modelProviderClient),
     appendChatMessage: new AppendChatMessageUseCase(adapter.unitOfWork, modelProviderClient),
+    updateChat: new UpdateChatUseCase(adapter.repositories.chats),
+    deleteChatMessage: new DeleteChatMessageUseCase(adapter.repositories.chats),
   };
 
   return {
@@ -198,8 +204,10 @@ function isContainerCompatible(container: ApplicationContainer): boolean {
       listChats?: unknown;
       getChatById?: unknown;
       createChatFromFirstMessage?: unknown;
-      appendChatMessage?: unknown;
-    };
+       appendChatMessage?: unknown;
+       updateChat?: unknown;
+       deleteChatMessage?: unknown;
+     };
   };
 
   return Boolean(
@@ -210,6 +218,8 @@ function isContainerCompatible(container: ApplicationContainer): boolean {
       candidate.useCases?.listChats &&
       candidate.useCases?.getChatById &&
       candidate.useCases?.createChatFromFirstMessage &&
-      candidate.useCases?.appendChatMessage,
+      candidate.useCases?.appendChatMessage &&
+      candidate.useCases?.updateChat &&
+      candidate.useCases?.deleteChatMessage,
   );
 }

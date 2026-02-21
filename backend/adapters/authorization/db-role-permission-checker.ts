@@ -6,7 +6,13 @@ const MEMBER_ACTIONS = new Set([
   "project.create",
 ]);
 
-const AUTHENTICATED_ACTIONS = new Set(["chat.read", "chat.create", "chat.message.create"]);
+const AUTHENTICATED_ACTIONS = new Set([
+  "chat.read",
+  "chat.create",
+  "chat.update",
+  "chat.message.create",
+  "chat.message.delete",
+]);
 
 export class DbRolePermissionChecker implements PermissionChecker {
   async can(
