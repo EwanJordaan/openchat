@@ -7,12 +7,8 @@ import ReactMarkdown from "react-markdown";
 
 import { type Chat, type ChatWithMessages } from "@/backend/domain/chat";
 import {
-  getCustomModelPreference,
   getModelPresetPreference,
-  getModelProviderPreference,
-  setCustomModelPreference,
   setModelPresetPreference,
-  setModelProviderPreference,
 } from "@/app/lib/model-provider";
 import {
   ChatApiError,
@@ -29,7 +25,6 @@ import {
   OPENCHAT_MODEL_PROVIDER_OPTIONS,
   OPENCHAT_PROVIDER_DEFAULT_MODELS,
   OPENCHAT_PROVIDER_MODEL_PRESETS,
-  resolveModelProviderId,
   type ModelProviderId,
 } from "@/shared/model-providers";
 import {
@@ -228,14 +223,8 @@ export default function Home() {
   const [isActiveChatLoading, setIsActiveChatLoading] = useState(false);
   const [isActiveChatMissing, setIsActiveChatMissing] = useState(false);
   const [currentUser, setCurrentUser] = useState<CurrentUserData | null>(null);
-  const [selectedModelProvider, setSelectedModelProvider] = useState<ModelProviderId>(
-    publicSiteConfig.ai.defaultModelProvider,
-  );
   const [defaultModelProvider, setDefaultModelProvider] = useState<ModelProviderId>(
     publicSiteConfig.ai.defaultModelProvider,
-  );
-  const [allowUserModelProviderSelection, setAllowUserModelProviderSelection] = useState<boolean>(
-    publicSiteConfig.ai.allowUserModelProviderSelection,
   );
   const [providerAvailability, setProviderAvailability] = useState<ModelProviderAvailability[]>(
     getDefaultProviderAvailability(),
@@ -248,9 +237,6 @@ export default function Home() {
   const [modelPresetByProvider, setModelPresetByProvider] = useState<
     Partial<Record<ModelProviderId, string>>
   >(() => getDefaultModelPresetByProvider(getDefaultProviderAvailability()));
-  const [customModelByProvider, setCustomModelByProvider] = useState<
-    Partial<Record<ModelProviderId, string>>
-  >({});
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
 
@@ -258,27 +244,12 @@ export default function Home() {
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const cachedProvider = getModelProviderPreference(publicSiteConfig.ai.defaultModelProvider);
-    setSelectedModelProvider(cachedProvider);
-
     const defaultProviders = getDefaultProviderAvailability();
 
     setModelPresetByProvider(() => {
       const next: Partial<Record<ModelProviderId, string>> = {};
       for (const provider of defaultProviders) {
         next[provider.id] = getModelPresetPreference(provider.id, provider.defaultModel);
-      }
-
-      return next;
-    });
-
-    setCustomModelByProvider(() => {
-      const next: Partial<Record<ModelProviderId, string>> = {};
-      for (const provider of defaultProviders) {
-        const customModel = getCustomModelPreference(provider.id);
-        if (customModel) {
-          next[provider.id] = customModel;
-        }
       }
 
       return next;
@@ -296,20 +267,13 @@ export default function Home() {
         }
 
         setDefaultModelProvider(payload.defaultModelProvider);
-        setAllowUserModelProviderSelection(payload.allowUserModelProviderSelection);
         setProviderAvailability(payload.providers);
         setOpenRouterRateLimits(payload.openrouterRateLimits);
-
-        if (!payload.allowUserModelProviderSelection) {
-          setSelectedModelProvider(payload.defaultModelProvider);
-          setModelProviderPreference(payload.defaultModelProvider);
-        }
       } catch {
         if (isDisposed) {
           return;
         }
 
-        setAllowUserModelProviderSelection(publicSiteConfig.ai.allowUserModelProviderSelection);
         setProviderAvailability(getDefaultProviderAvailability());
       }
     }
@@ -350,40 +314,7 @@ export default function Home() {
 
       return didChange ? next : previous;
     });
-
-    const selectedProviderOption = providerAvailability.find(
-      (provider) => provider.id === selectedModelProvider,
-    );
-
-    if (!allowUserModelProviderSelection) {
-      const enforcedProviderOption = providerAvailability.find(
-        (provider) => provider.id === defaultModelProvider,
-      );
-
-      if (enforcedProviderOption?.configured) {
-        setSelectedModelProvider(defaultModelProvider);
-        setModelProviderPreference(defaultModelProvider);
-        return;
-      }
-    }
-
-    if (selectedProviderOption?.configured) {
-      return;
-    }
-
-    const firstConfigured = providerAvailability.find((provider) => provider.configured);
-    if (!firstConfigured) {
-      return;
-    }
-
-    setSelectedModelProvider(firstConfigured.id);
-    setModelProviderPreference(firstConfigured.id);
-  }, [
-    allowUserModelProviderSelection,
-    defaultModelProvider,
-    providerAvailability,
-    selectedModelProvider,
-  ]);
+  }, [providerAvailability]);
 
   useEffect(() => {
     let isDisposed = false;
@@ -626,18 +557,7 @@ export default function Home() {
   function getActiveModel(providerId: ModelProviderId): string {
     const selectedProviderOption = providerAvailability.find((providerOption) => providerOption.id === providerId);
     const fallbackModel = selectedProviderOption?.defaultModel ?? OPENCHAT_PROVIDER_DEFAULT_MODELS[providerId];
-    const selectedPresetModel = modelPresetByProvider[providerId]?.trim() || fallbackModel;
-    if (providerId === "openrouter") {
-      return selectedPresetModel;
-    }
-
-    const customModel = customModelByProvider[providerId]?.trim() ?? "";
-
-    if (customModel.length > 0) {
-      return customModel;
-    }
-
-    return selectedPresetModel;
+    return modelPresetByProvider[providerId]?.trim() || fallbackModel;
   }
 
   async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
@@ -653,28 +573,14 @@ export default function Home() {
     }
 
     const selectedProviderOption = providerAvailability.find(
-      (providerOption) => providerOption.id === selectedModelProvider,
+      (providerOption) => providerOption.id === defaultModelProvider,
     );
-    const hasConfiguredProvider = providerAvailability.some((providerOption) => providerOption.configured);
-    if (!hasConfiguredProvider) {
-      setAuthNotice("No AI providers are configured. Add a provider key in admin settings.");
+    if (!selectedProviderOption?.configured) {
+      setAuthNotice("The admin-selected model provider is not configured. Add its API key in admin settings.");
       return;
     }
 
-    if (selectedProviderOption && !selectedProviderOption.configured) {
-      const fallbackProviderOption = providerAvailability.find((providerOption) => providerOption.configured);
-      if (!fallbackProviderOption) {
-        setAuthNotice("No AI providers are configured. Add a provider key in admin settings.");
-        return;
-      }
-
-      setSelectedModelProvider(fallbackProviderOption.id);
-      setModelProviderPreference(fallbackProviderOption.id);
-      setAuthNotice(`${fallbackProviderOption.label} is selected because your previous provider is unavailable.`);
-      return;
-    }
-
-    const selectedModel = getActiveModel(selectedModelProvider);
+    const selectedModel = getActiveModel(defaultModelProvider);
     if (!selectedModel) {
       setAuthNotice("Select a model before sending your message.");
       return;
@@ -708,7 +614,6 @@ export default function Home() {
       try {
         await streamGuestAssistantResponse(
           trimmedDraft,
-          selectedModelProvider,
           selectedModel,
           (chunk) => {
             setChatMessages((previous) =>
@@ -758,7 +663,6 @@ export default function Home() {
       if (!activeChatId) {
         const createdChat = await streamCreateChatFromMessage(
           trimmedDraft,
-          selectedModelProvider,
           selectedModel,
           (chunk) => {
             setChatMessages((previous) =>
@@ -783,7 +687,6 @@ export default function Home() {
       const updatedChat = await streamAppendChatMessage(
         targetChatId,
         trimmedDraft,
-        selectedModelProvider,
         selectedModel,
         (chunk) => {
           setChatMessages((previous) =>
@@ -838,51 +741,14 @@ export default function Home() {
     }
   }
 
-  function handleModelProviderChange(event: ChangeEvent<HTMLSelectElement>) {
-    if (!allowUserModelProviderSelection) {
-      return;
-    }
-
-    const nextProvider = resolveModelProviderId(event.target.value, defaultModelProvider);
-    const nextProviderOption = providerAvailability.find((providerOption) => providerOption.id === nextProvider);
-    if (nextProviderOption && !nextProviderOption.configured) {
-      setAuthNotice(`${nextProviderOption.label} is not configured in admin settings.`);
-      return;
-    }
-
-    setSelectedModelProvider(nextProvider);
-    setModelProviderPreference(nextProvider);
-
-    const resolvedPreset =
-      modelPresetByProvider[nextProvider] ??
-      nextProviderOption?.defaultModel ??
-      OPENCHAT_PROVIDER_DEFAULT_MODELS[nextProvider];
-    setModelPresetByProvider((previous) => ({
-      ...previous,
-      [nextProvider]: resolvedPreset,
-    }));
-    setModelPresetPreference(nextProvider, resolvedPreset);
-
-    setAuthNotice(null);
-  }
-
   function handleModelPresetChange(event: ChangeEvent<HTMLSelectElement>) {
     const nextModel = event.target.value;
     setModelPresetByProvider((previous) => ({
       ...previous,
-      [selectedModelProvider]: nextModel,
+      [defaultModelProvider]: nextModel,
     }));
-    setModelPresetPreference(selectedModelProvider, nextModel);
+    setModelPresetPreference(defaultModelProvider, nextModel);
     setAuthNotice(null);
-  }
-
-  function handleCustomModelChange(event: ChangeEvent<HTMLInputElement>) {
-    const nextModel = event.target.value;
-    setCustomModelByProvider((previous) => ({
-      ...previous,
-      [selectedModelProvider]: nextModel,
-    }));
-    setCustomModelPreference(selectedModelProvider, nextModel);
   }
 
   const userDisplayName = currentUser
@@ -890,7 +756,7 @@ export default function Home() {
     : "Guest";
 
   const selectedProviderOption = providerAvailability.find(
-    (providerOption) => providerOption.id === selectedModelProvider,
+    (providerOption) => providerOption.id === defaultModelProvider,
   );
   const selectedProviderModels = selectedProviderOption?.models ?? [];
   const accessTier = resolveAccessTier(currentUser);
@@ -901,15 +767,12 @@ export default function Home() {
         ? openRouterRateLimits.memberRequestsPerDay
         : openRouterRateLimits.guestRequestsPerDay;
   const selectedPresetModel =
-    modelPresetByProvider[selectedModelProvider] ??
+    modelPresetByProvider[defaultModelProvider] ??
     selectedProviderOption?.defaultModel ??
-    OPENCHAT_PROVIDER_DEFAULT_MODELS[selectedModelProvider];
-  const customModelDraft = customModelByProvider[selectedModelProvider] ?? "";
-  const allowCustomModelInput = selectedModelProvider !== "openrouter";
-  const activeModel = getActiveModel(selectedModelProvider);
+    OPENCHAT_PROVIDER_DEFAULT_MODELS[defaultModelProvider];
+  const activeModel = getActiveModel(defaultModelProvider);
 
-  const configuredProviderOptions = providerAvailability.filter((providerOption) => providerOption.configured);
-  const hasConfiguredProvider = configuredProviderOptions.length > 0;
+  const hasConfiguredProvider = Boolean(selectedProviderOption?.configured);
 
   const composerDisabled =
     isAssistantTyping ||
@@ -1227,32 +1090,7 @@ export default function Home() {
 
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-3 pb-3 sm:px-5 sm:pb-4">
             <div className="pointer-events-auto mb-2 rounded-lg border border-white/12 bg-[var(--bg-root)]/95 px-2.5 py-2 backdrop-blur">
-              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
-                <label className="flex min-w-0 items-center gap-2" htmlFor="chat-model-provider">
-                  <span className="w-14 shrink-0 text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-dim)]">
-                    Provider
-                  </span>
-                  <select
-                    id="chat-model-provider"
-                    value={selectedModelProvider}
-                    onChange={handleModelProviderChange}
-                    className="ai-select min-w-0 flex-1 rounded-md border border-white/12 bg-white/[0.04] px-2 py-1.5 text-xs text-[color:var(--text-primary)] outline-none disabled:opacity-70"
-                    disabled={
-                      isAssistantTyping ||
-                      providerAvailability.length === 0 ||
-                      !allowUserModelProviderSelection
-                    }
-                  >
-                    {providerAvailability.map((providerOption) => (
-                      <option key={providerOption.id} value={providerOption.id} disabled={!providerOption.configured}>
-                        {providerOption.configured
-                          ? providerOption.label
-                          : `${providerOption.label} (Not configured)`}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
+              <div className="grid gap-2">
                 <label className="flex min-w-0 items-center gap-2" htmlFor="chat-model-preset">
                   <span className="w-14 shrink-0 text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-dim)]">
                     Model
@@ -1271,28 +1109,11 @@ export default function Home() {
                     ))}
                   </select>
                 </label>
-
-                <label className="flex min-w-0 items-center gap-2" htmlFor="chat-custom-model">
-                  <span className="w-14 shrink-0 text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-dim)]">
-                    Custom
-                  </span>
-                  <input
-                    id="chat-custom-model"
-                    type="text"
-                    value={customModelDraft}
-                    onChange={handleCustomModelChange}
-                    placeholder={allowCustomModelInput ? "Optional model id" : "Admin-managed for OpenRouter"}
-                    className="min-w-0 flex-1 rounded-md border border-white/12 bg-white/[0.04] px-2 py-1.5 text-xs text-[color:var(--text-primary)] outline-none placeholder:text-[color:var(--text-dim)] disabled:opacity-70"
-                    disabled={isAssistantTyping || !allowCustomModelInput}
-                  />
-                </label>
               </div>
 
               <p className="mt-1.5 text-[11px] text-[color:var(--text-dim)]">
-                {!allowUserModelProviderSelection
-                  ? `Provider is managed by admin policy (${selectedProviderOption?.label ?? selectedModelProvider}).`
-                  : `${selectedProviderOption?.label ?? "Provider"} selected for this message.`}
-                {selectedModelProvider === "openrouter"
+                {`Provider is managed by admin policy (${selectedProviderOption?.label ?? defaultModelProvider}).`}
+                {defaultModelProvider === "openrouter"
                   ? ` ${accessTier} daily request limit: ${openRouterLimitForTier}.`
                   : ""}
               </p>

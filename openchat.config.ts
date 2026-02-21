@@ -51,7 +51,7 @@ export const openChatConfig: OpenChatConfig = {
   },
   ai: {
     defaultModelProvider: "openrouter",
-    allowUserModelProviderSelection: true,
+    allowUserModelProviderSelection: false,
     openrouter: {
       allowedModels: OPENCHAT_PROVIDER_MODEL_PRESETS.openrouter.map((option) => option.id),
       rateLimits: {

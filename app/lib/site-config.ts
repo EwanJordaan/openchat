@@ -8,7 +8,6 @@ export interface PublicSiteConfig {
   };
   ai: {
     defaultModelProvider: ModelProviderId;
-    allowUserModelProviderSelection: boolean;
   };
   ui: {
     defaultTheme: ThemeId;
@@ -27,10 +26,6 @@ export function getPublicSiteConfig(): PublicSiteConfig {
       defaultModelProvider: parseModelProviderEnv(
         process.env.NEXT_PUBLIC_DEFAULT_MODEL_PROVIDER,
         openChatConfig.ai.defaultModelProvider,
-      ),
-      allowUserModelProviderSelection: parseBooleanEnv(
-        process.env.NEXT_PUBLIC_ALLOW_USER_MODEL_PROVIDER_SELECTION,
-        openChatConfig.ai.allowUserModelProviderSelection,
       ),
     },
     ui: {

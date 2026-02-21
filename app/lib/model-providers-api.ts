@@ -20,7 +20,6 @@ export interface ModelProviderAvailability extends ModelProviderOption {
 
 export interface ModelProvidersSnapshot {
   defaultModelProvider: ModelProviderId;
-  allowUserModelProviderSelection: boolean;
   openrouterRateLimits: {
     guestRequestsPerDay: number;
     memberRequestsPerDay: number;

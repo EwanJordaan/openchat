@@ -673,26 +673,9 @@ export default function AdminSettingsPage() {
                 Allow guest responses
               </label>
 
-              <label className="surface-soft flex items-center gap-3 rounded-lg border border-white/10 px-3 py-2 text-sm text-[color:var(--text-primary)]">
-                <input
-                  type="checkbox"
-                  checked={draft?.ai.allowUserModelProviderSelection ?? true}
-                  onChange={(event) =>
-                    setDraft((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            ai: {
-                              ...prev.ai,
-                              allowUserModelProviderSelection: event.target.checked,
-                            },
-                          }
-                        : prev,
-                    )
-                  }
-                />
-                Allow users to choose model provider
-              </label>
+              <div className="surface-soft rounded-lg border border-white/10 px-3 py-2 text-sm text-[color:var(--text-dim)]">
+                Model provider is admin-managed. Users can only choose from the allowed model list.
+              </div>
 
               <label className="space-y-1 text-sm text-[color:var(--text-primary)]" htmlFor="default-theme">
                 <span className="block">Default theme</span>

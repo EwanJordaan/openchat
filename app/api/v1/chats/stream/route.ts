@@ -16,13 +16,11 @@ import {
   requirePrincipal,
 } from "@/backend/transport/rest/pipeline";
 import { createSseResponse } from "@/backend/transport/rest/sse";
-import { OPENCHAT_MODEL_PROVIDER_IDS } from "@/shared/model-providers";
 
 export const runtime = "nodejs";
 
 const createChatSchema = z.object({
   message: z.string().min(1).max(8000),
-  modelProvider: z.enum(OPENCHAT_MODEL_PROVIDER_IDS).optional(),
   model: z.string().trim().min(1).max(200).optional(),
 });
 
@@ -40,7 +38,6 @@ export async function POST(request: Request): Promise<Response> {
     const aiPolicy = resolveAiRequestPolicy({
       container,
       principal,
-      requestedModelProvider: payload.modelProvider,
       requestedModel: payload.model,
     });
 

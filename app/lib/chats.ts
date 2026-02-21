@@ -1,5 +1,4 @@
 import type { Chat, ChatWithMessages } from "@/backend/domain/chat";
-import type { ModelProviderId } from "@/shared/model-providers";
 
 interface ApiResponse<TData> {
   data?: TData;
@@ -91,7 +90,6 @@ export async function fetchChatById(chatId: string, _signal?: AbortSignal): Prom
 
 export async function createChatFromMessage(
   message: string,
-  modelProvider: ModelProviderId,
   model?: string,
 ): Promise<ChatWithMessages> {
   const response = await fetch("/api/v1/chats", {
@@ -100,7 +98,7 @@ export async function createChatFromMessage(
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({ message, modelProvider, model }),
+    body: JSON.stringify({ message, model }),
   });
 
   if (!response.ok) {
@@ -119,7 +117,6 @@ export async function createChatFromMessage(
 export async function appendChatMessage(
   chatId: string,
   message: string,
-  modelProvider: ModelProviderId,
   model?: string,
 ): Promise<ChatWithMessages> {
   const response = await fetch(`/api/v1/chats/${encodeURIComponent(chatId)}/messages`, {
@@ -128,7 +125,7 @@ export async function appendChatMessage(
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({ message, modelProvider, model }),
+    body: JSON.stringify({ message, model }),
   });
 
   if (!response.ok) {
@@ -146,7 +143,6 @@ export async function appendChatMessage(
 
 export async function requestGuestAssistantResponse(
   message: string,
-  modelProvider: ModelProviderId,
   model?: string,
 ): Promise<string> {
   const response = await fetch("/api/v1/chat/guest", {
@@ -155,7 +151,7 @@ export async function requestGuestAssistantResponse(
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({ message, modelProvider, model }),
+    body: JSON.stringify({ message, model }),
   });
 
   if (!response.ok) {
@@ -175,7 +171,6 @@ export async function requestGuestAssistantResponse(
 
 export async function streamGuestAssistantResponse(
   message: string,
-  modelProvider: ModelProviderId,
   model: string | undefined,
   onChunk: (chunk: string) => void,
 ): Promise<string> {
@@ -185,7 +180,7 @@ export async function streamGuestAssistantResponse(
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({ message, modelProvider, model }),
+    body: JSON.stringify({ message, model }),
   });
 
   if (!response.ok) {
@@ -206,7 +201,6 @@ export async function streamGuestAssistantResponse(
 
 export async function streamCreateChatFromMessage(
   message: string,
-  modelProvider: ModelProviderId,
   model: string | undefined,
   onChunk: (chunk: string) => void,
 ): Promise<ChatWithMessages> {
@@ -216,7 +210,7 @@ export async function streamCreateChatFromMessage(
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({ message, modelProvider, model }),
+    body: JSON.stringify({ message, model }),
   });
 
   if (!response.ok) {
@@ -238,7 +232,6 @@ export async function streamCreateChatFromMessage(
 export async function streamAppendChatMessage(
   chatId: string,
   message: string,
-  modelProvider: ModelProviderId,
   model: string | undefined,
   onChunk: (chunk: string) => void,
 ): Promise<ChatWithMessages> {
@@ -248,7 +241,7 @@ export async function streamAppendChatMessage(
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({ message, modelProvider, model }),
+    body: JSON.stringify({ message, model }),
   });
 
   if (!response.ok) {
@@ -497,7 +490,6 @@ async function toChatApiError(response: Response, fallbackMessage: string): Prom
 
 interface GuestStreamDonePayload {
   message?: string;
-  modelProvider?: ModelProviderId;
   model?: string;
 }
 

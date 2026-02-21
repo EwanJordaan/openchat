@@ -12,13 +12,11 @@ import {
 import { ApiError } from "@/backend/transport/rest/api-error";
 import { handleApiRoute, parseJsonBody } from "@/backend/transport/rest/pipeline";
 import { createSseResponse } from "@/backend/transport/rest/sse";
-import { OPENCHAT_MODEL_PROVIDER_IDS } from "@/shared/model-providers";
 
 export const runtime = "nodejs";
 
 const guestChatSchema = z.object({
   message: z.string().min(1).max(8000),
-  modelProvider: z.enum(OPENCHAT_MODEL_PROVIDER_IDS).optional(),
   model: z.string().trim().min(1).max(200).optional(),
 });
 
@@ -38,7 +36,6 @@ export async function POST(request: Request): Promise<Response> {
     const aiPolicy = resolveAiRequestPolicy({
       container,
       principal: null,
-      requestedModelProvider: payload.modelProvider,
       requestedModel: payload.model,
     });
 

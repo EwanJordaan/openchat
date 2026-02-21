@@ -14,7 +14,6 @@ export type OpenChatAccessRole = "guest" | "member" | "admin";
 export interface ResolveAiRequestPolicyInput {
   container: ApplicationContainer;
   principal: Principal | null;
-  requestedModelProvider?: ModelProviderId;
   requestedModel?: string;
 }
 
@@ -26,12 +25,7 @@ export interface ResolvedAiRequestPolicy {
 
 export function resolveAiRequestPolicy(input: ResolveAiRequestPolicyInput): ResolvedAiRequestPolicy {
   const role = resolveAccessRole(input.principal);
-  const defaultModelProvider = input.container.config.ai.defaultModelProvider;
-  const requestedProvider = input.requestedModelProvider ?? defaultModelProvider;
-
-  const modelProvider = input.container.config.ai.allowUserModelProviderSelection
-    ? requestedProvider
-    : defaultModelProvider;
+  const modelProvider = input.container.config.ai.defaultModelProvider;
 
   const fallbackModel =
     modelProvider === "openrouter"
