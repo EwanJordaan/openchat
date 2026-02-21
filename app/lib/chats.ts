@@ -13,6 +13,12 @@ interface CacheEntry<TValue> {
   expiresAt: number;
 }
 
+interface FetchChatsOptions {
+  includeArchived?: boolean;
+  query?: string;
+  limit?: number;
+}
+
 const CHAT_LIST_CACHE_TTL_MS = 30 * 60 * 1000;
 const CHAT_DETAILS_CACHE_TTL_MS = 10 * 60 * 1000;
 const CHAT_LIST_CACHE_STORAGE_PREFIX = "openchat_chat_list_cache_v1:";
@@ -45,7 +51,7 @@ export async function fetchChats(userId: string, _signal?: AbortSignal): Promise
     return cloneChats(await inFlightRequest);
   }
 
-  const request = requestChatsFromApi(_signal);
+  const request = requestChatsFromApi({ includeArchived: true }, _signal);
   chatListInFlightRequests.set(userId, request);
 
   try {
@@ -135,6 +141,55 @@ export async function appendChatMessage(
   const payload = (await response.json()) as ApiResponse<ChatWithMessages>;
   if (!payload.data) {
     throw new ChatApiError("Append message response did not include data", 500, "invalid_response");
+  }
+
+  storeChatSnapshot(payload.data);
+  return cloneChatWithMessages(payload.data);
+}
+
+export async function updateChatMetadata(
+  chatId: string,
+  input: { title?: string; isPinned?: boolean; isArchived?: boolean },
+): Promise<Chat> {
+  const response = await fetch(`/api/v1/chats/${encodeURIComponent(chatId)}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    throw await toChatApiError(response, "Failed to update chat");
+  }
+
+  const payload = (await response.json()) as ApiResponse<Chat>;
+  if (!payload.data) {
+    throw new ChatApiError("Update chat response did not include data", 500, "invalid_response");
+  }
+
+  const normalizedChat = normalizeChat(payload.data);
+  updateCachedChat(normalizedChat);
+  return { ...normalizedChat };
+}
+
+export async function deleteChatMessage(chatId: string, messageId: string): Promise<ChatWithMessages> {
+  const response = await fetch(
+    `/api/v1/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}`,
+    {
+      method: "DELETE",
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    throw await toChatApiError(response, "Failed to delete message");
+  }
+
+  const payload = (await response.json()) as ApiResponse<ChatWithMessages>;
+  if (!payload.data) {
+    throw new ChatApiError("Delete message response did not include data", 500, "invalid_response");
   }
 
   storeChatSnapshot(payload.data);
@@ -317,8 +372,25 @@ export function clearChatCache(userId?: string): void {
   chatDetailsInFlightRequests.clear();
 }
 
-async function requestChatsFromApi(signal?: AbortSignal): Promise<Chat[]> {
-  const response = await fetch("/api/v1/chats", {
+async function requestChatsFromApi(options?: FetchChatsOptions, signal?: AbortSignal): Promise<Chat[]> {
+  const includeArchived = options?.includeArchived;
+  const query = options?.query?.trim();
+  const limit = options?.limit;
+  const searchParams = new URLSearchParams();
+  if (includeArchived !== undefined) {
+    searchParams.set("includeArchived", includeArchived ? "true" : "false");
+  }
+
+  if (query) {
+    searchParams.set("q", query);
+  }
+
+  if (typeof limit === "number" && Number.isFinite(limit)) {
+    searchParams.set("limit", `${Math.floor(limit)}`);
+  }
+
+  const path = searchParams.size > 0 ? `/api/v1/chats?${searchParams.toString()}` : "/api/v1/chats";
+  const response = await fetch(path, {
     credentials: "include",
     cache: "no-store",
     signal,
@@ -329,7 +401,7 @@ async function requestChatsFromApi(signal?: AbortSignal): Promise<Chat[]> {
   }
 
   const payload = (await response.json()) as ApiResponse<Chat[]>;
-  return Array.isArray(payload.data) ? payload.data : [];
+  return Array.isArray(payload.data) ? payload.data.map((chat) => normalizeChat(chat)) : [];
 }
 
 async function requestChatByIdFromApi(chatId: string): Promise<ChatWithMessages> {
@@ -351,15 +423,38 @@ async function requestChatByIdFromApi(chatId: string): Promise<ChatWithMessages>
 }
 
 function storeChatSnapshot(payload: ChatWithMessages): void {
-  chatDetailsCache.set(payload.chat.id, {
-    value: cloneChatWithMessages(payload),
+  const normalizedPayload = normalizeChatWithMessages(payload);
+
+  chatDetailsCache.set(normalizedPayload.chat.id, {
+    value: cloneChatWithMessages(normalizedPayload),
     expiresAt: Date.now() + CHAT_DETAILS_CACHE_TTL_MS,
   });
 
-  const userId = payload.chat.ownerUserId;
+  const userId = normalizedPayload.chat.ownerUserId;
   const existingList = getCachedChatsSnapshot(userId) ?? [];
-  const nextList = upsertChat(existingList, payload.chat);
+  const nextList = upsertChat(existingList, normalizedPayload.chat);
   setChatListCache(userId, nextList);
+}
+
+function updateCachedChat(chat: Chat): void {
+  const normalizedChat = normalizeChat(chat);
+  const userId = normalizedChat.ownerUserId;
+  const existingList = getCachedChatsSnapshot(userId) ?? [];
+  const nextList = upsertChat(existingList, normalizedChat);
+  setChatListCache(userId, nextList);
+
+  const existingDetails = chatDetailsCache.get(normalizedChat.id);
+  if (!existingDetails || !isCacheEntryFresh(existingDetails)) {
+    return;
+  }
+
+  chatDetailsCache.set(normalizedChat.id, {
+    value: {
+      chat: { ...normalizedChat },
+      messages: existingDetails.value.messages.map((message) => ({ ...message })),
+    },
+    expiresAt: existingDetails.expiresAt,
+  });
 }
 
 function setChatListCache(userId: string, chats: Chat[]): void {
@@ -373,9 +468,11 @@ function setChatListCache(userId: string, chats: Chat[]): void {
 }
 
 function upsertChat(chats: Chat[], updatedChat: Chat): Chat[] {
-  return [updatedChat, ...chats.filter((chat) => chat.id !== updatedChat.id)].sort((a, b) => {
-    return b.updatedAt.localeCompare(a.updatedAt);
-  });
+  const normalizedUpdatedChat = normalizeChat(updatedChat);
+
+  return [normalizedUpdatedChat, ...chats.filter((chat) => chat.id !== normalizedUpdatedChat.id)]
+    .map((chat) => normalizeChat(chat))
+    .sort(compareChats);
 }
 
 function isCacheEntryFresh<TValue>(entry: CacheEntry<TValue>): boolean {
@@ -383,14 +480,39 @@ function isCacheEntryFresh<TValue>(entry: CacheEntry<TValue>): boolean {
 }
 
 function cloneChats(chats: Chat[]): Chat[] {
-  return chats.map((chat) => ({ ...chat }));
+  return chats.map((chat) => normalizeChat(chat));
 }
 
 function cloneChatWithMessages(chat: ChatWithMessages): ChatWithMessages {
+  const normalized = normalizeChatWithMessages(chat);
+
   return {
-    chat: { ...chat.chat },
-    messages: chat.messages.map((message) => ({ ...message })),
+    chat: { ...normalized.chat },
+    messages: normalized.messages.map((message) => ({ ...message })),
   };
+}
+
+function normalizeChat(chat: Chat): Chat {
+  return {
+    ...chat,
+    isPinned: chat.isPinned ?? false,
+    isArchived: chat.isArchived ?? false,
+  };
+}
+
+function normalizeChatWithMessages(payload: ChatWithMessages): ChatWithMessages {
+  return {
+    chat: normalizeChat(payload.chat),
+    messages: payload.messages.map((message) => ({ ...message })),
+  };
+}
+
+function compareChats(left: Chat, right: Chat): number {
+  if (left.isPinned !== right.isPinned) {
+    return left.isPinned ? -1 : 1;
+  }
+
+  return right.updatedAt.localeCompare(left.updatedAt);
 }
 
 function hasDom(): boolean {
@@ -491,6 +613,11 @@ async function toChatApiError(response: Response, fallbackMessage: string): Prom
 interface GuestStreamDonePayload {
   message?: string;
   model?: string;
+}
+
+export async function searchChats(options: FetchChatsOptions, signal?: AbortSignal): Promise<Chat[]> {
+  const chats = await requestChatsFromApi(options, signal);
+  return cloneChats(chats);
 }
 
 interface ChatStreamDonePayload {

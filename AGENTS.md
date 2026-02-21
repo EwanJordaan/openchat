@@ -43,7 +43,7 @@ This file helps coding agents quickly understand and safely modify this reposito
 - `backend/domain/*`
   - Core backend entities (`Principal`, `User`, `Project`).
 - `backend/application/*`
-  - Use-cases (`GetCurrentUser`, `ListProjects`, `CreateProject`, `GetProjectById`, chat list/get/create/append).
+  - Use-cases (`GetCurrentUser`, `ListProjects`, `CreateProject`, `GetProjectById`, chat list/get/create/append/update/delete-message).
 - `backend/ports/*`
   - Contracts for auth context, permission checking, repositories, and unit-of-work.
 - `backend/adapters/auth/*`
@@ -175,6 +175,7 @@ Clerk requirements:
 - Apply `backend/adapters/db/postgres/migrations/004_external_identity_metadata.sql` for persisted provider identity metadata.
 - Apply `backend/adapters/db/postgres/migrations/005_ai_usage_daily.sql` for provider daily rate-limit counters.
 - Apply `backend/adapters/db/postgres/migrations/006_local_auth.sql` for local credentials/sessions tables.
+- Apply `backend/adapters/db/postgres/migrations/007_chat_metadata.sql` for chat pin/archive metadata.
 - Neon uses the same schema/queries as local Postgres (swap only `DATABASE_URL`).
 
 ## MVP API routes
@@ -191,7 +192,9 @@ Clerk requirements:
 - `GET /api/v1/chats`
 - `POST /api/v1/chats`
 - `GET /api/v1/chats/:id`
+- `PATCH /api/v1/chats/:id`
 - `POST /api/v1/chats/:id/messages`
+- `DELETE /api/v1/chats/:id/messages/:messageId`
 - `POST /api/v1/chat/guest`
 - `GET /api/v1/model-providers`
 - `GET /api/v1/auth/providers`

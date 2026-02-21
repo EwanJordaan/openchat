@@ -12,13 +12,16 @@ import {
 } from "@/app/lib/model-provider";
 import {
   ChatApiError,
+  deleteChatMessage,
   clearChatCache,
   fetchChatById,
   fetchChats,
   getCachedChatsSnapshot,
+  searchChats,
   streamAppendChatMessage,
   streamCreateChatFromMessage,
   streamGuestAssistantResponse,
+  updateChatMetadata,
 } from "@/app/lib/chats";
 import { fetchModelProviders, type ModelProviderAvailability } from "@/app/lib/model-providers-api";
 import {
@@ -45,6 +48,8 @@ type Message = {
   content: string;
   time: string;
 };
+
+type ChatFilter = "active" | "pinned" | "archived" | "all";
 
 const publicSiteConfig = getPublicSiteConfig();
 
@@ -119,7 +124,13 @@ function getRolePriority(role: Role): number {
 
 function upsertChat(chats: Chat[], updatedChat: Chat): Chat[] {
   const next = [updatedChat, ...chats.filter((chat) => chat.id !== updatedChat.id)];
-  return next.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return next.sort((a, b) => {
+    if (a.isPinned !== b.isPinned) {
+      return a.isPinned ? -1 : 1;
+    }
+
+    return b.updatedAt.localeCompare(a.updatedAt);
+  });
 }
 
 function getChatIdFromPathname(pathname: string): string | null {
@@ -217,6 +228,10 @@ export default function Home() {
   const [isSidebarContentVisible, setIsSidebarContentVisible] = useState(true);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
+  const [chatFilter, setChatFilter] = useState<ChatFilter>("active");
+  const [chatSearchQuery, setChatSearchQuery] = useState("");
+  const [searchResultChats, setSearchResultChats] = useState<Chat[] | null>(null);
+  const [isChatSearchLoading, setIsChatSearchLoading] = useState(false);
   const [draft, setDraft] = useState("");
   const [isAssistantTyping, setIsAssistantTyping] = useState(false);
   const [isChatListLoading, setIsChatListLoading] = useState(false);
@@ -242,6 +257,7 @@ export default function Home() {
 
   const sidebarContentTimerRef = useRef<number | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const composerInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const defaultProviders = getDefaultProviderAvailability();
@@ -407,6 +423,7 @@ export default function Home() {
   useEffect(() => {
     if (!currentUser) {
       setChats([]);
+      setSearchResultChats(null);
       return;
     }
 
@@ -458,6 +475,55 @@ export default function Home() {
       isDisposed = true;
     };
   }, [currentUser, pathname, router]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setSearchResultChats(null);
+      setIsChatSearchLoading(false);
+      return;
+    }
+
+    const trimmedQuery = chatSearchQuery.trim();
+    if (!trimmedQuery) {
+      setSearchResultChats(null);
+      setIsChatSearchLoading(false);
+      return;
+    }
+
+    let isDisposed = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setIsChatSearchLoading(true);
+
+        try {
+          const results = await searchChats({
+            query: trimmedQuery,
+            includeArchived: true,
+            limit: 200,
+          });
+
+          if (isDisposed) {
+            return;
+          }
+
+          setSearchResultChats(results);
+        } catch {
+          if (!isDisposed) {
+            setSearchResultChats([]);
+          }
+        } finally {
+          if (!isDisposed) {
+            setIsChatSearchLoading(false);
+          }
+        }
+      })();
+    }, 220);
+
+    return () => {
+      isDisposed = true;
+      window.clearTimeout(timer);
+    };
+  }, [chatSearchQuery, currentUser]);
 
   useEffect(() => {
     const requestedChatId = activeChatId;
@@ -741,6 +807,88 @@ export default function Home() {
     }
   }
 
+  function applyUpdatedChatToState(updatedChat: Chat) {
+    setChats((previous) => upsertChat(previous, updatedChat));
+    setSearchResultChats((previous) => (previous ? upsertChat(previous, updatedChat) : previous));
+  }
+
+  async function handleRenameChat(chat: Chat) {
+    const nextTitle = window.prompt("Rename chat", chat.title)?.trim();
+    setOpenMenuChatId(null);
+
+    if (!nextTitle || nextTitle === chat.title) {
+      return;
+    }
+
+    try {
+      const updatedChat = await updateChatMetadata(chat.id, { title: nextTitle });
+      applyUpdatedChatToState(updatedChat);
+      setAuthNotice(null);
+    } catch (error) {
+      setAuthNotice(error instanceof Error ? error.message : "Could not rename chat.");
+    }
+  }
+
+  async function handleTogglePin(chat: Chat) {
+    setOpenMenuChatId(null);
+
+    try {
+      const updatedChat = await updateChatMetadata(chat.id, {
+        isPinned: !chat.isPinned,
+      });
+      applyUpdatedChatToState(updatedChat);
+      setAuthNotice(null);
+    } catch (error) {
+      setAuthNotice(error instanceof Error ? error.message : "Could not update chat.");
+    }
+  }
+
+  async function handleToggleArchived(chat: Chat) {
+    setOpenMenuChatId(null);
+
+    try {
+      const updatedChat = await updateChatMetadata(chat.id, {
+        isArchived: !chat.isArchived,
+      });
+      applyUpdatedChatToState(updatedChat);
+
+      if (updatedChat.isArchived && activeChatId === chat.id) {
+        router.push("/");
+      }
+
+      setAuthNotice(null);
+    } catch (error) {
+      setAuthNotice(error instanceof Error ? error.message : "Could not update chat.");
+    }
+  }
+
+  function handleReuseMessage(content: string) {
+    setDraft(content);
+    composerInputRef.current?.focus();
+    setAuthNotice(null);
+  }
+
+  function handleRetryMessage(content: string) {
+    setDraft(content);
+    composerInputRef.current?.focus();
+    setAuthNotice("Prompt loaded. Press send to retry.");
+  }
+
+  async function handleDeleteMessage(messageId: string) {
+    if (!currentUser || !activeChatId || isAssistantTyping) {
+      return;
+    }
+
+    try {
+      const updatedChat = await deleteChatMessage(activeChatId, messageId);
+      setChatMessages(mapChatMessages(updatedChat));
+      applyUpdatedChatToState(updatedChat.chat);
+      setAuthNotice(null);
+    } catch (error) {
+      setAuthNotice(error instanceof Error ? error.message : "Could not delete message.");
+    }
+  }
+
   function handleModelPresetChange(event: ChangeEvent<HTMLSelectElement>) {
     const nextModel = event.target.value;
     setModelPresetByProvider((previous) => ({
@@ -750,6 +898,23 @@ export default function Home() {
     setModelPresetPreference(defaultModelProvider, nextModel);
     setAuthNotice(null);
   }
+
+  const isSearchingChats = chatSearchQuery.trim().length > 0;
+  const chatsForSidebar = (searchResultChats ?? chats).filter((chat) => {
+    if (chatFilter === "all") {
+      return true;
+    }
+
+    if (chatFilter === "archived") {
+      return chat.isArchived;
+    }
+
+    if (chatFilter === "pinned") {
+      return chat.isPinned && !chat.isArchived;
+    }
+
+    return !chat.isArchived;
+  });
 
   const userDisplayName = currentUser
     ? getDisplayName(currentUser.user.name, currentUser.user.email)
@@ -849,11 +1014,48 @@ export default function Home() {
 
           {isSidebarContentVisible ? (
             <div className="chat-history-list scrollbar-chat flex-1 space-y-2 overflow-y-auto p-3">
-              {chats.length === 0 ? (
+              {currentUser ? (
+                <div className="space-y-2">
+                  <input
+                    type="search"
+                    value={chatSearchQuery}
+                    onChange={(event) => setChatSearchQuery(event.target.value)}
+                    placeholder="Search chats and messages"
+                    className="w-full rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-2 text-xs text-[var(--text-primary)] outline-none placeholder:text-[var(--text-dim)]"
+                  />
+                  <div className="grid grid-cols-2 gap-1">
+                    {([
+                      ["active", "Active"],
+                      ["pinned", "Pinned"],
+                      ["archived", "Archived"],
+                      ["all", "All"],
+                    ] as const).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setChatFilter(value)}
+                        className={`rounded-md border px-2 py-1 text-[11px] transition ${
+                          chatFilter === value
+                            ? "border-[var(--accent-primary)]/60 bg-[var(--accent-primary)]/18 text-[var(--accent-primary-strong)]"
+                            : "border-white/12 bg-white/[0.02] text-[var(--text-dim)] hover:text-[var(--text-primary)]"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {chatsForSidebar.length === 0 ? (
                 currentUser ? (
                   isChatListLoading ? null : (
                     <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-[var(--text-muted)]">
-                      No chats yet. Start with your first message.
+                      {isSearchingChats
+                        ? isChatSearchLoading
+                          ? "Searching chats..."
+                          : "No chats match this search."
+                        : "No chats in this filter yet."}
                     </div>
                   )
                 ) : isAuthLoading ? null : (
@@ -862,7 +1064,7 @@ export default function Home() {
                   </div>
                 )
               ) : (
-                chats.map((chat) => {
+                chatsForSidebar.map((chat) => {
                   const isActive = chat.id === activeChatId;
                   const isMenuOpen = openMenuChatId === chat.id;
 
@@ -877,7 +1079,10 @@ export default function Home() {
                         data-active={isActive ? "true" : "false"}
                         className="chat-history-link block w-full px-3 py-2 pr-11 text-left"
                       >
-                        <p className="truncate text-sm font-medium">{chat.title}</p>
+                        <p className="truncate text-sm font-medium">
+                          {chat.isPinned ? "* " : ""}
+                          {chat.title}
+                        </p>
                       </Link>
 
                       <div className="absolute right-1 top-1/2 -translate-y-1/2">
@@ -899,7 +1104,7 @@ export default function Home() {
                         <div
                           role="menu"
                           aria-label={`Actions for ${chat.title}`}
-                          className={`absolute right-0 top-full z-30 mt-1 w-32 rounded-lg border border-white/12 bg-[var(--bg-root)] p-1 shadow-[0_10px_30px_rgba(0,0,0,0.45)] transition ${
+                          className={`absolute right-0 top-full z-30 mt-1 w-40 rounded-lg border border-white/12 bg-[var(--bg-root)] p-1 shadow-[0_10px_30px_rgba(0,0,0,0.45)] transition ${
                             isMenuOpen
                               ? "pointer-events-auto visible translate-y-0 opacity-100"
                               : "pointer-events-none invisible translate-y-1 opacity-0"
@@ -912,6 +1117,36 @@ export default function Home() {
                             className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-primary)]/18 hover:text-[var(--accent-primary-strong)]"
                           >
                             Open
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              void handleRenameChat(chat);
+                            }}
+                            className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-primary)]/18 hover:text-[var(--accent-primary-strong)]"
+                          >
+                            Rename
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              void handleTogglePin(chat);
+                            }}
+                            className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-primary)]/18 hover:text-[var(--accent-primary-strong)]"
+                          >
+                            {chat.isPinned ? "Unpin" : "Pin"}
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              void handleToggleArchived(chat);
+                            }}
+                            className="w-full rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] transition hover:bg-[var(--accent-primary)]/18 hover:text-[var(--accent-primary-strong)]"
+                          >
+                            {chat.isArchived ? "Unarchive" : "Archive"}
                           </button>
                         </div>
                       </div>
@@ -1070,7 +1305,40 @@ export default function Home() {
                           <ReactMarkdown>{message.content}</ReactMarkdown>
                         </div>
                       )}
-                      <p className="mt-2 text-[11px] text-[var(--text-dim)]">{message.time}</p>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <p className="text-[11px] text-[var(--text-dim)]">{message.time}</p>
+                        {currentUser && activeChatId ? (
+                          <div className="flex items-center gap-1">
+                            {isUser ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleReuseMessage(message.content)}
+                                  className="rounded px-1.5 py-0.5 text-[10px] text-[var(--text-dim)] transition hover:bg-white/10 hover:text-[var(--text-primary)]"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRetryMessage(message.content)}
+                                  className="rounded px-1.5 py-0.5 text-[10px] text-[var(--text-dim)] transition hover:bg-white/10 hover:text-[var(--text-primary)]"
+                                >
+                                  Retry
+                                </button>
+                              </>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void handleDeleteMessage(message.id);
+                              }}
+                              className="rounded px-1.5 py-0.5 text-[10px] text-[var(--text-dim)] transition hover:bg-white/10 hover:text-[var(--text-primary)]"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   </article>
                 );
@@ -1130,6 +1398,7 @@ export default function Home() {
                 +
               </button>
               <input
+                ref={composerInputRef}
                 type="text"
                 className="peer h-7 flex-1 bg-transparent px-1 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-dim)] disabled:cursor-not-allowed disabled:opacity-70"
                 placeholder={

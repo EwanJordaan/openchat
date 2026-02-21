@@ -21,7 +21,7 @@ npm install
 ```
 
 2. Create `.env` from `.env.example` and set values.
-3. Run SQL migrations in `backend/adapters/db/postgres/migrations/001_initial.sql`, `backend/adapters/db/postgres/migrations/002_user_profile_avatar.sql`, `backend/adapters/db/postgres/migrations/003_chats.sql`, `backend/adapters/db/postgres/migrations/004_external_identity_metadata.sql`, `backend/adapters/db/postgres/migrations/005_ai_usage_daily.sql`, and `backend/adapters/db/postgres/migrations/006_local_auth.sql`.
+3. Run SQL migrations in `backend/adapters/db/postgres/migrations/001_initial.sql`, `backend/adapters/db/postgres/migrations/002_user_profile_avatar.sql`, `backend/adapters/db/postgres/migrations/003_chats.sql`, `backend/adapters/db/postgres/migrations/004_external_identity_metadata.sql`, `backend/adapters/db/postgres/migrations/005_ai_usage_daily.sql`, `backend/adapters/db/postgres/migrations/006_local_auth.sql`, and `backend/adapters/db/postgres/migrations/007_chat_metadata.sql`.
 4. Start the app:
 
 ```bash
@@ -155,7 +155,9 @@ Use the exact `iss` claim from your Clerk session token for `issuer`.
 - `GET /api/v1/chats`
 - `POST /api/v1/chats`
 - `GET /api/v1/chats/:id`
+- `PATCH /api/v1/chats/:id`
 - `POST /api/v1/chats/:id/messages`
+- `DELETE /api/v1/chats/:id/messages/:messageId`
 - `POST /api/v1/chat/guest`
 - `GET /api/v1/model-providers`
 - `GET /api/v1/auth/providers`
@@ -192,6 +194,9 @@ Chat behavior:
 - `/` starts as a new empty chat draft.
 - The first message creates a saved chat and navigates to `/c/:chatId`.
 - Chat access is owner-scoped; non-owner or unknown chat IDs return not found.
+- Chat list supports query filters: `includeArchived`, `q`, and `limit`.
+- Chats can be renamed, pinned, and archived.
+- Messages can be deleted from saved chats.
 - Model-provider selection can be admin-managed via site settings.
 - Model/provider selection is in a dedicated box near the chat composer.
 - OpenRouter model allowlists and daily role-based request limits are enforced server-side.
