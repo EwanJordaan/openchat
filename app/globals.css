@@ -318,13 +318,17 @@ body {
   backdrop-filter: blur(var(--surface-soft-backdrop-blur));
 }
 
-.admin-select {
+.admin-select,
+.ai-select {
   background-color: color-mix(in srgb, var(--bg-panel-soft) 92%, black 8%) !important;
   color: var(--text-primary);
+  color-scheme: dark;
 }
 
 .admin-select option,
-.admin-select optgroup {
+.admin-select optgroup,
+.ai-select option,
+.ai-select optgroup {
   background-color: color-mix(in srgb, var(--bg-panel) 94%, black 6%);
   color: var(--text-primary);
 }
