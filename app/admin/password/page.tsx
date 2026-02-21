@@ -166,7 +166,7 @@ function AdminPasswordFallback() {
 
 function sanitizeReturnTo(raw: string | null): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) {
-    return "/admin/settings";
+    return "/admin/dashboard";
   }
 
   return raw;

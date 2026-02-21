@@ -35,6 +35,9 @@ This file helps coding agents quickly understand and safely modify this reposito
 - `app/settings/page.tsx`
   - Authenticated account settings UI.
   - Profile editing, avatar upload/remove, session/provider details.
+- `app/admin/dashboard/page.tsx`
+  - Guided local admin setup dashboard for runtime DB/auth wiring.
+  - Shows readiness checks and links to advanced admin settings.
 - `app/api/v1/*`
   - MVP REST routes (`health`, `me`, `projects`, `chats`, `auth`).
 - `backend/domain/*`
@@ -203,6 +206,7 @@ Clerk requirements:
 - `GET /api/v1/admin/auth/session`
 - `GET /api/v1/admin/api-keys`
 - `PUT /api/v1/admin/api-keys`
+- `GET /api/v1/admin/dashboard`
 - `GET /api/v1/admin/runtime-settings`
 - `PUT /api/v1/admin/runtime-settings`
 - `POST /api/v1/auth/logout`

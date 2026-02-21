@@ -717,10 +717,16 @@ export default function AdminSettingsPage() {
             <p className="text-xs uppercase tracking-[0.14em] text-[color:var(--text-dim)]">Admin</p>
             <h1 className="mt-1 text-2xl font-semibold text-[color:var(--text-primary)]">Site and Runtime Settings</h1>
             <p className="mt-1 text-sm text-[color:var(--text-muted)]">
-              Local admin control plane for sitewide behavior and runtime environment configuration.
+              Advanced editor for sitewide behavior and runtime environment configuration.
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              href="/admin/dashboard"
+              className="rounded-lg border border-white/15 px-3 py-2 text-sm text-[color:var(--text-muted)] transition hover:text-[color:var(--text-primary)]"
+            >
+              Setup dashboard
+            </Link>
             <Link
               href="/admin/password?returnTo=%2Fadmin%2Fsettings"
               className="rounded-lg border border-white/15 px-3 py-2 text-sm text-[color:var(--text-muted)] transition hover:text-[color:var(--text-primary)]"
