@@ -15,14 +15,14 @@ import {
   setModelProviderPreference,
 } from "@/app/lib/model-provider";
 import {
-  appendChatMessage,
   ChatApiError,
   clearChatCache,
-  createChatFromMessage,
   fetchChatById,
   fetchChats,
   getCachedChatsSnapshot,
-  requestGuestAssistantResponse,
+  streamAppendChatMessage,
+  streamCreateChatFromMessage,
+  streamGuestAssistantResponse,
 } from "@/app/lib/chats";
 import { fetchModelProviders, type ModelProviderAvailability } from "@/app/lib/model-providers-api";
 import {
@@ -692,27 +692,37 @@ export default function Home() {
         content: trimmedDraft,
         time: getCurrentTimeLabel(),
       };
+      const assistantMessageId = crypto.randomUUID();
+      const streamingAssistantMessage: Message = {
+        id: assistantMessageId,
+        role: "assistant",
+        content: "",
+        time: getCurrentTimeLabel(),
+      };
 
       const previousMessages = chatMessages;
-      setChatMessages((previous) => [...previous, userMessage]);
+      setChatMessages((previous) => [...previous, userMessage, streamingAssistantMessage]);
       setDraft("");
       setIsAssistantTyping(true);
 
       try {
-        const assistantReply = await requestGuestAssistantResponse(
+        await streamGuestAssistantResponse(
           trimmedDraft,
           selectedModelProvider,
           selectedModel,
+          (chunk) => {
+            setChatMessages((previous) =>
+              previous.map((message) =>
+                message.id === assistantMessageId
+                  ? {
+                      ...message,
+                      content: `${message.content}${chunk}`,
+                    }
+                  : message,
+              ),
+            );
+          },
         );
-
-        const assistantMessage: Message = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: assistantReply,
-          time: getCurrentTimeLabel(),
-        };
-
-        setChatMessages((previous) => [...previous, assistantMessage]);
       } catch (error) {
         setChatMessages(previousMessages);
         setDraft(trimmedDraft);
@@ -730,19 +740,38 @@ export default function Home() {
       content: trimmedDraft,
       time: getCurrentTimeLabel(),
     };
+    const assistantMessageId = crypto.randomUUID();
+    const streamingAssistantMessage: Message = {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      time: getCurrentTimeLabel(),
+    };
 
     const previousMessages = chatMessages;
-    setChatMessages((previous) => [...previous, optimisticMessage]);
+    setChatMessages((previous) => [...previous, optimisticMessage, streamingAssistantMessage]);
     setDraft("");
     setIsAssistantTyping(true);
     setAuthNotice(null);
 
     try {
       if (!activeChatId) {
-        const createdChat = await createChatFromMessage(
+        const createdChat = await streamCreateChatFromMessage(
           trimmedDraft,
           selectedModelProvider,
           selectedModel,
+          (chunk) => {
+            setChatMessages((previous) =>
+              previous.map((message) =>
+                message.id === assistantMessageId
+                  ? {
+                      ...message,
+                      content: `${message.content}${chunk}`,
+                    }
+                  : message,
+              ),
+            );
+          },
         );
         setChats((previous) => upsertChat(previous, createdChat.chat));
         setChatMessages(mapChatMessages(createdChat));
@@ -751,11 +780,23 @@ export default function Home() {
       }
 
       const targetChatId = activeChatId;
-      const updatedChat = await appendChatMessage(
+      const updatedChat = await streamAppendChatMessage(
         targetChatId,
         trimmedDraft,
         selectedModelProvider,
         selectedModel,
+        (chunk) => {
+          setChatMessages((previous) =>
+            previous.map((message) =>
+              message.id === assistantMessageId
+                ? {
+                    ...message,
+                    content: `${message.content}${chunk}`,
+                  }
+                : message,
+            ),
+          );
+        },
       );
       setChats((previous) => upsertChat(previous, updatedChat.chat));
       setChatMessages(mapChatMessages(updatedChat));
@@ -877,6 +918,11 @@ export default function Home() {
     !hasConfiguredProvider ||
     activeModel.trim().length === 0 ||
     (!currentUser && !publicSiteConfig.features.allowGuestResponses);
+
+  const latestMessage = chatMessages[chatMessages.length - 1];
+  const showTypingIndicator =
+    isAssistantTyping &&
+    (latestMessage?.role !== "assistant" || (latestMessage.content?.length ?? 0) === 0);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--bg-root)] text-[var(--text-primary)]">
@@ -1168,7 +1214,7 @@ export default function Home() {
               })
             )}
 
-            {isAssistantTyping ? (
+            {showTypingIndicator ? (
               <article className="message-enter flex" style={{ animationDelay: "120ms" }}>
                 <div className="flex items-center gap-1 px-2 py-3">
                   <span className="typing-dot" />

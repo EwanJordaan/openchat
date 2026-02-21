@@ -1,7 +1,12 @@
-import type { ModelProviderId } from "@/shared/model-providers";
+import {
+  OPENCHAT_PROVIDER_DEFAULT_MODELS,
+  resolveModelId,
+  type ModelProviderId,
+} from "@/shared/model-providers";
 import type {
   GenerateTextInput,
   GenerateTextResult,
+  GenerateTextStreamResult,
   ModelProviderChatMessage,
   ModelProviderClient,
 } from "@/backend/ports/model-provider-client";
@@ -17,17 +22,30 @@ const PROVIDER_LABELS: Record<ModelProviderId, string> = {
   gemini: "Gemini",
 };
 
-const DEFAULT_MODELS: Record<ModelProviderId, string> = {
-  openrouter: "openai/gpt-4o-mini",
-  openai: "gpt-4o-mini",
-  anthropic: "claude-3-5-haiku-latest",
-  gemini: "gemini-1.5-flash",
-};
-
 const REQUEST_TIMEOUT_MS = 45_000;
 
 export class LiveModelProviderClient implements ModelProviderClient {
   async generateText(input: GenerateTextInput): Promise<GenerateTextResult> {
+    const streamResult = await this.generateTextStream(input);
+
+    let text = "";
+    for await (const chunk of streamResult.chunks) {
+      text += chunk;
+    }
+
+    const normalizedText = text.trim();
+    if (!normalizedText) {
+      throw new ModelProviderRequestError("Provider returned an empty response");
+    }
+
+    return {
+      text: normalizedText,
+      modelProvider: streamResult.modelProvider,
+      model: streamResult.model,
+    };
+  }
+
+  async generateTextStream(input: GenerateTextInput): Promise<GenerateTextStreamResult> {
     const normalizedMessages = normalizeMessages(input.messages);
     if (normalizedMessages.length === 0) {
       throw new ModelProviderConfigurationError("At least one chat message is required");
@@ -39,41 +57,46 @@ export class LiveModelProviderClient implements ModelProviderClient {
       );
     }
 
-    const model = DEFAULT_MODELS[input.modelProvider];
+    const model = resolveModelId(
+      input.model,
+      OPENCHAT_PROVIDER_DEFAULT_MODELS[input.modelProvider],
+    );
 
-    let text: string;
+    let chunks: AsyncIterable<string>;
     if (input.modelProvider === "openrouter") {
-      text = await requestOpenAiCompatibleResponse(
+      chunks = await requestOpenAiCompatibleStreamResponse(
         "https://openrouter.ai/api/v1/chat/completions",
         process.env.OPENROUTER_API_KEY as string,
         model,
         normalizedMessages,
       );
     } else if (input.modelProvider === "openai") {
-      text = await requestOpenAiCompatibleResponse(
+      chunks = await requestOpenAiCompatibleStreamResponse(
         "https://api.openai.com/v1/chat/completions",
         process.env.OPENAI_API_KEY as string,
         model,
         normalizedMessages,
       );
     } else if (input.modelProvider === "anthropic") {
-      text = await requestAnthropicResponse(
+      const text = await requestAnthropicResponse(
         process.env.ANTHROPIC_API_KEY as string,
         model,
         normalizedMessages,
       );
+      chunks = singleChunk(text);
     } else {
-      text = await requestGeminiResponse(
+      const text = await requestGeminiResponse(
         process.env.GOOGLE_API_KEY as string,
         model,
         normalizedMessages,
       );
+      chunks = singleChunk(text);
     }
 
     return {
-      text,
       modelProvider: input.modelProvider,
       model,
+      chunks,
     };
   }
 
@@ -118,12 +141,23 @@ interface OpenAiCompatibleResponse {
   };
 }
 
-async function requestOpenAiCompatibleResponse(
+interface OpenAiCompatibleStreamResponse {
+  choices?: Array<{
+    delta?: {
+      content?: unknown;
+    };
+  }>;
+  error?: {
+    message?: string;
+  };
+}
+
+async function requestOpenAiCompatibleStreamResponse(
   endpoint: string,
   apiKey: string,
   model: string,
   messages: ModelProviderChatMessage[],
-): Promise<string> {
+): Promise<AsyncIterable<string>> {
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -132,6 +166,7 @@ async function requestOpenAiCompatibleResponse(
     },
     body: JSON.stringify({
       model,
+      stream: true,
       messages: messages.map((message) => ({
         role: message.role,
         content: message.content,
@@ -140,19 +175,17 @@ async function requestOpenAiCompatibleResponse(
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
-  const payload = (await safeJson(response)) as OpenAiCompatibleResponse | null;
   if (!response.ok) {
+    const payload = (await safeJson(response)) as OpenAiCompatibleResponse | null;
     const fallbackMessage = `${extractLabelFromEndpoint(endpoint)} request failed (${response.status})`;
     throw new ModelProviderRequestError(payload?.error?.message ?? fallbackMessage);
   }
 
-  const content = payload?.choices?.[0]?.message?.content;
-  const text = normalizeTextContent(content);
-  if (!text) {
-    throw new ModelProviderRequestError("Provider returned an empty response");
+  if (!response.body) {
+    throw new ModelProviderRequestError("Provider returned an empty streaming response");
   }
 
-  return text;
+  return streamOpenAiCompatibleChunks(response.body);
 }
 
 interface AnthropicResponse {
@@ -294,33 +327,97 @@ async function safeJson(response: Response): Promise<unknown | null> {
   }
 }
 
-function normalizeTextContent(content: unknown): string | null {
+async function* streamOpenAiCompatibleChunks(
+  stream: ReadableStream<Uint8Array>,
+): AsyncGenerator<string, void, undefined> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+
+      while (true) {
+        const lineBreakIndex = buffer.indexOf("\n");
+        if (lineBreakIndex < 0) {
+          break;
+        }
+
+        const rawLine = buffer.slice(0, lineBreakIndex);
+        buffer = buffer.slice(lineBreakIndex + 1);
+
+        const line = rawLine.trim();
+        if (!line.startsWith("data:")) {
+          continue;
+        }
+
+        const payloadText = line.slice(5).trim();
+        if (!payloadText || payloadText === "[DONE]") {
+          continue;
+        }
+
+        const payload = tryParseJson(payloadText) as OpenAiCompatibleStreamResponse | null;
+        if (!payload) {
+          continue;
+        }
+
+        const deltaContent = payload.choices?.[0]?.delta?.content;
+        const chunk = normalizeDeltaContent(deltaContent);
+        if (chunk) {
+          yield chunk;
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+async function* singleChunk(text: string): AsyncGenerator<string, void, undefined> {
+  if (text.length > 0) {
+    yield text;
+  }
+}
+
+function tryParseJson(raw: string): unknown | null {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeDeltaContent(content: unknown): string | null {
   if (typeof content === "string") {
-    const trimmed = content.trim();
-    return trimmed.length > 0 ? trimmed : null;
+    return content.length > 0 ? content : null;
   }
 
   if (!Array.isArray(content)) {
     return null;
   }
 
-  const text = content
+  const combined = content
     .map((item) => {
       if (typeof item === "string") {
         return item;
       }
 
       if (item && typeof item === "object" && "text" in item) {
-        const value = item.text;
-        return typeof value === "string" ? value : "";
+        const text = item.text;
+        return typeof text === "string" ? text : "";
       }
 
       return "";
     })
-    .join("\n\n")
-    .trim();
+    .join("");
 
-  return text.length > 0 ? text : null;
+  return combined.length > 0 ? combined : null;
 }
 
 function extractLabelFromEndpoint(endpoint: string): string {

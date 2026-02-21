@@ -8,6 +8,7 @@ export interface ModelProviderChatMessage {
 
 export interface GenerateTextInput {
   modelProvider: ModelProviderId;
+  model?: string;
   messages: ModelProviderChatMessage[];
 }
 
@@ -17,8 +18,15 @@ export interface GenerateTextResult {
   model: string;
 }
 
+export interface GenerateTextStreamResult {
+  modelProvider: ModelProviderId;
+  model: string;
+  chunks: AsyncIterable<string>;
+}
+
 export interface ModelProviderClient {
   generateText(input: GenerateTextInput): Promise<GenerateTextResult>;
+  generateTextStream(input: GenerateTextInput): Promise<GenerateTextStreamResult>;
   isProviderConfigured(provider: ModelProviderId): boolean;
 }
 

@@ -1,6 +1,10 @@
 import { z } from "zod";
 
 import {
+  enforceOpenRouterDailyRateLimit,
+  resolveAiRequestPolicy,
+} from "@/backend/transport/rest/ai-policy";
+import {
   handleApiRoute,
   jsonResponse,
   parseJsonBody,
@@ -14,6 +18,7 @@ export const runtime = "nodejs";
 const createChatSchema = z.object({
   message: z.string().min(1).max(8000),
   modelProvider: z.enum(OPENCHAT_MODEL_PROVIDER_IDS).optional(),
+  model: z.string().trim().min(1).max(200).optional(),
 });
 
 export async function GET(request: Request): Promise<Response> {
@@ -32,9 +37,25 @@ export async function POST(request: Request): Promise<Response> {
     await requirePermission(container, principal, "chat.create", { type: "global" });
 
     const payload = await parseJsonBody(request, createChatSchema);
+    const aiPolicy = resolveAiRequestPolicy({
+      container,
+      principal,
+      requestedModelProvider: payload.modelProvider,
+      requestedModel: payload.model,
+    });
+
+    await enforceOpenRouterDailyRateLimit({
+      request,
+      container,
+      principal,
+      role: aiPolicy.role,
+      modelProvider: aiPolicy.modelProvider,
+    });
+
     const chat = await container.useCases.createChatFromFirstMessage.execute(principal, {
-      ...payload,
-      modelProvider: payload.modelProvider ?? container.config.ai.defaultModelProvider,
+      message: payload.message,
+      modelProvider: aiPolicy.modelProvider,
+      model: aiPolicy.model,
     });
 
     return jsonResponse(requestId, { data: chat }, 201);

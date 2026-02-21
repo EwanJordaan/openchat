@@ -15,6 +15,7 @@ import type { ModelProviderId } from "@/shared/model-providers";
 export interface CreateChatFromFirstMessageInput {
   message: string;
   modelProvider: ModelProviderId;
+  model?: string;
 }
 
 export class CreateChatFromFirstMessageUseCase {
@@ -37,6 +38,7 @@ export class CreateChatFromFirstMessageUseCase {
     try {
       const generation = await this.modelProviderClient.generateText({
         modelProvider: input.modelProvider,
+        model: input.model,
         messages: [
           {
             role: "user",

@@ -23,6 +23,15 @@ const siteSettingsConfigSchema = z
     }),
     ai: z.object({
       defaultModelProvider: z.enum(OPENCHAT_MODEL_PROVIDER_IDS),
+      allowUserModelProviderSelection: z.boolean(),
+      openrouter: z.object({
+        allowedModels: z.array(z.string().trim().min(1).max(200)).min(1),
+        rateLimits: z.object({
+          guestRequestsPerDay: z.number().int().min(0).max(1_000_000),
+          memberRequestsPerDay: z.number().int().min(0).max(1_000_000),
+          adminRequestsPerDay: z.number().int().min(0).max(1_000_000),
+        }),
+      }),
     }),
     ui: z.object({
       defaultTheme: z.enum(OPENCHAT_THEME_IDS),
@@ -54,6 +63,19 @@ const siteSettingsOverridesSchema = z
     ai: z
       .object({
         defaultModelProvider: z.enum(OPENCHAT_MODEL_PROVIDER_IDS).optional(),
+        allowUserModelProviderSelection: z.boolean().optional(),
+        openrouter: z
+          .object({
+            allowedModels: z.array(z.string().trim().min(1).max(200)).min(1).optional(),
+            rateLimits: z
+              .object({
+                guestRequestsPerDay: z.number().int().min(0).max(1_000_000).optional(),
+                memberRequestsPerDay: z.number().int().min(0).max(1_000_000).optional(),
+                adminRequestsPerDay: z.number().int().min(0).max(1_000_000).optional(),
+              })
+              .optional(),
+          })
+          .optional(),
       })
       .optional(),
     ui: z
@@ -169,6 +191,22 @@ function applySiteSettingsOverrides(
     ai: {
       defaultModelProvider:
         overrides.ai?.defaultModelProvider ?? baseConfig.ai.defaultModelProvider,
+      allowUserModelProviderSelection:
+        overrides.ai?.allowUserModelProviderSelection ?? baseConfig.ai.allowUserModelProviderSelection,
+      openrouter: {
+        allowedModels: overrides.ai?.openrouter?.allowedModels ?? baseConfig.ai.openrouter.allowedModels,
+        rateLimits: {
+          guestRequestsPerDay:
+            overrides.ai?.openrouter?.rateLimits?.guestRequestsPerDay ??
+            baseConfig.ai.openrouter.rateLimits.guestRequestsPerDay,
+          memberRequestsPerDay:
+            overrides.ai?.openrouter?.rateLimits?.memberRequestsPerDay ??
+            baseConfig.ai.openrouter.rateLimits.memberRequestsPerDay,
+          adminRequestsPerDay:
+            overrides.ai?.openrouter?.rateLimits?.adminRequestsPerDay ??
+            baseConfig.ai.openrouter.rateLimits.adminRequestsPerDay,
+        },
+      },
     },
     ui: {
       defaultTheme: overrides.ui?.defaultTheme ?? baseConfig.ui.defaultTheme,
@@ -213,6 +251,50 @@ function deriveSiteSettingsOverrides(
   if (nextConfig.ai.defaultModelProvider !== baseConfig.ai.defaultModelProvider) {
     overrides.ai = {
       defaultModelProvider: nextConfig.ai.defaultModelProvider,
+    };
+  }
+
+  if (
+    nextConfig.ai.allowUserModelProviderSelection !==
+    baseConfig.ai.allowUserModelProviderSelection
+  ) {
+    overrides.ai = {
+      ...overrides.ai,
+      allowUserModelProviderSelection: nextConfig.ai.allowUserModelProviderSelection,
+    };
+  }
+
+  if (
+    JSON.stringify(nextConfig.ai.openrouter.allowedModels) !==
+    JSON.stringify(baseConfig.ai.openrouter.allowedModels)
+  ) {
+    overrides.ai = {
+      ...overrides.ai,
+      openrouter: {
+        ...overrides.ai?.openrouter,
+        allowedModels: [...nextConfig.ai.openrouter.allowedModels],
+      },
+    };
+  }
+
+  if (
+    nextConfig.ai.openrouter.rateLimits.guestRequestsPerDay !==
+      baseConfig.ai.openrouter.rateLimits.guestRequestsPerDay ||
+    nextConfig.ai.openrouter.rateLimits.memberRequestsPerDay !==
+      baseConfig.ai.openrouter.rateLimits.memberRequestsPerDay ||
+    nextConfig.ai.openrouter.rateLimits.adminRequestsPerDay !==
+      baseConfig.ai.openrouter.rateLimits.adminRequestsPerDay
+  ) {
+    overrides.ai = {
+      ...overrides.ai,
+      openrouter: {
+        ...overrides.ai?.openrouter,
+        rateLimits: {
+          guestRequestsPerDay: nextConfig.ai.openrouter.rateLimits.guestRequestsPerDay,
+          memberRequestsPerDay: nextConfig.ai.openrouter.rateLimits.memberRequestsPerDay,
+          adminRequestsPerDay: nextConfig.ai.openrouter.rateLimits.adminRequestsPerDay,
+        },
+      },
     };
   }
 

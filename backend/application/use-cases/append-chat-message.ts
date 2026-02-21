@@ -17,6 +17,7 @@ export interface AppendChatMessageInput {
   chatId: string;
   message: string;
   modelProvider: ModelProviderId;
+  model?: string;
 }
 
 export class AppendChatMessageUseCase {
@@ -47,6 +48,7 @@ export class AppendChatMessageUseCase {
     try {
       const generation = await this.modelProviderClient.generateText({
         modelProvider: input.modelProvider,
+        model: input.model,
         messages: [
           ...existingChat.messages.map((existingMessage) => ({
             role: existingMessage.role,

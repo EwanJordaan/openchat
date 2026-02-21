@@ -1,4 +1,8 @@
-import type { ModelProviderId, ModelProviderOption } from "@/shared/model-providers";
+import type {
+  ModelPresetOption,
+  ModelProviderId,
+  ModelProviderOption,
+} from "@/shared/model-providers";
 
 interface ApiResponse<TData> {
   data?: TData;
@@ -10,10 +14,18 @@ interface ApiResponse<TData> {
 
 export interface ModelProviderAvailability extends ModelProviderOption {
   configured: boolean;
+  defaultModel: string;
+  models: ModelPresetOption[];
 }
 
 export interface ModelProvidersSnapshot {
   defaultModelProvider: ModelProviderId;
+  allowUserModelProviderSelection: boolean;
+  openrouterRateLimits: {
+    guestRequestsPerDay: number;
+    memberRequestsPerDay: number;
+    adminRequestsPerDay: number;
+  };
   providers: ModelProviderAvailability[];
 }
 

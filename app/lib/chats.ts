@@ -92,6 +92,7 @@ export async function fetchChatById(chatId: string, _signal?: AbortSignal): Prom
 export async function createChatFromMessage(
   message: string,
   modelProvider: ModelProviderId,
+  model?: string,
 ): Promise<ChatWithMessages> {
   const response = await fetch("/api/v1/chats", {
     method: "POST",
@@ -99,7 +100,7 @@ export async function createChatFromMessage(
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({ message, modelProvider }),
+    body: JSON.stringify({ message, modelProvider, model }),
   });
 
   if (!response.ok) {
@@ -119,6 +120,7 @@ export async function appendChatMessage(
   chatId: string,
   message: string,
   modelProvider: ModelProviderId,
+  model?: string,
 ): Promise<ChatWithMessages> {
   const response = await fetch(`/api/v1/chats/${encodeURIComponent(chatId)}/messages`, {
     method: "POST",
@@ -126,7 +128,7 @@ export async function appendChatMessage(
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({ message, modelProvider }),
+    body: JSON.stringify({ message, modelProvider, model }),
   });
 
   if (!response.ok) {
@@ -145,6 +147,7 @@ export async function appendChatMessage(
 export async function requestGuestAssistantResponse(
   message: string,
   modelProvider: ModelProviderId,
+  model?: string,
 ): Promise<string> {
   const response = await fetch("/api/v1/chat/guest", {
     method: "POST",
@@ -152,7 +155,7 @@ export async function requestGuestAssistantResponse(
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({ message, modelProvider }),
+    body: JSON.stringify({ message, modelProvider, model }),
   });
 
   if (!response.ok) {
@@ -168,6 +171,100 @@ export async function requestGuestAssistantResponse(
   }
 
   return assistantMessage;
+}
+
+export async function streamGuestAssistantResponse(
+  message: string,
+  modelProvider: ModelProviderId,
+  model: string | undefined,
+  onChunk: (chunk: string) => void,
+): Promise<string> {
+  const response = await fetch("/api/v1/chat/guest/stream", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ message, modelProvider, model }),
+  });
+
+  if (!response.ok) {
+    throw await toChatApiError(response, "Failed to generate guest response");
+  }
+
+  const donePayload = await consumeChatEventStream<GuestStreamDonePayload>(response, {
+    onChunk,
+  });
+
+  const assistantMessage = donePayload.message?.trim();
+  if (!assistantMessage) {
+    throw new ChatApiError("Guest response did not include an assistant message", 500, "invalid_response");
+  }
+
+  return assistantMessage;
+}
+
+export async function streamCreateChatFromMessage(
+  message: string,
+  modelProvider: ModelProviderId,
+  model: string | undefined,
+  onChunk: (chunk: string) => void,
+): Promise<ChatWithMessages> {
+  const response = await fetch("/api/v1/chats/stream", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ message, modelProvider, model }),
+  });
+
+  if (!response.ok) {
+    throw await toChatApiError(response, "Failed to create chat");
+  }
+
+  const donePayload = await consumeChatEventStream<ChatStreamDonePayload>(response, {
+    onChunk,
+  });
+
+  if (!donePayload.chat) {
+    throw new ChatApiError("Create chat stream did not include chat data", 500, "invalid_response");
+  }
+
+  storeChatSnapshot(donePayload.chat);
+  return cloneChatWithMessages(donePayload.chat);
+}
+
+export async function streamAppendChatMessage(
+  chatId: string,
+  message: string,
+  modelProvider: ModelProviderId,
+  model: string | undefined,
+  onChunk: (chunk: string) => void,
+): Promise<ChatWithMessages> {
+  const response = await fetch(`/api/v1/chats/${encodeURIComponent(chatId)}/messages/stream`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ message, modelProvider, model }),
+  });
+
+  if (!response.ok) {
+    throw await toChatApiError(response, "Failed to send message");
+  }
+
+  const donePayload = await consumeChatEventStream<ChatStreamDonePayload>(response, {
+    onChunk,
+  });
+
+  if (!donePayload.chat) {
+    throw new ChatApiError("Append stream did not include chat data", 500, "invalid_response");
+  }
+
+  storeChatSnapshot(donePayload.chat);
+  return cloneChatWithMessages(donePayload.chat);
 }
 
 export function getCachedChatsSnapshot(userId: string): Chat[] | undefined {
@@ -396,4 +493,138 @@ async function toChatApiError(response: Response, fallbackMessage: string): Prom
   const code = payload?.error?.code;
 
   return new ChatApiError(message, response.status, code);
+}
+
+interface GuestStreamDonePayload {
+  message?: string;
+  modelProvider?: ModelProviderId;
+  model?: string;
+}
+
+interface ChatStreamDonePayload {
+  chat?: ChatWithMessages;
+}
+
+interface ConsumeEventStreamOptions {
+  onChunk: (chunk: string) => void;
+}
+
+async function consumeChatEventStream<TDone extends object>(
+  response: Response,
+  options: ConsumeEventStreamOptions,
+): Promise<TDone> {
+  if (!response.body) {
+    throw new ChatApiError("Streaming response body is missing", 500, "invalid_response");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let donePayload: TDone | null = null;
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+
+      while (true) {
+        const boundaryIndex = buffer.indexOf("\n\n");
+        if (boundaryIndex < 0) {
+          break;
+        }
+
+        const block = buffer.slice(0, boundaryIndex);
+        buffer = buffer.slice(boundaryIndex + 2);
+
+        const parsedEvent = parseServerSentEventBlock(block);
+        if (!parsedEvent) {
+          continue;
+        }
+
+        if (parsedEvent.event === "chunk") {
+          const chunkText =
+            parsedEvent.data && typeof parsedEvent.data === "object" && "text" in parsedEvent.data
+              ? parsedEvent.data.text
+              : null;
+
+          if (typeof chunkText === "string" && chunkText.length > 0) {
+            options.onChunk(chunkText);
+          }
+          continue;
+        }
+
+        if (parsedEvent.event === "error") {
+          const errorMessage =
+            parsedEvent.data &&
+            typeof parsedEvent.data === "object" &&
+            "message" in parsedEvent.data &&
+            typeof parsedEvent.data.message === "string"
+              ? parsedEvent.data.message
+              : "Streaming request failed";
+
+          throw new ChatApiError(errorMessage, response.status || 500, "stream_error");
+        }
+
+        if (parsedEvent.event === "done" && parsedEvent.data && typeof parsedEvent.data === "object") {
+          donePayload = parsedEvent.data as TDone;
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (!donePayload) {
+    throw new ChatApiError("Streaming response ended before completion", response.status || 500, "stream_incomplete");
+  }
+
+  return donePayload;
+}
+
+interface ParsedServerSentEvent {
+  event: string;
+  data: unknown;
+}
+
+function parseServerSentEventBlock(block: string): ParsedServerSentEvent | null {
+  const lines = block.split("\n");
+  let eventName = "message";
+  const dataLines: string[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    if (!line || line.startsWith(":")) {
+      continue;
+    }
+
+    if (line.startsWith("event:")) {
+      eventName = line.slice(6).trim() || "message";
+      continue;
+    }
+
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart());
+    }
+  }
+
+  if (dataLines.length === 0) {
+    return null;
+  }
+
+  const rawData = dataLines.join("\n");
+  let parsedData: unknown = rawData;
+  try {
+    parsedData = JSON.parse(rawData);
+  } catch {
+    parsedData = rawData;
+  }
+
+  return {
+    event: eventName,
+    data: parsedData,
+  };
 }
