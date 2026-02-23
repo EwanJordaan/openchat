@@ -4,20 +4,22 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   ChevronDown,
   FileText,
   LoaderCircle,
-  LogIn,
   LogOut,
   Plus,
-  Send,
+  SendHorizontal,
   Settings,
   Shield,
+  SquarePen,
   Trash2,
   UserRound,
 } from "lucide-react";
 
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { useTheme } from "@/components/providers/theme-provider";
 import type { Actor, ChatMessage, ChatSummary, ModelOption, PublicAppSettings, UploadedFile } from "@/lib/types";
 
 const CHAT_CACHE_KEY = "openchat:chat-list";
@@ -26,6 +28,8 @@ interface SessionPayload {
   actor: Actor;
   settings: PublicAppSettings;
   models: ModelOption[];
+  degraded?: boolean;
+  error?: string;
 }
 
 function actorCacheKey(actor: Actor | null) {
@@ -39,85 +43,6 @@ function useAutoScroll(dep: unknown) {
     anchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [dep]);
   return anchorRef;
-}
-
-function AuthPanel({ onAuthenticated }: { onAuthenticated: () => Promise<void> }) {
-  const [mode, setMode] = useState<"login" | "register">("login");
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
-    const payload = mode === "login" ? { email, password } : { email, password, name };
-
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        setError(data.error || "Authentication failed");
-        return;
-      }
-
-      setPassword("");
-      await onAuthenticated();
-    } catch {
-      setError("Network error while signing in");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <form className="auth-card" onSubmit={submit}>
-      <div className="auth-tabs">
-        <button type="button" className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>Sign in</button>
-        <button type="button" className={mode === "register" ? "active" : ""} onClick={() => setMode("register")}>Create account</button>
-      </div>
-
-      {mode === "register" ? (
-        <label>
-          Name
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Ada Lovelace" required minLength={2} maxLength={80} />
-        </label>
-      ) : null}
-
-      <label>
-        Email
-        <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required />
-      </label>
-
-      <label>
-        Password
-        <input
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          placeholder="At least 8 characters"
-          required
-          minLength={8}
-          maxLength={128}
-        />
-      </label>
-
-      {error ? <p className="auth-error">{error}</p> : null}
-
-      <button className="auth-submit" type="submit" disabled={loading}>
-        {loading ? <LoaderCircle size={14} className="spin" /> : <LogIn size={14} />}
-        {mode === "login" ? "Sign in" : "Create account"}
-      </button>
-    </form>
-  );
 }
 
 function ModelSelector({
@@ -135,10 +60,7 @@ function ModelSelector({
   return (
     <div className="model-selector">
       <button type="button" className="model-trigger" onClick={() => setOpen((value) => !value)}>
-        <span>
-          <strong>{current?.displayName ?? "Select model"}</strong>
-          <small>{current?.description ?? "No model selected"}</small>
-        </span>
+        <span>{current?.displayName ?? "Select model"}</span>
         <ChevronDown size={14} />
       </button>
 
@@ -148,14 +70,17 @@ function ModelSelector({
             <button
               type="button"
               key={model.id}
-              className={model.id === modelId ? "active" : ""}
+              className={`model-option ${model.id === modelId ? "active" : ""}`}
               onClick={() => {
                 onSelect(model.id);
                 setOpen(false);
               }}
             >
-              <span>{model.displayName}</span>
-              <small>{model.provider.toUpperCase()}</small>
+              <div>
+                <p className="model-option-label">{model.displayName}</p>
+                <p className="model-option-desc">{model.description}</p>
+              </div>
+              <span className="model-option-provider">{model.provider}</span>
             </button>
           ))}
         </div>
@@ -167,6 +92,7 @@ function ModelSelector({
 export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { setMode } = useTheme();
 
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
@@ -184,60 +110,91 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const messageAnchor = useAutoScroll(messages.length);
-
   const activeChat = useMemo(() => chats.find((chat) => chat.id === activeChatId) || null, [chats, activeChatId]);
 
-  async function loadSession() {
+  const canChat =
+    !!session &&
+    !session.degraded &&
+    !(session.actor.type === "guest" && !session.settings.guestEnabled);
+
+  const loadSession = useCallback(async () => {
     setSessionLoading(true);
     setSessionError(null);
     try {
       const response = await fetch("/api/auth/session", { cache: "no-store" });
       const data = (await response.json()) as SessionPayload;
       setSession(data);
-      setModelId((current) => current || data.settings.defaultModelId);
+      setModelId(data.settings.defaultModelId || "gpt-4o-mini");
+
+      if (data.actor.type === "user") {
+        const settingsResponse = await fetch("/api/settings/user", { cache: "no-store" });
+        if (settingsResponse.ok) {
+          const settingsData = (await settingsResponse.json()) as { settings: { theme: "system" | "light" | "dark" } };
+          setMode(settingsData.settings.theme);
+        }
+      }
     } catch {
       setSessionError("Could not load session data");
     } finally {
       setSessionLoading(false);
     }
-  }
+  }, [setMode]);
 
   const loadChats = useCallback(async () => {
-    const cacheKey = `${CHAT_CACHE_KEY}:${actorCacheKey(session?.actor ?? null)}`;
+    if (!session || session.degraded) {
+      setChats([]);
+      return;
+    }
+
+    const cacheKey = `${CHAT_CACHE_KEY}:${actorCacheKey(session.actor)}`;
     const cachedRaw = localStorage.getItem(cacheKey);
     if (cachedRaw) {
-      const cachedChats = JSON.parse(cachedRaw) as ChatSummary[];
-      setChats(cachedChats);
+      setChats(JSON.parse(cachedRaw) as ChatSummary[]);
     }
 
     const response = await fetch("/api/chats", { cache: "no-store" });
+    if (!response.ok) {
+      setError("Could not load chat history. Check database connection.");
+      return;
+    }
+
     const data = (await response.json()) as { chats: ChatSummary[] };
     setChats(data.chats);
     localStorage.setItem(cacheKey, JSON.stringify(data.chats));
-  }, [session?.actor]);
+  }, [session]);
 
-  const loadChat = useCallback(async (chatId: string) => {
-    const response = await fetch(`/api/chats/${chatId}`, { cache: "no-store" });
-    if (!response.ok) {
-      setError("This chat is unavailable");
-      return;
-    }
-    const data = (await response.json()) as {
-      chat: {
-        id: string;
-        modelId: string;
-        messages: ChatMessage[];
+  const loadChat = useCallback(
+    async (chatId: string) => {
+      if (!session || session.degraded) {
+        setMessages([]);
+        setError("Database is unavailable. Update DATABASE_URL to continue.");
+        return;
+      }
+
+      const response = await fetch(`/api/chats/${chatId}`, { cache: "no-store" });
+      if (!response.ok) {
+        setError("This chat is unavailable");
+        return;
+      }
+
+      const data = (await response.json()) as {
+        chat: {
+          id: string;
+          modelId: string;
+          messages: ChatMessage[];
+        };
       };
-    };
 
-    setActiveChatId(data.chat.id);
-    setModelId(data.chat.modelId);
-    setMessages(data.chat.messages);
-  }, []);
+      setActiveChatId(data.chat.id);
+      setModelId(data.chat.modelId);
+      setMessages(data.chat.messages);
+    },
+    [session],
+  );
 
   useEffect(() => {
     void loadSession();
-  }, []);
+  }, [loadSession]);
 
   useEffect(() => {
     if (!session) return;
@@ -279,7 +236,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draft.trim() || sending) return;
+    if (!draft.trim() || sending || !canChat) return;
     setError(null);
 
     const optimisticMessage: ChatMessage = {
@@ -318,7 +275,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
         }),
       });
 
-      const data = (await response.json()) as { chatId?: string; message?: string; error?: string };
+      const data = (await response.json()) as { chatId?: string; error?: string };
       if (!response.ok || !data.chatId) {
         throw new Error(data.error || "Failed to send message");
       }
@@ -378,14 +335,13 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     );
   }
 
+  const nextPath = encodeURIComponent(pathname || "/");
+
   return (
     <div className="chat-layout">
       <aside className="chat-sidebar">
         <div className="sidebar-header">
-          <div>
-            <p className="eyebrow">OpenChat</p>
-            <h1>Conversations</h1>
-          </div>
+          <p className="sidebar-brand">OpenChat</p>
           <button
             type="button"
             className="new-chat"
@@ -395,8 +351,8 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
               setActiveChatId(undefined);
             }}
           >
-            <Plus size={14} />
-            New
+            <SquarePen size={14} />
+            New chat
           </button>
         </div>
 
@@ -439,15 +395,12 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
             <>
               <p className="guest-note">
                 {session.settings.guestEnabled
-                  ? "Guest mode enabled. Sign in to keep permanent history and role-based controls."
+                  ? "Guest mode is enabled. Sign in to save long-term history and personalize settings."
                   : "Guest mode is currently disabled by admin."}
               </p>
-              <AuthPanel
-                onAuthenticated={async () => {
-                  await loadSession();
-                  await loadChats();
-                }}
-              />
+              <Link href={`/signin?next=${nextPath}`} className="signin-link">
+                Sign in
+              </Link>
             </>
           )}
         </div>
@@ -455,13 +408,17 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
 
       <main className="chat-main">
         <header className="chat-main-header">
-          <div>
-            <h2>{activeChat?.title || "New chat"}</h2>
-            <p>{session.actor.type === "guest" ? "Guest session" : `${session.actor.roles.join(", ")} role`}</p>
+          <div className="header-left">
+            <ModelSelector models={session.models} modelId={modelId} onSelect={setModelId} />
+            <h2 className="header-title">{activeChat?.title || "New chat"}</h2>
           </div>
           <div className="header-actions">
-            <ModelSelector models={session.models} modelId={modelId} onSelect={setModelId} />
-            <ThemeToggle />
+            {session.degraded ? (
+              <span className="status-chip" title={session.error || "Database unavailable"}>
+                <AlertTriangle size={13} /> Offline mode
+              </span>
+            ) : null}
+            {session.actor.type === "guest" ? <ThemeToggle /> : null}
           </div>
         </header>
 
@@ -469,9 +426,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
           {!messages.length ? (
             <div className="empty-state">
               <h3>Start a new conversation</h3>
-              <p>
-                Ask anything, attach files, and switch models instantly. Your chat will be saved once your first message is sent.
-              </p>
+              <p>Ask anything, add files, and switch models from the top-left selector.</p>
             </div>
           ) : (
             messages.map((message) => (
@@ -502,15 +457,16 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
         <footer className="composer-wrap">
           <form onSubmit={sendMessage} className="composer">
             <textarea
+              className="composer-input"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder="Message OpenChat..."
-              rows={2}
-              disabled={sending || uploading || (session.actor.type === "guest" && !session.settings.guestEnabled)}
+              placeholder="Ask anything"
+              rows={1}
+              disabled={sending || uploading || !canChat}
             />
 
-            <div className="composer-actions">
-              <label className="attach-button">
+            <div className="composer-toolbar">
+              <label className="attach-icon-button" title="Add files">
                 <input
                   type="file"
                   multiple
@@ -519,13 +475,11 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                     setPendingFiles(files);
                   }}
                 />
-                <FileText size={14} />
-                Add files
+                <Plus size={16} />
               </label>
 
-              <button type="submit" disabled={sending || uploading || !draft.trim()}>
-                {sending ? <LoaderCircle size={14} className="spin" /> : <Send size={14} />}
-                Send
+              <button className="send-icon-button" type="submit" disabled={sending || uploading || !canChat || !draft.trim()}>
+                {sending ? <LoaderCircle size={14} className="spin" /> : <SendHorizontal size={14} />}
               </button>
             </div>
 

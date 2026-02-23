@@ -33,6 +33,32 @@ function extractRows<T>(result: unknown) {
   return [] as T[];
 }
 
+function normalizeError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return new Error("Unknown database error");
+  }
+
+  const anyError = error as Error & {
+    code?: string;
+    hostname?: string;
+    cause?: { code?: string; hostname?: string };
+  };
+  const code = anyError.code || anyError.cause?.code;
+  const hostname = anyError.hostname || anyError.cause?.hostname;
+
+  if (code === "ENOTFOUND" && hostname?.includes(".supabase.co")) {
+    return new Error(
+      [
+        `Supabase host '${hostname}' could not be resolved from this machine.`,
+        "This usually happens when using the direct DB host (IPv6-only) on an IPv4-only network.",
+        "Use Supabase's Session/Transaction pooler connection string (port 6543) from Project Settings -> Database.",
+      ].join(" "),
+    );
+  }
+
+  return error;
+}
+
 function createContext(): DbContext {
   const provider = env.DATABASE_PROVIDER as Provider;
 
@@ -44,7 +70,12 @@ function createContext(): DbContext {
       provider,
       db,
       query: async <T>(statement: SQL) => {
-        const result = await db.execute(statement as never);
+        let result: unknown;
+        try {
+          result = await db.execute(statement as never);
+        } catch (error) {
+          throw normalizeError(error);
+        }
         return extractRows<T>(result);
       },
     };
@@ -60,7 +91,12 @@ function createContext(): DbContext {
     provider,
     db,
     query: async <T>(statement: SQL) => {
-      const result = await db.execute(statement as never);
+      let result: unknown;
+      try {
+        result = await db.execute(statement as never);
+      } catch (error) {
+        throw normalizeError(error);
+      }
       return extractRows<T>(result);
     },
   };

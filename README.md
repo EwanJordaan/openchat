@@ -61,3 +61,13 @@ Register with an email listed in `ADMIN_EMAILS` to automatically receive admin r
 
 - Database tables are auto-created and seeded on startup.
 - Uploaded files are stored locally in `.uploads/` (good for local/dev; use object storage for production).
+
+## Supabase Connection Troubleshooting
+
+- If you see `getaddrinfo ENOTFOUND db.<project-ref>.supabase.co`, your network/runtime likely cannot use the IPv6-only direct DB host.
+- Use the Supabase Session/Transaction pooler URL (port `6543`) as `DATABASE_URL` instead of the direct `db.<project-ref>.supabase.co` host.
+- The pooler URL includes your region and username in this pattern:
+
+```text
+postgresql://postgres.<project-ref>:<DB_PASSWORD>@aws-0-<REGION>.pooler.supabase.com:6543/postgres
+```

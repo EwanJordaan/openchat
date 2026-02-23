@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { LoaderCircle, Save } from "lucide-react";
 
-import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { useTheme } from "@/components/providers/theme-provider";
 import type { Actor, UserSettings } from "@/lib/types";
 
 const defaultSettings: UserSettings = {
@@ -18,6 +18,7 @@ const defaultSettings: UserSettings = {
 };
 
 export function UserSettingsPanel() {
+  const { setMode } = useTheme();
   const [actor, setActor] = useState<Actor | null>(null);
   const [settings, setSettings] = useState<UserSettings>(defaultSettings);
   const [loading, setLoading] = useState(true);
@@ -38,6 +39,7 @@ export function UserSettingsPanel() {
         if (response.ok && alive) {
           const data = (await response.json()) as { settings: UserSettings };
           setSettings(data.settings);
+          setMode(data.settings.theme);
         }
       }
 
@@ -50,7 +52,7 @@ export function UserSettingsPanel() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [setMode]);
 
   async function save() {
     setSaving(true);
@@ -103,7 +105,6 @@ export function UserSettingsPanel() {
           <p>Personalize your account and chat defaults. These settings apply to all future chats.</p>
         </div>
         <div className="settings-actions">
-          <ThemeToggle />
           <button type="button" onClick={() => void save()} disabled={saving}>
             {saving ? <LoaderCircle size={14} className="spin" /> : <Save size={14} />}
             Save changes
@@ -130,12 +131,14 @@ export function UserSettingsPanel() {
             Theme preference
             <select
               value={settings.theme}
-              onChange={(event) =>
+              onChange={(event) => {
+                const theme = event.target.value as UserSettings["theme"];
                 setSettings((prev) => ({
                   ...prev,
-                  theme: event.target.value as UserSettings["theme"],
-                }))
-              }
+                  theme,
+                }));
+                setMode(theme);
+              }}
             >
               <option value="system">System</option>
               <option value="light">Light</option>

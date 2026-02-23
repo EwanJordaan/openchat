@@ -111,6 +111,26 @@ export async function resolveActor() {
   };
 }
 
+export async function resolveGuestActorFromCookies() {
+  const cookieStore = await cookies();
+  const existingGuestId = cookieStore.get(env.GUEST_COOKIE_NAME)?.value;
+  const guestId = existingGuestId || createId("gst");
+
+  const guestActor: Actor = {
+    type: "guest",
+    guestId,
+    roles: ["guest"],
+    userId: null,
+    user: null,
+  };
+
+  return {
+    actor: guestActor,
+    needsGuestCookie: !existingGuestId,
+    needsSessionCleanup: true,
+  };
+}
+
 export async function logoutCurrentSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get(env.SESSION_COOKIE_NAME)?.value;
