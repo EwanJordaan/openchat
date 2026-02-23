@@ -1,0 +1,63 @@
+# OpenChat
+
+OpenChat is a ChatGPT-style AI chat application built with Next.js App Router. It supports guest and authenticated chat, role-based controls, model management, file attachments, and a full admin dashboard.
+
+## Features
+
+- ChatGPT-like UX with responsive sidebar, model picker, chat composer, and light/dark theme
+- Guest mode on `/` (admin can enable/disable and choose guest models)
+- Persistent chats on `/chat/[id]` with chat-id caching
+- Drizzle-backed auth sessions, user roles, and SQL storage
+- Admin dashboard for provider keys, model controls, role limits, and user roles
+- Comprehensive user settings page
+- File upload and attachment support
+- Provider abstraction with OpenAI-compatible API support and encrypted provider keys
+
+## Tech Stack
+
+- Next.js 16 + React 19
+- TypeScript
+- Drizzle ORM
+- SQL providers via env switch: `postgres`, `supabase`, `neon`, `mysql`
+
+## Setup
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Copy env file:
+
+```bash
+cp .env.example .env.local
+```
+
+3. Set `DATABASE_PROVIDER` and `DATABASE_URL`.
+
+4. Start dev server:
+
+```bash
+npm run dev
+```
+
+5. Open `http://localhost:3000`
+
+## Important env vars
+
+- `DATABASE_PROVIDER`: `postgres | supabase | neon | mysql`
+- `DATABASE_URL`: SQL connection string
+- `ADMIN_EMAILS`: comma-separated emails auto-assigned admin role
+- `ADMIN_SEED_EMAIL` / `ADMIN_SEED_PASSWORD`: optional bootstrap admin account created at startup
+- `SETTINGS_ENCRYPTION_KEY`: encrypts provider API keys stored in DB
+- `OPENAI_API_KEY`: optional fallback key (dashboard value takes priority)
+
+## Admin access
+
+Register with an email listed in `ADMIN_EMAILS` to automatically receive admin role. Then visit `/admin`.
+
+## Notes
+
+- Database tables are auto-created and seeded on startup.
+- Uploaded files are stored locally in `.uploads/` (good for local/dev; use object storage for production).
