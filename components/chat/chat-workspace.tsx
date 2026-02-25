@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   AlertTriangle,
@@ -11,6 +11,7 @@ import {
   LoaderCircle,
   LogOut,
   Paperclip,
+  Search,
   SendHorizontal,
   Settings,
   Shield,
@@ -23,6 +24,7 @@ import remarkGfm from "remark-gfm";
 
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useTheme } from "@/components/providers/theme-provider";
+import { UserSettingsPanel } from "@/components/settings/user-settings-panel";
 import type { Actor, ChatMessage, ChatSummary, ModelOption, PublicAppSettings, UploadedFile } from "@/lib/types";
 
 const CHAT_CACHE_KEY = "openchat:chat-list";
@@ -162,9 +164,21 @@ function ModelSelector({
   );
 }
 
+function OpenChatGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <rect x="2.75" y="2.75" width="18.5" height="18.5" rx="6.5" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M9.4 8.25a3.6 3.6 0 1 0 0 7.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M14.6 8.25h0.35a3.6 3.6 0 1 1 0 7.5h-0.35" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M12 8.25v7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.65" />
+    </svg>
+  );
+}
+
 export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { setMode } = useTheme();
   const [isHydrated, setIsHydrated] = useState(false);
 
@@ -215,8 +229,31 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const shouldStickToBottomRef = useRef(true);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const chatMenuRef = useRef<HTMLDivElement | null>(null);
+  const searchMenuRef = useRef<HTMLDivElement | null>(null);
+  const chatSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [isProfileMenuOpen, setProfileMenuOpen] = useState(false);
   const [openChatMenuId, setOpenChatMenuId] = useState<string | null>(null);
+  const [isChatSearchOpen, setChatSearchOpen] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState("");
+  const isSettingsOverlayOpen = searchParams.get("settings") === "1";
+  const filteredChats = useMemo(() => {
+    const query = chatSearchQuery.trim().toLocaleLowerCase();
+    if (!query) return chats;
+    return chats.filter((chat) => chat.title.toLocaleLowerCase().includes(query));
+  }, [chats, chatSearchQuery]);
+
+  const closeSettingsOverlay = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("settings");
+    const nextQuery = params.toString();
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname);
+  }, [pathname, router, searchParams]);
+
+  const openSettingsOverlay = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("settings", "1");
+    router.push(`${pathname}?${params.toString()}`);
+  }, [pathname, router, searchParams]);
 
   useEffect(() => {
     setIsHydrated(true);
@@ -469,6 +506,36 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       document.removeEventListener("keydown", onEscape);
     };
   }, [openChatMenuId]);
+
+  useEffect(() => {
+    if (!isChatSearchOpen) return;
+
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!searchMenuRef.current?.contains(target)) {
+        closeSearchChats();
+      }
+    }
+
+    function onEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closeSearchChats();
+      }
+    }
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [isChatSearchOpen]);
+
+  useEffect(() => {
+    if (!isChatSearchOpen) return;
+    chatSearchInputRef.current?.focus();
+  }, [isChatSearchOpen]);
 
   useEffect(() => {
     const textarea = composerInputRef.current;
@@ -769,6 +836,20 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     setProfileMenuOpen(false);
   }
 
+  function toggleSearchChats() {
+    if (isChatSearchOpen) {
+      setChatSearchOpen(false);
+      setChatSearchQuery("");
+      return;
+    }
+    setChatSearchOpen(true);
+  }
+
+  function closeSearchChats() {
+    setChatSearchOpen(false);
+    setChatSearchQuery("");
+  }
+
   if (!isHydrated || (sessionLoading && !session)) {
     return (
       <div className="chat-loading">
@@ -795,57 +876,111 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     <div className="chat-layout">
       <aside className="chat-sidebar">
         <div className="sidebar-header">
-          <p className="sidebar-brand">OpenChat</p>
-          <button
-            type="button"
-            className="new-chat"
-            onClick={() => {
-              if (session) {
-                removeCachedChatMessages(session.actor, DRAFT_CHAT_ID);
-              }
-              setOpenChatMenuId(null);
-              router.push("/");
-              setMessages([]);
-              setError(null);
-              setPendingFiles([]);
-              setActiveChatId(undefined);
-            }}
-          >
-            <SquarePen size={14} />
-            New chat
-          </button>
+          <div className="sidebar-brand-row">
+            <span className="sidebar-brand-mark">
+              <OpenChatGlyph className="sidebar-brand-icon" />
+            </span>
+            <p className="sidebar-brand">OpenChat</p>
+          </div>
+
+          <div className="sidebar-nav">
+            <button
+              type="button"
+              className="sidebar-nav-item"
+              onClick={() => {
+                if (session) {
+                  removeCachedChatMessages(session.actor, DRAFT_CHAT_ID);
+                }
+                setOpenChatMenuId(null);
+                router.push("/");
+                setMessages([]);
+                setError(null);
+                setPendingFiles([]);
+                setActiveChatId(undefined);
+              }}
+            >
+              <SquarePen className="sidebar-nav-icon" size={18} strokeWidth={1.9} />
+              <span>New chat</span>
+            </button>
+
+            <div className={`sidebar-search-menu ${isChatSearchOpen ? "open" : ""}`} ref={searchMenuRef}>
+              <button
+                type="button"
+                className={`sidebar-nav-item ${isChatSearchOpen ? "active search-open" : ""}`}
+                onClick={toggleSearchChats}
+                aria-expanded={isChatSearchOpen}
+                aria-controls="chat-search-input"
+              >
+                <Search className="sidebar-nav-icon" size={18} strokeWidth={1.9} />
+                <span>Search chats</span>
+              </button>
+
+              {isChatSearchOpen ? (
+                <div className="sidebar-search-panel">
+                  <input
+                    ref={chatSearchInputRef}
+                    id="chat-search-input"
+                    className="sidebar-search-input"
+                    type="search"
+                    value={chatSearchQuery}
+                    onChange={(event) => setChatSearchQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        closeSearchChats();
+                      }
+                    }}
+                    placeholder="Search your chats"
+                  />
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
 
-        <div className="chat-list" role="list">
-          {chats.map((chat) => (
-            <div key={chat.id} className={`chat-item ${chat.id === activeChatId ? "active" : ""}`}>
-              <Link href={`/chat/${chat.id}`}>
-                <span>{chat.title}</span>
-              </Link>
-              <div className="chat-item-actions" ref={openChatMenuId === chat.id ? chatMenuRef : undefined}>
-                <button
-                  type="button"
-                  className="chat-menu-trigger"
-                  aria-haspopup="menu"
-                  aria-expanded={openChatMenuId === chat.id}
-                  title="Chat options"
-                  onClick={() => setOpenChatMenuId((current) => (current === chat.id ? null : chat.id))}
-                >
-                  <Ellipsis size={14} />
-                </button>
-                {openChatMenuId === chat.id ? (
-                  <div className="chat-item-menu" role="menu">
-                    <button type="button" onClick={() => void renameChat(chat.id)}>
-                      Rename
+        <div className="chat-list-section">
+          <p className="chat-list-heading">Your chats</p>
+
+          <div className="chat-list" role="list">
+            {filteredChats.length ? (
+              filteredChats.map((chat) => (
+                <div key={chat.id} className={`chat-item ${chat.id === activeChatId ? "active" : ""}`}>
+                  <Link href={`/chat/${chat.id}`}>
+                    <span>{chat.title}</span>
+                  </Link>
+                  <div className="chat-item-actions" ref={openChatMenuId === chat.id ? chatMenuRef : undefined}>
+                    <button
+                      type="button"
+                      className="chat-menu-trigger"
+                      aria-haspopup="menu"
+                      aria-expanded={openChatMenuId === chat.id}
+                      title="Chat options"
+                      onClick={() => setOpenChatMenuId((current) => (current === chat.id ? null : chat.id))}
+                    >
+                      <Ellipsis size={16} strokeWidth={2} />
                     </button>
-                    <button type="button" onClick={() => void removeChat(chat.id)}>
-                      <Trash2 size={13} /> Delete
-                    </button>
+                    {openChatMenuId === chat.id ? (
+                      <div className="chat-item-menu" role="menu">
+                        <button type="button" onClick={() => void renameChat(chat.id)}>
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          className="chat-item-menu-delete"
+                          onClick={() => void removeChat(chat.id)}
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
-            </div>
-          ))}
+                </div>
+              ))
+            ) : (
+              <p className="chat-list-empty">
+                {chatSearchQuery ? "No chats match your search." : "No chats yet."}
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="sidebar-footer">
@@ -872,9 +1007,15 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
 
               {isProfileMenuOpen ? (
                 <div className="profile-menu" role="menu">
-                  <Link href="/settings" onClick={() => setProfileMenuOpen(false)}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileMenuOpen(false);
+                      openSettingsOverlay();
+                    }}
+                  >
                     <Settings size={14} /> Settings
-                  </Link>
+                  </button>
                   {session.actor.roles.includes("admin") ? (
                     <Link href="/admin" onClick={() => setProfileMenuOpen(false)}>
                       <Shield size={14} /> Admin
@@ -1046,6 +1187,8 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
           </form>
         </footer>
       </main>
+
+      {isSettingsOverlayOpen ? <UserSettingsPanel mode="overlay" onClose={closeSettingsOverlay} /> : null}
     </div>
   );
 }
