@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:run": "bun run dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
