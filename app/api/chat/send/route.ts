@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { generateAssistantReply } from "@/lib/ai/provider";
+import { streamAssistantReply } from "@/lib/ai/provider";
 import { resolveActor } from "@/lib/auth/session";
 import { invalidateChatListCache } from "@/lib/cache/chat-cache";
 import {
@@ -39,6 +39,11 @@ export async function POST(request: Request) {
     return jsonError(parsed.error.issues[0]?.message || "Invalid chat payload", 400);
   }
 
+  const message = parsed.data.message.trimEnd();
+  if (!message.trim()) {
+    return jsonError("Message must include non-whitespace text", 400);
+  }
+
   const settings = await getPublicAppSettings();
   if (resolved.actor.type === "guest" && !settings.guestEnabled) {
     return jsonError("Guest chatting is currently disabled by the admin", 403);
@@ -71,8 +76,13 @@ export async function POST(request: Request) {
 
   let chatId = parsed.data.chatId;
   if (!chatId) {
-    const inferredTitle = parsed.data.message.trim().slice(0, 72) || "New chat";
+    const inferredTitle = message.trim().slice(0, 72) || "New chat";
     chatId = await createChat(resolved.actor, inferredTitle, model.id);
+  } else {
+    const existingChat = await getChat(resolved.actor, chatId);
+    if (!existingChat) {
+      return jsonError("Chat not found", 404);
+    }
   }
 
   await touchFilesWithChat(files.map((file) => file.id), chatId);
@@ -80,7 +90,7 @@ export async function POST(request: Request) {
   await appendMessage({
     chatId,
     role: "user",
-    content: parsed.data.message,
+    content: message,
     modelId: model.id,
     attachments: files,
   });
@@ -90,38 +100,83 @@ export async function POST(request: Request) {
     return jsonError("Chat could not be loaded after save", 500);
   }
 
-  const ai = await generateAssistantReply({
-    model,
-    messages: hydratedChat.messages,
-  });
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      void (async () => {
+        let assistantContent = "";
+        let assistantPersisted = false;
+        let providerStatus = "ok";
+        let usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
-  await appendMessage({
-    chatId,
-    role: "assistant",
-    content: ai.content,
-    modelId: model.id,
-  });
+        try {
+          const streamed = await streamAssistantReply({
+            model,
+            messages: hydratedChat.messages,
+            signal: request.signal,
+            onToken: (token) => {
+              assistantContent += token;
+              controller.enqueue(encoder.encode(token));
+            },
+          });
 
-  await logAudit({
-    actorUserId: resolved.actor.type === "user" ? resolved.actor.userId : null,
-    action: "chat.send",
-    targetType: "chat",
-    targetId: chatId,
-    payload: {
-      modelId: model.id,
-      providerStatus: ai.providerStatus,
-      attachmentCount: files.length,
+          providerStatus = streamed.providerStatus;
+          usage = streamed.usage;
+          if (!assistantContent && streamed.content) {
+            assistantContent = streamed.content;
+          }
+
+          if (assistantContent.trim()) {
+            await appendMessage({
+              chatId,
+              role: "assistant",
+              content: assistantContent,
+              modelId: model.id,
+            });
+            assistantPersisted = true;
+          }
+
+          await logAudit({
+            actorUserId: resolved.actor.type === "user" ? resolved.actor.userId : null,
+            action: "chat.send",
+            targetType: "chat",
+            targetId: chatId,
+            payload: {
+              modelId: model.id,
+              providerStatus,
+              attachmentCount: files.length,
+              usage,
+            },
+          });
+        } catch {
+          if (!assistantPersisted && assistantContent.trim()) {
+            await appendMessage({
+              chatId,
+              role: "assistant",
+              content: assistantContent,
+              modelId: model.id,
+            });
+          }
+        } finally {
+          const key = actorCacheKey(resolved.actor);
+          invalidateChatListCache(key.type, key.id);
+          try {
+            controller.close();
+          } catch {
+            return;
+          }
+        }
+      })();
     },
   });
 
-  const key = actorCacheKey(resolved.actor);
-  invalidateChatListCache(key.type, key.id);
-
-  const response = NextResponse.json({
-    chatId,
-    message: ai.content,
-    usage: ai.usage,
-    providerStatus: ai.providerStatus,
+  const response = new NextResponse(stream, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Chat-Id": chatId,
+    },
   });
   return attachActorCookies(response, resolved);
 }

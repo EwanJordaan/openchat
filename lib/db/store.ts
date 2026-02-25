@@ -315,7 +315,6 @@ export async function listProviders() {
     provider: String(row.provider),
     baseUrl: String(row.base_url),
     hasApiKey: Boolean(row.encrypted_api_key),
-    apiKeyPreview: decryptSecret(String(row.encrypted_api_key || "")).slice(0, 3),
     isEnabled: toBool(row.is_enabled),
     updatedAt: String(row.updated_at),
   }));
@@ -596,27 +595,34 @@ export async function getOwnedFiles(actor: Actor, fileIds: string[]): Promise<Up
   await ensureDatabase();
   if (!fileIds.length) return [];
   const { query } = getDb();
-  const files: UploadedFile[] = [];
+  const ownershipFilter = actor.type === "user"
+    ? sql`(owner_user_id = ${actor.userId} or guest_id = ${actor.guestId})`
+    : sql`owner_user_id is null and guest_id = ${actor.guestId}`;
 
-  for (const fileId of fileIds) {
-    const rows = actor.type === "user"
-      ? await query<Record<string, unknown>>(
-          sql`select id, file_name, mime_type, size_bytes, storage_path from files where id = ${fileId} and (owner_user_id = ${actor.userId} or guest_id = ${actor.guestId}) limit 1`,
-        )
-      : await query<Record<string, unknown>>(
-          sql`select id, file_name, mime_type, size_bytes, storage_path from files where id = ${fileId} and owner_user_id is null and guest_id = ${actor.guestId} limit 1`,
-        );
+  const rows = await query<Record<string, unknown>>(sql`
+    select id, file_name, mime_type, size_bytes, storage_path
+    from files
+    where id in (${sql.join(fileIds.map((fileId) => sql`${fileId}`), sql`, `)})
+      and ${ownershipFilter}
+  `);
 
-    const row = rows[0];
-    if (row) {
-      files.push({
+  const byId = new Map(
+    rows.map((row) => [
+      String(row.id),
+      {
         id: String(row.id),
         fileName: String(row.file_name),
         mimeType: String(row.mime_type),
         sizeBytes: asNumber(row.size_bytes, 0),
         storagePath: String(row.storage_path),
-      });
-    }
+      } satisfies UploadedFile,
+    ]),
+  );
+
+  const files: UploadedFile[] = [];
+  for (const fileId of fileIds) {
+    const file = byId.get(fileId);
+    if (file) files.push(file);
   }
 
   return files;
@@ -740,6 +746,23 @@ export async function listUsersWithRoles() {
     sql`select id, email, name, is_active, created_at from users order by created_at desc limit 200`,
   );
 
+  const userIds = users.map((user) => String(user.id));
+  if (!userIds.length) return [];
+
+  const roleRows = await query<{ user_id: string; role: Role }>(sql`
+    select user_id, role
+    from user_roles
+    where user_id in (${sql.join(userIds.map((id) => sql`${id}`), sql`, `)})
+  `);
+
+  const rolesByUser = new Map<string, Role[]>();
+  for (const row of roleRows) {
+    const key = String(row.user_id);
+    const roles = rolesByUser.get(key) ?? [];
+    roles.push(row.role);
+    rolesByUser.set(key, roles);
+  }
+
   const result = [] as Array<{
     id: string;
     email: string;
@@ -750,7 +773,7 @@ export async function listUsersWithRoles() {
   }>;
 
   for (const user of users) {
-    const roles = await getUserRoles(String(user.id));
+    const roles = rolesByUser.get(String(user.id)) ?? ["user"];
     result.push({
       id: String(user.id),
       email: String(user.email),

@@ -45,7 +45,10 @@ const defaultRoleLimits = [
 
 export async function ensureDatabase() {
   if (!bootstrapPromise) {
-    bootstrapPromise = runBootstrap();
+    bootstrapPromise = runBootstrap().catch((error) => {
+      bootstrapPromise = null;
+      throw error;
+    });
   }
   await bootstrapPromise;
 }
@@ -122,58 +125,56 @@ async function runBootstrap() {
         (${"guest_allowed_models"}, ${JSON.stringify(defaultModels.filter((m) => m.isGuestAllowed).map((m) => m.id))}, ${now}),
         (${"default_model_id"}, ${JSON.stringify("gpt-4o-mini")}, ${now})
     `);
-
-    return;
-  }
-
-  await query(sql`
-    insert into provider_credentials (id, provider, base_url, encrypted_api_key, is_enabled, updated_at)
-    values (${createId("prv")}, ${"openai"}, ${"https://api.openai.com/v1"}, ${""}, ${1}, ${now})
-    on conflict (provider) do nothing
-  `);
-
-  for (const model of defaultModels) {
+  } else {
     await query(sql`
-      insert into models (id, provider, display_name, description, is_enabled, is_default, is_guest_allowed, max_output_tokens, created_at, updated_at)
-      values (
-        ${model.id},
-        ${model.provider},
-        ${model.displayName},
-        ${model.description},
-        ${1},
-        ${model.isDefault},
-        ${model.isGuestAllowed},
-        ${model.maxOutputTokens},
-        ${now},
-        ${now}
-      )
-      on conflict (id) do nothing
+      insert into provider_credentials (id, provider, base_url, encrypted_api_key, is_enabled, updated_at)
+      values (${createId("prv")}, ${"openai"}, ${"https://api.openai.com/v1"}, ${""}, ${1}, ${now})
+      on conflict (provider) do nothing
+    `);
+
+    for (const model of defaultModels) {
+      await query(sql`
+        insert into models (id, provider, display_name, description, is_enabled, is_default, is_guest_allowed, max_output_tokens, created_at, updated_at)
+        values (
+          ${model.id},
+          ${model.provider},
+          ${model.displayName},
+          ${model.description},
+          ${1},
+          ${model.isDefault},
+          ${model.isGuestAllowed},
+          ${model.maxOutputTokens},
+          ${now},
+          ${now}
+        )
+        on conflict (id) do nothing
+      `);
+    }
+
+    for (const role of defaultRoleLimits) {
+      await query(sql`
+        insert into role_limits (id, role, daily_message_limit, max_attachment_count, max_attachment_mb, updated_at)
+        values (
+          ${createId("rlm")},
+          ${role.role},
+          ${role.dailyMessageLimit},
+          ${role.maxAttachmentCount},
+          ${role.maxAttachmentMb},
+          ${now}
+        )
+        on conflict (role) do nothing
+      `);
+    }
+
+    await query(sql`
+      insert into app_settings (setting_key, value_json, updated_at)
+      values
+        (${"guest_enabled"}, ${JSON.stringify(true)}, ${now}),
+        (${"guest_allowed_models"}, ${JSON.stringify(defaultModels.filter((m) => m.isGuestAllowed).map((m) => m.id))}, ${now}),
+        (${"default_model_id"}, ${JSON.stringify("gpt-4o-mini")}, ${now})
+      on conflict (setting_key) do nothing
     `);
   }
-
-  for (const role of defaultRoleLimits) {
-    await query(sql`
-      insert into role_limits (id, role, daily_message_limit, max_attachment_count, max_attachment_mb, updated_at)
-      values (
-        ${createId("rlm")},
-        ${role.role},
-        ${role.dailyMessageLimit},
-        ${role.maxAttachmentCount},
-        ${role.maxAttachmentMb},
-        ${now}
-      )
-      on conflict (role) do nothing
-    `);
-  }
-
-  await query(sql`
-    insert into app_settings (setting_key, value_json, updated_at)
-    values
-      (${"guest_enabled"}, ${JSON.stringify(true)}, ${now}),
-      (${"guest_allowed_models"}, ${JSON.stringify(defaultModels.filter((m) => m.isGuestAllowed).map((m) => m.id))}, ${now}),
-      (${"default_model_id"}, ${JSON.stringify("gpt-4o-mini")}, ${now})
-    on conflict (setting_key) do nothing
-  `);
 
   await seedAdminUser(provider, query);
 }

@@ -11,7 +11,6 @@ interface ProviderItem {
   provider: string;
   baseUrl: string;
   hasApiKey: boolean;
-  apiKeyPreview: string;
   isEnabled: boolean;
   updatedAt: string;
 }
@@ -260,7 +259,7 @@ export function AdminDashboard() {
                   API key
                   <input
                     type="password"
-                    placeholder={provider.hasApiKey ? `${provider.apiKeyPreview}***` : "Not configured"}
+                    placeholder={provider.hasApiKey ? "Configured (leave blank to keep current key)" : "Not configured"}
                     value={providerKeys[provider.provider] || ""}
                     onChange={(event) =>
                       setProviderKeys((prev) => ({
