@@ -901,7 +901,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
         </div>
       </aside>
 
-      <main className="chat-main">
+      <main ref={messageStreamRef} className="chat-main" onScroll={handleMessageStreamScroll}>
         <header className="chat-main-header">
           <div className="header-left">
             <ModelSelector models={session.models} modelId={modelId} onSelect={setModelId} />
@@ -922,7 +922,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
           </div>
         </header>
 
-        <section ref={messageStreamRef} className="message-stream" onScroll={handleMessageStreamScroll}>
+        <section className="message-stream">
           {!messages.length ? (
             <div className="empty-state">
               <h3>Start a new conversation</h3>

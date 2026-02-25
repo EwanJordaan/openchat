@@ -16,6 +16,13 @@
   --danger: #d14343;
   --shadow: 0 8px 28px rgba(24, 24, 27, 0.08);
   --chat-content-max-width: 900px;
+  --sidebar-width: 300px;
+  --chat-header-height: 58px;
+  --chat-composer-height: 176px;
+  --scrollbar-size: 18px;
+  --scrollbar-track: color-mix(in oklab, var(--surface-muted) 70%, var(--surface));
+  --scrollbar-thumb: color-mix(in oklab, var(--text-muted) 38%, var(--surface));
+  --scrollbar-thumb-hover: color-mix(in oklab, var(--text-secondary) 46%, var(--surface));
 }
 
 :root[data-theme="dark"] {
@@ -81,7 +88,7 @@ select {
 
 .chat-layout {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;
   max-height: 100dvh;
@@ -374,12 +381,40 @@ select {
   min-width: 0;
   height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.chat-main::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+}
+
+.chat-main::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-left: 1px solid var(--border);
+}
+
+.chat-main::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border: 3px solid var(--scrollbar-track);
+  border-radius: 999px;
+}
+
+.chat-main::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
 .chat-main-header {
+  position: fixed;
+  left: var(--sidebar-width);
+  right: var(--scrollbar-size);
+  top: 0;
+  z-index: 24;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   padding: 10px 16px;
@@ -502,10 +537,10 @@ select {
 }
 
 .message-stream {
+  flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 24px 24px 14px;
+  overflow: visible;
+  padding: calc(var(--chat-header-height) + 20px) 0 calc(var(--chat-composer-height) + 12px) 24px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -516,6 +551,8 @@ select {
   content: "";
   position: sticky;
   display: block;
+  left: 0;
+  right: 0;
   bottom: 0;
   height: 44px;
   margin-top: -44px;
@@ -527,6 +564,7 @@ select {
 .message-row {
   width: min(var(--chat-content-max-width), 100%);
   margin: 0 auto;
+  padding-right: 10px;
   display: flex;
 }
 
@@ -751,8 +789,11 @@ select {
 .empty-state {
   margin: auto;
   max-width: 520px;
+  padding-right: 10px;
   text-align: center;
-  padding: 14px;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  padding-left: 14px;
 }
 
 .empty-state h3 {
@@ -768,7 +809,12 @@ select {
 }
 
 .composer-wrap {
-  position: relative;
+  position: fixed;
+  left: var(--sidebar-width);
+  right: var(--scrollbar-size);
+  bottom: 0;
+  width: auto;
+  z-index: 24;
   isolation: isolate;
   border-top: 0;
   padding: 12px 16px 18px;
@@ -1265,6 +1311,21 @@ select {
   .settings-topbar {
     flex-direction: column;
   }
+
+  .chat-main-header {
+    position: sticky;
+    left: auto;
+    right: auto;
+    width: calc(100% - var(--scrollbar-size));
+    margin-right: var(--scrollbar-size);
+    z-index: 10;
+  }
+
+  .composer-wrap {
+    left: 0;
+    right: 0;
+    width: 100vw;
+  }
 }
 
 @media (max-width: 680px) {
@@ -1295,6 +1356,7 @@ select {
 
   .message-stream {
     padding-top: 14px;
+    padding-right: 0;
   }
 
   .markdown-content {
