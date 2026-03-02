@@ -373,6 +373,16 @@ select {
   color: var(--danger) !important;
 }
 
+.chat-item-menu button.chat-item-menu-delete-confirm {
+  background: color-mix(in oklab, var(--danger) 14%, var(--surface-elevated));
+  color: var(--danger) !important;
+}
+
+.chat-item-menu button.chat-item-menu-delete-confirm:hover {
+  background: color-mix(in oklab, var(--danger) 22%, var(--surface-elevated));
+  color: var(--danger) !important;
+}
+
 .sidebar-footer {
   border-top: 1px solid color-mix(in oklab, var(--border) 72%, transparent);
   padding: 12px;

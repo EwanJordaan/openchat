@@ -233,6 +233,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const chatSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [isProfileMenuOpen, setProfileMenuOpen] = useState(false);
   const [openChatMenuId, setOpenChatMenuId] = useState<string | null>(null);
+  const [confirmDeleteChatId, setConfirmDeleteChatId] = useState<string | null>(null);
   const [isChatSearchOpen, setChatSearchOpen] = useState(false);
   const [chatSearchQuery, setChatSearchQuery] = useState("");
   const isSettingsOverlayOpen = searchParams.get("settings") === "1";
@@ -490,12 +491,14 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       if (!(target instanceof Node)) return;
       if (!chatMenuRef.current?.contains(target)) {
         setOpenChatMenuId(null);
+        setConfirmDeleteChatId(null);
       }
     }
 
     function onEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setOpenChatMenuId(null);
+        setConfirmDeleteChatId(null);
       }
     }
 
@@ -786,6 +789,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   async function removeChat(chatId: string) {
     await fetch(`/api/chats/${chatId}`, { method: "DELETE" });
     setOpenChatMenuId(null);
+    setConfirmDeleteChatId(null);
     if (session) {
       removeCachedChatMessages(session.actor, chatId);
     }
@@ -954,7 +958,10 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                       aria-haspopup="menu"
                       aria-expanded={openChatMenuId === chat.id}
                       title="Chat options"
-                      onClick={() => setOpenChatMenuId((current) => (current === chat.id ? null : chat.id))}
+                      onClick={() => {
+                        setConfirmDeleteChatId(null);
+                        setOpenChatMenuId((current) => (current === chat.id ? null : chat.id));
+                      }}
                     >
                       <Ellipsis size={16} strokeWidth={2} />
                     </button>
@@ -963,13 +970,28 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                         <button type="button" onClick={() => void renameChat(chat.id)}>
                           Rename
                         </button>
-                        <button
-                          type="button"
-                          className="chat-item-menu-delete"
-                          onClick={() => void removeChat(chat.id)}
-                        >
-                          <Trash2 size={13} /> Delete
-                        </button>
+                        {confirmDeleteChatId === chat.id ? (
+                          <>
+                            <button
+                              type="button"
+                              className="chat-item-menu-delete-confirm"
+                              onClick={() => void removeChat(chat.id)}
+                            >
+                              <Trash2 size={13} /> Confirm delete
+                            </button>
+                            <button type="button" onClick={() => setConfirmDeleteChatId(null)}>
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="chat-item-menu-delete"
+                            onClick={() => setConfirmDeleteChatId(chat.id)}
+                          >
+                            <Trash2 size={13} /> Delete
+                          </button>
+                        )}
                       </div>
                     ) : null}
                   </div>
