@@ -106,33 +106,39 @@ export async function PATCH(request: Request) {
   }
 
   const action = parsed.data;
-  if (action.action === "settings") {
-    await updatePublicAppSettings(action.payload);
+  try {
+    if (action.action === "settings") {
+      await updatePublicAppSettings(action.payload);
+    }
+
+    if (action.action === "provider") {
+      await upsertProviderCredential(action.payload);
+    }
+
+    if (action.action === "model") {
+      await updateModel(action.payload.id, action.payload);
+    }
+
+    if (action.action === "roleLimit") {
+      await upsertRoleLimit(action.payload);
+    }
+
+    if (action.action === "userRoles") {
+      await setUserRoles(action.payload.userId, action.payload.roles);
+    }
+
+    await logAudit({
+      actorUserId: resolved.actor.userId,
+      action: `admin.${action.action}`,
+      targetType: "admin-config",
+      payload: action.payload,
+    });
+
+    const response = NextResponse.json({ ok: true });
+    return attachActorCookies(response, resolved);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to update admin configuration";
+    const response = jsonError(message, 500);
+    return attachActorCookies(response, resolved);
   }
-
-  if (action.action === "provider") {
-    await upsertProviderCredential(action.payload);
-  }
-
-  if (action.action === "model") {
-    await updateModel(action.payload.id, action.payload);
-  }
-
-  if (action.action === "roleLimit") {
-    await upsertRoleLimit(action.payload);
-  }
-
-  if (action.action === "userRoles") {
-    await setUserRoles(action.payload.userId, action.payload.roles);
-  }
-
-  await logAudit({
-    actorUserId: resolved.actor.userId,
-    action: `admin.${action.action}`,
-    targetType: "admin-config",
-    payload: action.payload,
-  });
-
-  const response = NextResponse.json({ ok: true });
-  return attachActorCookies(response, resolved);
 }

@@ -52,6 +52,14 @@ npm run dev
 - `ADMIN_SEED_EMAIL` / `ADMIN_SEED_PASSWORD`: optional bootstrap admin account created at startup
 - `SETTINGS_ENCRYPTION_KEY`: encrypts provider API keys stored in DB
 - `OPENAI_API_KEY`: optional fallback key (dashboard value takes priority)
+- `OPENAI_API_KEY_LOCAL` / `OPENAI_API_KEY_VERCEL` / `OPENAI_API_KEY_CLOUDFLARE`: platform-specific fallback keys
+- `OPENAI_BASE_URL_LOCAL` / `OPENAI_BASE_URL_VERCEL` / `OPENAI_BASE_URL_CLOUDFLARE`: platform-specific fallback base URLs
+
+Provider precedence at runtime:
+
+1. Admin dashboard provider credentials stored in the database
+2. Platform-specific env vars (`*_LOCAL`, `*_VERCEL`, `*_CLOUDFLARE`) based on detected runtime
+3. Generic env vars (`OPENAI_API_KEY`, `OPENAI_BASE_URL`)
 
 ## Admin access
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { LoaderCircle, Save, ShieldAlert } from "lucide-react";
+import { CheckCircle2, LoaderCircle, Save, ShieldAlert } from "lucide-react";
 
 import type { Actor, ModelOption, PublicAppSettings, RoleLimit } from "@/lib/types";
 
@@ -39,6 +39,7 @@ export function AdminDashboard() {
   const [status, setStatus] = useState<string | null>(null);
 
   const [providerKeys, setProviderKeys] = useState<Record<string, string>>({});
+  const [providerMessages, setProviderMessages] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let alive = true;
@@ -99,19 +100,65 @@ export function AdminDashboard() {
   }, [data?.models]);
 
   async function update(action: unknown) {
-    const response = await fetch("/api/admin/config", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(action),
-    });
-    const result = (await response.json()) as { error?: string };
-    if (!response.ok) {
-      setStatus(result.error || "Failed to save changes");
+    try {
+      const response = await fetch("/api/admin/config", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(action),
+      });
+
+      const raw = await response.text();
+      let result: { error?: string } | null = null;
+      if (raw) {
+        try {
+          result = JSON.parse(raw) as { error?: string };
+        } catch {
+          result = null;
+        }
+      }
+
+      if (!response.ok) {
+        setStatus(result?.error || `Failed to save changes (${response.status})`);
+        return false;
+      }
+      setStatus("Saved.");
+      await load();
+      return true;
+    } catch {
+      setStatus("Failed to save changes");
       return false;
     }
-    setStatus("Saved.");
-    await load();
-    return true;
+  }
+
+  async function saveProvider(provider: ProviderItem) {
+    const pendingApiKey = (providerKeys[provider.provider] || "").trim();
+    const ok = await update({
+      action: "provider",
+      payload: {
+        provider: provider.provider,
+        baseUrl: provider.baseUrl,
+        isEnabled: provider.isEnabled,
+        apiKey: pendingApiKey || undefined,
+      },
+    });
+
+    if (!ok) {
+      setProviderMessages((prev) => ({
+        ...prev,
+        [provider.provider]: "Failed to save provider settings.",
+      }));
+      return;
+    }
+
+    setProviderKeys((prev) => ({
+      ...prev,
+      [provider.provider]: "",
+    }));
+
+    setProviderMessages((prev) => ({
+      ...prev,
+      [provider.provider]: pendingApiKey ? "API key added successfully." : "Provider settings saved.",
+    }));
   }
 
   if (loading) {
@@ -296,21 +343,16 @@ export function AdminDashboard() {
                 </label>
                 <button
                   type="button"
-                  onClick={() =>
-                    void update({
-                      action: "provider",
-                      payload: {
-                        provider: provider.provider,
-                        baseUrl: provider.baseUrl,
-                        isEnabled: provider.isEnabled,
-                        apiKey: providerKeys[provider.provider] || undefined,
-                      },
-                    })
-                  }
+                  onClick={() => void saveProvider(provider)}
                 >
                   <Save size={14} />
                   Save provider
                 </button>
+                {providerMessages[provider.provider] ? (
+                  <p className="subtle" role="status" aria-live="polite">
+                    <CheckCircle2 size={14} /> {providerMessages[provider.provider]}
+                  </p>
+                ) : null}
               </div>
             ))}
           </div>

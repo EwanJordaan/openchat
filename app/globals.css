@@ -30,7 +30,7 @@
   --surface: #212121;
   --surface-elevated: #2f2f2f;
   --surface-muted: #1b1b1b;
-  --sidebar-bg: #171717;
+  --sidebar-bg: #181818;
   --text-primary: #ececec;
   --text-secondary: #c7c7c7;
   --text-muted: #9d9d9d;
@@ -96,8 +96,8 @@ select {
 }
 
 .chat-sidebar {
-  border-right: 1px solid var(--border);
-  background: var(--sidebar-bg);
+  border-right: 1px solid color-mix(in oklab, var(--border) 72%, transparent);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--sidebar-bg) 92%, #000 8%), var(--sidebar-bg));
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -106,40 +106,165 @@ select {
 }
 
 .sidebar-header {
-  border-bottom: 1px solid var(--border);
-  padding: 14px 12px;
+  padding: 14px 12px 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.sidebar-brand {
-  margin: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  padding: 0 4px;
+.sidebar-brand-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 4px 6px;
 }
 
-.new-chat {
+.sidebar-brand-mark {
+  width: 28px;
+  height: 28px;
+  border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  border-radius: 9px;
+  background: color-mix(in oklab, var(--surface) 35%, var(--sidebar-bg));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in oklab, var(--text-primary) 90%, var(--text-secondary));
+  flex: 0 0 auto;
+}
+
+.sidebar-brand-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.sidebar-brand {
+  margin: 0;
+  font-size: 0.74rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-search-menu {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+  border-radius: 12px;
+  padding: 2px 2px 4px;
+  transition: background 120ms ease;
+}
+
+.sidebar-search-menu:hover,
+.sidebar-search-menu:focus-within,
+.sidebar-search-menu.open {
+  background: color-mix(in oklab, var(--surface-elevated) 70%, transparent);
+}
+
+.sidebar-nav-item {
   width: 100%;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 0.45rem;
-  font-size: 0.9rem;
+  gap: 0.6rem;
+  font-size: 1.02rem;
   font-weight: 500;
-  padding: 0.56rem 0.52rem;
+  line-height: 1.25;
+  padding: 0.58rem 0.58rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sidebar-nav-item:hover,
+.sidebar-nav-item.active {
+  background: color-mix(in oklab, var(--surface-elevated) 70%, transparent);
+  color: var(--text-primary);
+}
+
+.sidebar-search-menu.open .sidebar-nav-item.active,
+.sidebar-search-menu:hover .sidebar-nav-item.active,
+.sidebar-search-menu:focus-within .sidebar-nav-item.active {
+  background: transparent;
+}
+
+.sidebar-nav-item:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--text-primary) 38%, transparent);
+  outline-offset: 0;
+}
+
+.sidebar-nav-icon {
+  flex: 0 0 auto;
+  color: color-mix(in oklab, var(--text-primary) 88%, var(--text-secondary));
+}
+
+.sidebar-search-panel {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 2px 4px 0;
+}
+
+.sidebar-search-input {
+  appearance: none;
+  width: 100%;
+  border: 1px solid color-mix(in oklab, var(--border) 65%, transparent);
+  border-radius: 9px;
+  background: color-mix(in oklab, var(--surface) 32%, var(--sidebar-bg));
+  color: var(--text-primary);
+  font-size: 0.79rem;
+  padding: 0.5rem 0.62rem;
+}
+
+.sidebar-search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 2l8 8M10 2L2 10' stroke='%23a1a1aa' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-size: 12px 12px;
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 0.95;
   cursor: pointer;
 }
 
-.new-chat:hover {
-  background: var(--surface-elevated);
+.sidebar-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.sidebar-search-input:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--text-primary) 38%, transparent);
+  outline-offset: 1px;
+}
+
+.chat-list-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-list-heading {
+  margin: 0;
+  padding: 8px 16px 7px;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.chat-list-empty {
+  margin: 10px 8px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
 }
 
 .chat-list {
@@ -147,28 +272,28 @@ select {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 10px;
+  padding: 4px 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .chat-item {
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   background: transparent;
-  padding: 6px 8px;
+  padding: 7px 8px;
 }
 
 .chat-item:hover {
-  background: var(--surface-elevated);
+  background: color-mix(in oklab, var(--surface-elevated) 72%, transparent);
 }
 
 .chat-item.active {
-  background: var(--surface-elevated);
+  background: color-mix(in oklab, var(--surface-elevated) 85%, transparent);
 }
 
 .chat-item a {
@@ -178,7 +303,8 @@ select {
 
 .chat-item span {
   display: block;
-  font-size: 0.82rem;
+  font-size: 0.9rem;
+  color: color-mix(in oklab, var(--text-primary) 86%, var(--text-secondary));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -192,13 +318,13 @@ select {
   border: 0;
   background: transparent;
   color: var(--text-muted);
-  padding: 4px;
-  border-radius: 6px;
+  padding: 5px;
+  border-radius: 8px;
   cursor: pointer;
 }
 
 .chat-menu-trigger:hover {
-  background: var(--surface-muted);
+  background: color-mix(in oklab, var(--surface-muted) 80%, transparent);
   color: var(--text-primary);
 }
 
@@ -238,8 +364,27 @@ select {
   color: var(--text-primary);
 }
 
+.chat-item-menu button.chat-item-menu-delete {
+  color: var(--danger) !important;
+}
+
+.chat-item-menu button.chat-item-menu-delete:hover {
+  background: color-mix(in oklab, var(--danger) 12%, var(--surface-elevated));
+  color: var(--danger) !important;
+}
+
+.chat-item-menu button.chat-item-menu-delete-confirm {
+  background: color-mix(in oklab, var(--danger) 14%, var(--surface-elevated));
+  color: var(--danger) !important;
+}
+
+.chat-item-menu button.chat-item-menu-delete-confirm:hover {
+  background: color-mix(in oklab, var(--danger) 22%, var(--surface-elevated));
+  color: var(--danger) !important;
+}
+
 .sidebar-footer {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid color-mix(in oklab, var(--border) 72%, transparent);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -252,9 +397,9 @@ select {
 
 .profile-trigger,
 .signin-link {
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in oklab, var(--border) 74%, transparent);
   border-radius: 9px;
-  background: var(--surface);
+  background: color-mix(in oklab, var(--surface) 42%, var(--sidebar-bg));
   color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
@@ -293,13 +438,13 @@ select {
   color: var(--text-primary);
   font-size: 0.8rem;
   font-weight: 700;
-  background: #171717;
+  background: color-mix(in oklab, var(--surface-muted) 68%, var(--sidebar-bg));
   flex: 0 0 auto;
   transition: background 0.15s ease;
 }
 
 .profile-avatar:hover {
-  background: #212121;
+  background: color-mix(in oklab, var(--surface) 48%, var(--sidebar-bg));
 }
 
 .profile-copy {
@@ -1122,6 +1267,41 @@ select {
   padding: 26px 20px 40px;
 }
 
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: color-mix(in oklab, var(--bg) 58%, rgba(8, 10, 14, 0.54));
+  backdrop-filter: blur(3px);
+}
+
+.settings-overlay-panel {
+  width: min(880px, 100%);
+  max-height: calc(100dvh - 44px);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-shell.settings-shell-overlay {
+  max-width: none;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .settings-topbar {
   display: flex;
   justify-content: space-between;
@@ -1144,6 +1324,33 @@ select {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.settings-close-button {
+  width: 32px;
+  height: 32px;
+  padding: 0 !important;
+  justify-content: center;
+  gap: 0;
+}
+
+.settings-close-button:hover {
+  border-color: color-mix(in oklab, var(--danger) 48%, var(--border));
+  color: var(--danger);
+  background: color-mix(in oklab, var(--danger) 11%, var(--surface));
+}
+
+.settings-close-button:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--danger) 50%, var(--border-strong));
+  outline-offset: 2px;
+}
+
+.settings-sync-indicator {
+  color: var(--text-muted);
+  font-size: 0.77rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .theme-toggle-button {
@@ -1182,6 +1389,35 @@ select {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.user-settings-grid {
+  align-content: start;
+}
+
+.settings-shell-overlay .settings-topbar {
+  margin: 0;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.settings-shell-overlay .settings-grid {
+  grid-template-columns: 1fr;
+  overflow: auto;
+  padding: 14px 20px 20px;
+}
+
+.settings-shell-overlay .settings-status {
+  margin: 0 20px 18px;
+  align-self: flex-start;
+}
+
+.settings-shell-overlay .settings-loading {
+  min-height: 100%;
 }
 
 .settings-grid article {
@@ -1310,6 +1546,27 @@ select {
 
   .settings-topbar {
     flex-direction: column;
+  }
+
+  .settings-overlay {
+    padding: 10px;
+  }
+
+  .settings-overlay-panel {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    border-radius: 14px;
+  }
+
+  .settings-shell-overlay .settings-topbar,
+  .settings-shell-overlay .settings-grid {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .settings-shell-overlay .settings-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 
   .chat-main-header {
