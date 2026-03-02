@@ -256,6 +256,21 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     router.push(`${pathname}?${params.toString()}`);
   }, [pathname, router, searchParams]);
 
+  const closeSearchChats = useCallback(() => {
+    setChatSearchOpen(false);
+    setChatSearchQuery("");
+  }, []);
+
+  const toggleSearchChats = useCallback(() => {
+    setChatSearchOpen((open) => {
+      if (!open) {
+        return true;
+      }
+      setChatSearchQuery("");
+      return false;
+    });
+  }, []);
+
   useEffect(() => {
     setIsHydrated(true);
   }, []);
@@ -533,7 +548,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onEscape);
     };
-  }, [isChatSearchOpen]);
+  }, [closeSearchChats, isChatSearchOpen]);
 
   useEffect(() => {
     if (!isChatSearchOpen) return;
@@ -838,20 +853,6 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     setMessages([]);
     setActiveChatId(undefined);
     setProfileMenuOpen(false);
-  }
-
-  function toggleSearchChats() {
-    if (isChatSearchOpen) {
-      setChatSearchOpen(false);
-      setChatSearchQuery("");
-      return;
-    }
-    setChatSearchOpen(true);
-  }
-
-  function closeSearchChats() {
-    setChatSearchOpen(false);
-    setChatSearchQuery("");
   }
 
   if (!isHydrated || (sessionLoading && !session)) {

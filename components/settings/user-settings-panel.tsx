@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LoaderCircle, X } from "lucide-react";
 
 import { useTheme } from "@/components/providers/theme-provider";
@@ -32,6 +32,96 @@ export function UserSettingsPanel({ mode = "page", onClose }: UserSettingsPanelP
   const [message, setMessage] = useState<string | null>(null);
   const lastSavedSettingsRef = useRef<string>(JSON.stringify(defaultSettings));
   const saveRequestIdRef = useRef(0);
+  const saveTimeoutRef = useRef<number | null>(null);
+  const pendingSerializedSettingsRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+
+  const persistSettings = useCallback(
+    async (serializedSettings: string, requestId: number, options?: { immediate?: boolean }) => {
+      if (!actor || actor.type !== "user") {
+        return;
+      }
+
+      if (mountedRef.current) {
+        setSaving(true);
+        setMessage("Saving changes...");
+      }
+
+      try {
+        const response = await fetch("/api/settings/user", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: serializedSettings,
+          keepalive: options?.immediate ?? false,
+        });
+        const data = (await response.json()) as { error?: string };
+
+        if (requestId !== saveRequestIdRef.current) {
+          return;
+        }
+
+        if (!response.ok) {
+          if (!mountedRef.current) {
+            return;
+          }
+          setMessage(data.error || "Failed to save settings");
+          setSaving(false);
+          return;
+        }
+
+        lastSavedSettingsRef.current = serializedSettings;
+        pendingSerializedSettingsRef.current = null;
+
+        if (!mountedRef.current) {
+          return;
+        }
+        setMessage("Saved");
+        setSaving(false);
+      } catch {
+        if (requestId !== saveRequestIdRef.current || !mountedRef.current) {
+          return;
+        }
+        setMessage("Failed to save settings");
+        setSaving(false);
+      }
+    },
+    [actor],
+  );
+
+  const flushPendingSave = useCallback(() => {
+    if (loading || !actor || actor.type !== "user") {
+      return;
+    }
+
+    const serializedSettings = pendingSerializedSettingsRef.current ?? JSON.stringify(settings);
+    if (serializedSettings === lastSavedSettingsRef.current) {
+      return;
+    }
+
+    if (saveTimeoutRef.current !== null) {
+      window.clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+
+    pendingSerializedSettingsRef.current = serializedSettings;
+    const requestId = ++saveRequestIdRef.current;
+    void persistSettings(serializedSettings, requestId, { immediate: true });
+  }, [actor, loading, persistSettings, settings]);
+
+  const requestClose = useCallback(() => {
+    if (!onClose) {
+      return;
+    }
+    flushPendingSave();
+    onClose();
+  }, [flushPendingSave, onClose]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -68,7 +158,7 @@ export function UserSettingsPanel({ mode = "page", onClose }: UserSettingsPanelP
 
     function onEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        onClose?.();
+        requestClose();
       }
     }
 
@@ -76,7 +166,7 @@ export function UserSettingsPanel({ mode = "page", onClose }: UserSettingsPanelP
     return () => {
       document.removeEventListener("keydown", onEscape);
     };
-  }, [isOverlay, onClose]);
+  }, [isOverlay, onClose, requestClose]);
 
   useEffect(() => {
     if (loading || !actor || actor.type !== "user") return;
@@ -84,41 +174,21 @@ export function UserSettingsPanel({ mode = "page", onClose }: UserSettingsPanelP
     const nextSerialized = JSON.stringify(settings);
     if (nextSerialized === lastSavedSettingsRef.current) return;
 
+    pendingSerializedSettingsRef.current = nextSerialized;
     const requestId = ++saveRequestIdRef.current;
     const timeout = window.setTimeout(async () => {
-      setSaving(true);
-      setMessage("Saving changes...");
-
-      try {
-        const response = await fetch("/api/settings/user", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: nextSerialized,
-        });
-        const data = (await response.json()) as { error?: string };
-
-        if (requestId !== saveRequestIdRef.current) return;
-
-        if (!response.ok) {
-          setMessage(data.error || "Failed to save settings");
-          setSaving(false);
-          return;
-        }
-
-        lastSavedSettingsRef.current = nextSerialized;
-        setMessage("Saved");
-        setSaving(false);
-      } catch {
-        if (requestId !== saveRequestIdRef.current) return;
-        setMessage("Failed to save settings");
-        setSaving(false);
-      }
+      await persistSettings(nextSerialized, requestId);
     }, 500);
+
+    saveTimeoutRef.current = timeout;
 
     return () => {
       window.clearTimeout(timeout);
+      if (saveTimeoutRef.current === timeout) {
+        saveTimeoutRef.current = null;
+      }
     };
-  }, [actor, loading, settings]);
+  }, [actor, loading, persistSettings, settings]);
 
   const panelContent = loading ? (
     <div className="settings-loading">
@@ -135,7 +205,7 @@ export function UserSettingsPanel({ mode = "page", onClose }: UserSettingsPanelP
         </div>
         {isOverlay && onClose ? (
           <div className="settings-actions">
-            <button type="button" onClick={onClose} className="settings-close-button" aria-label="Close settings">
+            <button type="button" onClick={requestClose} className="settings-close-button" aria-label="Close settings">
               <X size={14} />
             </button>
           </div>
@@ -166,7 +236,7 @@ export function UserSettingsPanel({ mode = "page", onClose }: UserSettingsPanelP
             </span>
           ) : null}
           {isOverlay && onClose ? (
-            <button type="button" onClick={onClose} className="settings-close-button" aria-label="Close settings">
+            <button type="button" onClick={requestClose} className="settings-close-button" aria-label="Close settings">
               <X size={14} />
             </button>
           ) : null}
@@ -288,7 +358,7 @@ export function UserSettingsPanel({ mode = "page", onClose }: UserSettingsPanelP
       aria-label="User settings"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && onClose) {
-          onClose();
+          requestClose();
         }
       }}
     >
