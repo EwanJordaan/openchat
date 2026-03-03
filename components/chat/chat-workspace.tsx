@@ -22,6 +22,7 @@ import {
   LoaderCircle,
   LogOut,
   PanelLeftClose,
+  PanelLeftOpen,
   Paperclip,
   Search,
   SendHorizontal,
@@ -311,6 +312,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const [isChatSearchOpen, setChatSearchOpen] = useState(false);
   const [chatSearchQuery, setChatSearchQuery] = useState("");
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isCollapsedBrandHover, setCollapsedBrandHover] = useState(false);
   const isSettingsOverlayOpen = searchParams.get("settings") === "1";
   const filteredChats = useMemo(() => {
     const query = chatSearchQuery.trim().toLocaleLowerCase();
@@ -368,11 +370,29 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     });
   }, [isSidebarCollapsed]);
 
+  const handleNewChat = useCallback(() => {
+    if (session) {
+      removeCachedChatMessages(session.actor, DRAFT_CHAT_ID);
+    }
+    setOpenChatMenuId(null);
+    router.push("/");
+    setMessages([]);
+    setError(null);
+    setPendingFiles([]);
+    setActiveChatId(undefined);
+  }, [router, session]);
+
   useEffect(() => {
     if (!isSidebarCollapsed) return;
     setChatSearchOpen(false);
     setOpenChatMenuId(null);
     setConfirmDeleteChatId(null);
+  }, [isSidebarCollapsed]);
+
+  useEffect(() => {
+    if (!isSidebarCollapsed) {
+      setCollapsedBrandHover(false);
+    }
   }, [isSidebarCollapsed]);
 
   useEffect(() => {
@@ -1144,40 +1164,60 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     <div className={`chat-layout ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <aside className={`chat-sidebar ${isSidebarCollapsed ? "collapsed" : ""}`}>
         <div className="sidebar-header">
-          <button
-            type="button"
-            className="sidebar-brand-row sidebar-brand-toggle"
-            onClick={() => setSidebarCollapsed((value) => !value)}
-            aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            <span className="sidebar-brand-mark">
-              <OpenChatGlyph className="sidebar-brand-icon" />
-            </span>
-            {!isSidebarCollapsed ? <p className="sidebar-brand">OpenChat</p> : null}
-            {!isSidebarCollapsed ? (
-              <span className="sidebar-brand-toggle-icon" aria-hidden="true">
-                <PanelLeftClose size={14} />
+          <div className="sidebar-top-row">
+            <button
+              type="button"
+              className="sidebar-brand-row sidebar-brand-new-chat"
+              onMouseEnter={() => {
+                if (isSidebarCollapsed) {
+                  setCollapsedBrandHover(true);
+                }
+              }}
+              onMouseLeave={() => setCollapsedBrandHover(false)}
+              onClick={isSidebarCollapsed ? () => setSidebarCollapsed(false) : handleNewChat}
+              aria-label={isSidebarCollapsed ? "Expand sidebar" : "New chat"}
+              title={isSidebarCollapsed ? "Expand sidebar" : "New chat"}
+            >
+              <span className="sidebar-brand-mark">
+                {isSidebarCollapsed && isCollapsedBrandHover ? (
+                  <PanelLeftOpen className="sidebar-brand-icon" size={16} />
+                ) : (
+                  <OpenChatGlyph className="sidebar-brand-icon" />
+                )}
               </span>
+              {!isSidebarCollapsed ? <p className="sidebar-brand">OpenChat</p> : null}
+            </button>
+            {!isSidebarCollapsed ? (
+              <button
+                type="button"
+                className="sidebar-collapse-toggle"
+                onClick={() => setSidebarCollapsed((value) => !value)}
+                aria-label="Collapse sidebar"
+                title="Collapse sidebar"
+              >
+                <PanelLeftClose size={16} />
+              </button>
             ) : null}
-          </button>
+          </div>
+
+          {isSidebarCollapsed ? (
+            <button
+              type="button"
+              className="sidebar-collapsed-new-chat"
+              onClick={handleNewChat}
+              aria-label="New chat"
+              title="New chat"
+            >
+              <SquarePen size={18} strokeWidth={1.9} />
+            </button>
+          ) : null}
 
           {!isSidebarCollapsed ? (
             <div className="sidebar-nav">
               <button
                 type="button"
                 className="sidebar-nav-item"
-                onClick={() => {
-                  if (session) {
-                    removeCachedChatMessages(session.actor, DRAFT_CHAT_ID);
-                  }
-                  setOpenChatMenuId(null);
-                  router.push("/");
-                  setMessages([]);
-                  setError(null);
-                  setPendingFiles([]);
-                  setActiveChatId(undefined);
-                }}
+                onClick={handleNewChat}
               >
                 <SquarePen className="sidebar-nav-icon" size={18} strokeWidth={1.9} />
                 <span className="sidebar-nav-label">New chat</span>
