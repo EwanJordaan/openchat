@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
+import "katex/dist/katex.min.css";
 
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import "./globals.css";
