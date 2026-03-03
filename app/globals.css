@@ -19,6 +19,7 @@
   --sidebar-width: 300px;
   --chat-header-height: 58px;
   --chat-composer-height: 176px;
+  --chat-end-scroll-space: 100px;
   --scrollbar-size: 18px;
   --scrollbar-track: color-mix(in oklab, var(--surface-muted) 70%, var(--surface));
   --scrollbar-thumb: color-mix(in oklab, var(--text-muted) 38%, var(--surface));
@@ -685,7 +686,7 @@ select {
   flex: 1 1 auto;
   min-height: 0;
   overflow: visible;
-  padding: calc(var(--chat-header-height) + 20px) 0 calc(var(--chat-composer-height) + 12px) 24px;
+  padding: calc(var(--chat-header-height) + 20px) 0 var(--chat-end-scroll-space) 24px;
   position: relative;
   display: flex;
   flex-direction: column;
