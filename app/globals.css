@@ -556,9 +556,7 @@ select {
 }
 
 .chat-main-header {
-  position: fixed;
-  left: var(--sidebar-width);
-  right: var(--scrollbar-size);
+  position: sticky;
   top: 0;
   z-index: 24;
   border-bottom: 1px solid var(--border);
@@ -684,9 +682,8 @@ select {
 
 .message-stream {
   flex: 1 1 auto;
-  min-height: 0;
-  overflow: visible;
-  padding: calc(var(--chat-header-height) + 20px) 0 var(--chat-end-scroll-space) 24px;
+  min-height: max-content;
+  padding: 20px 0 var(--chat-end-scroll-space) 24px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -745,6 +742,7 @@ select {
   border-radius: 0;
   background: transparent;
   padding: 0;
+  position: relative;
 }
 
 .message.user {
@@ -913,6 +911,92 @@ select {
   word-break: break-word;
 }
 
+.message-assistant-footer {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 0.2rem;
+}
+
+.message-copy-button {
+  border: 1px solid color-mix(in oklab, var(--border) 72%, transparent);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface-elevated) 82%, transparent);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.message-copy-button span {
+  display: none;
+}
+
+.message-copy-button:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: color-mix(in oklab, var(--surface-elevated) 92%, transparent);
+}
+
+.message-copy-button:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--text-primary) 42%, transparent);
+  outline-offset: 1px;
+}
+
+.message-context-menu {
+  position: fixed;
+  min-width: 170px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow);
+  padding: 4px;
+  z-index: 44;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.message-context-menu-item {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  text-align: left;
+  font-size: 0.77rem;
+  line-height: 1.2;
+  padding: 0.42rem 0.5rem;
+  cursor: pointer;
+}
+
+.message-context-menu-item:hover {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.markdown-content .katex {
+  max-width: 100%;
+}
+
+.markdown-content .katex-display {
+  margin: 0.95rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.15rem;
+}
+
+.markdown-content .katex-display > .katex {
+  display: inline-block;
+  min-width: max-content;
+}
+
 .message > ul {
   list-style: none;
   margin: 8px 0 0;
@@ -955,9 +1039,7 @@ select {
 }
 
 .composer-wrap {
-  position: fixed;
-  left: var(--sidebar-width);
-  right: var(--scrollbar-size);
+  position: sticky;
   bottom: 0;
   width: auto;
   z-index: 24;
@@ -1572,18 +1654,9 @@ select {
 
   .chat-main-header {
     position: sticky;
-    left: auto;
-    right: auto;
-    width: calc(100% - var(--scrollbar-size));
-    margin-right: var(--scrollbar-size);
     z-index: 10;
   }
 
-  .composer-wrap {
-    left: 0;
-    right: 0;
-    width: 100vw;
-  }
 }
 
 @media (max-width: 680px) {

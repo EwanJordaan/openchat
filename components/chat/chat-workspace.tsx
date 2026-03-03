@@ -2,10 +2,21 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import {
   AlertTriangle,
+  Check,
   ChevronDown,
+  Copy,
   Ellipsis,
   FileText,
   LoaderCircle,
@@ -19,8 +30,10 @@ import {
   SquarePen,
   Trash2,
 } from "lucide-react";
+import rehypeKatex from "rehype-katex";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useTheme } from "@/components/providers/theme-provider";
@@ -31,6 +44,7 @@ const CHAT_CACHE_KEY = "openchat:chat-list";
 const CHAT_MESSAGES_CACHE_KEY = "openchat:chat-messages";
 const SESSION_CACHE_KEY = "openchat:session";
 const DRAFT_CHAT_ID = "draft";
+const COPY_FEEDBACK_MS = 1600;
 
 let sessionMemoryCache: SessionPayload | null = null;
 
@@ -107,17 +121,15 @@ interface SessionPayload {
   error?: string;
 }
 
+interface UserMessageContextMenuState {
+  messageId: string;
+  x: number;
+  y: number;
+}
+
 function actorCacheKey(actor: Actor | null) {
   if (!actor) return "anonymous";
   return actor.type === "user" ? `user:${actor.userId}` : `guest:${actor.guestId}`;
-}
-
-function useAutoScroll(dep: unknown) {
-  const anchorRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    anchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [dep]);
-  return anchorRef;
 }
 
 function ModelSelector({
@@ -175,6 +187,23 @@ function OpenChatGlyph({ className }: { className?: string }) {
   );
 }
 
+function normalizeMathDelimiters(content: string) {
+  const codeBlocks: string[] = [];
+  const withoutCodeBlocks = content.replace(/(```[\s\S]*?```|~~~[\s\S]*?~~~)/g, (block) => {
+    const index = codeBlocks.push(block) - 1;
+    return `__OPENCHAT_CODE_BLOCK_${index}__`;
+  });
+
+  const normalized = withoutCodeBlocks
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, formula: string) => `$${formula}$`)
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, formula: string) => `$$${formula}$$`);
+
+  return normalized.replace(/__OPENCHAT_CODE_BLOCK_(\d+)__/g, (_, rawIndex: string) => {
+    const index = Number(rawIndex);
+    return Number.isNaN(index) ? "" : codeBlocks[index] || "";
+  });
+}
+
 export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -217,8 +246,10 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isAttachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [copiedAssistantMessageId, setCopiedAssistantMessageId] = useState<string | null>(null);
+  const [copiedUserMessageId, setCopiedUserMessageId] = useState<string | null>(null);
+  const [userContextMenu, setUserContextMenu] = useState<UserMessageContextMenuState | null>(null);
 
-  const messageAnchor = useAutoScroll(messages.length);
   const activeChat = useMemo(() => chats.find((chat) => chat.id === activeChatId) || null, [chats, activeChatId]);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const attachMenuRef = useRef<HTMLDivElement | null>(null);
@@ -230,6 +261,9 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const chatMenuRef = useRef<HTMLDivElement | null>(null);
   const searchMenuRef = useRef<HTMLDivElement | null>(null);
+  const userContextMenuRef = useRef<HTMLDivElement | null>(null);
+  const assistantCopyTimerRef = useRef<number | null>(null);
+  const userCopyTimerRef = useRef<number | null>(null);
   const chatSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [isProfileMenuOpen, setProfileMenuOpen] = useState(false);
   const [openChatMenuId, setOpenChatMenuId] = useState<string | null>(null);
@@ -473,6 +507,18 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     }
   }, [canChat]);
 
+  useEffect(
+    () => () => {
+      if (assistantCopyTimerRef.current !== null) {
+        clearTimeout(assistantCopyTimerRef.current);
+      }
+      if (userCopyTimerRef.current !== null) {
+        clearTimeout(userCopyTimerRef.current);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!isProfileMenuOpen) return;
 
@@ -556,6 +602,47 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   }, [isChatSearchOpen]);
 
   useEffect(() => {
+    if (!userContextMenu) return;
+
+    function closeContextMenu() {
+      setUserContextMenu(null);
+    }
+
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!userContextMenuRef.current?.contains(target)) {
+        closeContextMenu();
+      }
+    }
+
+    function onEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closeContextMenu();
+      }
+    }
+
+    window.addEventListener("blur", closeContextMenu);
+    window.addEventListener("scroll", closeContextMenu, true);
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      window.removeEventListener("blur", closeContextMenu);
+      window.removeEventListener("scroll", closeContextMenu, true);
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [userContextMenu]);
+
+  useEffect(() => {
+    if (!userContextMenu) return;
+    const targetMessage = messages.find((message) => message.id === userContextMenu.messageId && message.role === "user");
+    if (!targetMessage) {
+      setUserContextMenu(null);
+    }
+  }, [messages, userContextMenu]);
+
+  useEffect(() => {
     const textarea = composerInputRef.current;
     if (!textarea) return;
 
@@ -579,14 +666,120 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     if (!stream) return;
     const distanceToBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight;
     shouldStickToBottomRef.current = distanceToBottom < 80;
+    if (userContextMenu) {
+      setUserContextMenu(null);
+    }
   }
 
   useEffect(() => {
     const stream = messageStreamRef.current;
     if (!stream) return;
     if (!shouldStickToBottomRef.current) return;
-    stream.scrollTop = stream.scrollHeight;
+    stream.scrollTo({
+      top: stream.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages]);
+
+  async function copyText(content: string) {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(content);
+        return true;
+      } catch {
+        // Fall back when clipboard API is blocked.
+      }
+    }
+
+    if (typeof document === "undefined") {
+      return false;
+    }
+
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = content;
+      textarea.setAttribute("readonly", "true");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const copied = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      return copied;
+    } catch {
+      return false;
+    }
+  }
+
+  async function handleCopyAssistantMessage(messageId: string, content: string) {
+    const copied = await copyText(content);
+    if (!copied) {
+      setError("Could not copy assistant message.");
+      return;
+    }
+
+    setError(null);
+    setCopiedAssistantMessageId(messageId);
+    if (assistantCopyTimerRef.current !== null) {
+      clearTimeout(assistantCopyTimerRef.current);
+    }
+    assistantCopyTimerRef.current = window.setTimeout(() => {
+      setCopiedAssistantMessageId((current) => (current === messageId ? null : current));
+    }, COPY_FEEDBACK_MS);
+  }
+
+  async function handleCopyUserMessage(messageId: string) {
+    const targetMessage = messages.find((message) => message.id === messageId && message.role === "user");
+    if (!targetMessage) {
+      setUserContextMenu(null);
+      return;
+    }
+
+    const copied = await copyText(targetMessage.content);
+    if (!copied) {
+      setError("Could not copy message.");
+      return;
+    }
+
+    setError(null);
+    setCopiedUserMessageId(messageId);
+    setUserContextMenu(null);
+    if (userCopyTimerRef.current !== null) {
+      clearTimeout(userCopyTimerRef.current);
+    }
+    userCopyTimerRef.current = window.setTimeout(() => {
+      setCopiedUserMessageId((current) => (current === messageId ? null : current));
+    }, COPY_FEEDBACK_MS);
+  }
+
+  function handleEditUserMessage(messageId: string) {
+    const targetMessage = messages.find((message) => message.id === messageId && message.role === "user");
+    if (!targetMessage) {
+      setUserContextMenu(null);
+      return;
+    }
+
+    setDraft(targetMessage.content);
+    setUserContextMenu(null);
+    requestAnimationFrame(() => {
+      const textarea = composerInputRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.selectionStart = textarea.value.length;
+      textarea.selectionEnd = textarea.value.length;
+    });
+  }
+
+  function openUserContextMenu(event: ReactMouseEvent<HTMLElement>, messageId: string) {
+    event.preventDefault();
+    const menuWidth = 176;
+    const menuHeight = 92;
+    const viewportPadding = 8;
+    const clampedX = Math.max(viewportPadding, Math.min(event.clientX, window.innerWidth - menuWidth - viewportPadding));
+    const clampedY = Math.max(viewportPadding, Math.min(event.clientY, window.innerHeight - menuHeight - viewportPadding));
+    setUserContextMenu({ messageId, x: clampedX, y: clampedY });
+  }
 
   async function uploadPendingFiles() {
     if (!pendingFiles.length) return [] as UploadedFile[];
@@ -1095,7 +1288,10 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
           ) : (
             messages.map((message) => (
               <div key={message.id} className={`message-row ${message.role}`}>
-                <article className={`message ${message.role}`}>
+                <article
+                  className={`message ${message.role}`}
+                  onContextMenu={message.role === "user" ? (event) => openUserContextMenu(event, message.id) : undefined}
+                >
                   {message.role === "user" ? (
                     <header>
                       <strong>You</strong>
@@ -1104,11 +1300,29 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                   ) : null}
                   <div className={`message-content ${message.role === "assistant" ? "markdown-content" : ""}`}>
                     {message.role === "assistant" ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: "ignore" }]]}
+                      >
+                        {normalizeMathDelimiters(message.content)}
+                      </ReactMarkdown>
                     ) : (
                       <p>{message.content}</p>
                     )}
                   </div>
+                  {message.role === "assistant" ? (
+                    <div className="message-assistant-footer">
+                      <button
+                        type="button"
+                        className="message-copy-button"
+                        onClick={() => void handleCopyAssistantMessage(message.id, message.content)}
+                        aria-label={copiedAssistantMessageId === message.id ? "Copied assistant message" : "Copy assistant message"}
+                        title={copiedAssistantMessageId === message.id ? "Copied" : "Copy"}
+                      >
+                        {copiedAssistantMessageId === message.id ? <Check size={13} /> : <Copy size={13} />}
+                      </button>
+                    </div>
+                  ) : null}
                   {message.attachments.length ? (
                     <ul>
                       {message.attachments.map((file) => (
@@ -1125,8 +1339,32 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
               </div>
             ))
           )}
-          <div ref={messageAnchor} />
         </section>
+        {userContextMenu ? (
+          <div
+            ref={userContextMenuRef}
+            className="message-context-menu"
+            role="menu"
+            style={{ left: `${userContextMenu.x}px`, top: `${userContextMenu.y}px` }}
+          >
+            <button
+              type="button"
+              className="message-context-menu-item"
+              onClick={() => handleEditUserMessage(userContextMenu.messageId)}
+            >
+              <SquarePen size={14} />
+              Edit
+            </button>
+            <button
+              type="button"
+              className="message-context-menu-item"
+              onClick={() => void handleCopyUserMessage(userContextMenu.messageId)}
+            >
+              {copiedUserMessageId === userContextMenu.messageId ? <Check size={14} /> : <Copy size={14} />}
+              {copiedUserMessageId === userContextMenu.messageId ? "Copied" : "Copy"}
+            </button>
+          </div>
+        ) : null}
 
         <footer className="composer-wrap">
             <form
