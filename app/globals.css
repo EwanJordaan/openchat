@@ -1,20 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f7f7f8;
-  --surface: #ffffff;
-  --surface-elevated: #fcfcfc;
-  --surface-muted: #f1f2f4;
-  --sidebar-bg: #f3f4f6;
-  --text-primary: #1f1f1f;
-  --text-secondary: #4a4d57;
-  --text-muted: #6b7280;
-  --border: #e4e5e8;
-  --border-strong: #cfd2d7;
+  --bg: #efe7db;
+  --main-bg: #f6f1e9;
+  --surface: #fffaf3;
+  --surface-elevated: #fffdf9;
+  --surface-muted: #ece3d6;
+  --sidebar-bg: #e2d5c5;
+  --sidebar-bg-strong: #d7c7b2;
+  --text-primary: #2f2418;
+  --text-secondary: #534236;
+  --text-muted: #746456;
+  --border: #d8c7b3;
+  --border-strong: #bda68f;
   --accent: #111111;
-  --accent-soft: #eceef1;
+  --accent-soft: #e8d8c4;
   --danger: #d14343;
-  --shadow: 0 8px 28px rgba(24, 24, 27, 0.08);
+  --shadow: 0 10px 30px rgba(47, 36, 24, 0.11);
   --chat-content-max-width: 900px;
   --sidebar-width: 300px;
   --chat-header-height: 58px;
@@ -26,20 +28,22 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #212121;
-  --surface: #212121;
-  --surface-elevated: #2f2f2f;
-  --surface-muted: #1b1b1b;
-  --sidebar-bg: #171717;
-  --text-primary: #ececec;
-  --text-secondary: #c7c7c7;
-  --text-muted: #9d9d9d;
-  --border: #3f3f46;
-  --border-strong: #54545b;
+  --bg: #17120d;
+  --main-bg: #1d1711;
+  --surface: #272019;
+  --surface-elevated: #2f261e;
+  --surface-muted: #221b14;
+  --sidebar-bg: #1b150f;
+  --sidebar-bg-strong: #221a13;
+  --text-primary: #efe1d1;
+  --text-secondary: #cdb89f;
+  --text-muted: #b09b85;
+  --border: #493b2d;
+  --border-strong: #66533f;
   --accent: #ececec;
-  --accent-soft: #3a3a3a;
+  --accent-soft: #3c2f22;
   --danger: #ef7f7f;
-  --shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  --shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
 }
 
 * {
@@ -93,53 +97,129 @@ select {
   height: 100dvh;
   max-height: 100dvh;
   overflow: hidden;
+  background: var(--main-bg);
 }
 
 .chat-sidebar {
-  border-right: 1px solid var(--border);
   background: var(--sidebar-bg);
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  position: relative;
+}
+
+.chat-sidebar::after {
+  content: none;
 }
 
 .sidebar-header {
-  border-bottom: 1px solid var(--border);
-  padding: 14px 12px;
+  padding: 16px 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  background: var(--sidebar-bg);
 }
 
 .sidebar-brand {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: color-mix(in oklab, var(--text-secondary) 85%, var(--text-muted));
   padding: 0 4px;
 }
 
 .new-chat {
   width: 100%;
   border: 0;
-  border-radius: 8px;
-  background: transparent;
+  border-radius: 12px;
+  background: var(--sidebar-bg);
   color: var(--text-primary);
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
   gap: 0.45rem;
-  font-size: 0.9rem;
-  font-weight: 500;
-  padding: 0.56rem 0.52rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  padding: 0.6rem 0.56rem;
   cursor: pointer;
 }
 
 .new-chat:hover {
-  background: var(--surface-elevated);
+  background: var(--sidebar-bg);
+}
+
+.sidebar-search {
+  min-height: 36px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 90%, var(--sidebar-bg));
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: border-color 0.16s ease;
+}
+
+.sidebar-search:focus-within {
+  border-bottom-color: var(--border-strong);
+}
+
+.sidebar-search-icon {
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+
+.sidebar-search-input {
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  flex: 1;
+  min-width: 0;
+  padding: 0.42rem 0;
+}
+
+.sidebar-search-input::placeholder {
+  color: color-mix(in oklab, var(--text-muted) 80%, var(--surface));
+}
+
+.sidebar-search-hint {
+  border: 1px solid color-mix(in oklab, var(--border) 88%, var(--sidebar-bg));
+  border-radius: 6px;
+  padding: 0.06rem 0.34rem;
+  font-size: 0.67rem;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+  background: transparent;
+  white-space: nowrap;
+  transition: opacity 0.14s ease;
+}
+
+.sidebar-search:focus-within .sidebar-search-hint {
+  opacity: 0.38;
+}
+
+.sidebar-search-clear {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.sidebar-search-clear:hover {
+  color: var(--text-primary);
+  background: transparent;
 }
 
 .chat-list {
@@ -147,28 +227,40 @@ select {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 10px;
+  padding: 12px 10px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
+}
+
+.chat-list-empty {
+  margin: 10px 6px 0;
+  padding: 0.58rem 0.7rem;
+  border: 1px dashed color-mix(in oklab, var(--border) 84%, var(--sidebar-bg));
+  border-radius: 10px;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  background: color-mix(in oklab, var(--surface) 58%, var(--sidebar-bg));
 }
 
 .chat-item {
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   gap: 6px;
   background: transparent;
-  padding: 6px 8px;
+  padding: 7px 8px;
+  position: relative;
 }
 
-.chat-item:hover {
-  background: var(--surface-elevated);
+.chat-item:hover,
+.chat-item.active {
+  background: color-mix(in oklab, var(--surface) 55%, var(--sidebar-bg));
 }
 
 .chat-item.active {
-  background: var(--surface-elevated);
+  box-shadow: inset 3px 0 0 color-mix(in oklab, var(--text-primary) 65%, var(--surface));
 }
 
 .chat-item a {
@@ -209,7 +301,7 @@ select {
   min-width: 148px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--surface-elevated);
+  background: var(--surface);
   box-shadow: var(--shadow);
   padding: 5px;
   z-index: 25;
@@ -239,11 +331,11 @@ select {
 }
 
 .sidebar-footer {
-  border-top: 1px solid var(--border);
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  background: var(--sidebar-bg);
 }
 
 .profile-menu-wrap {
@@ -254,7 +346,7 @@ select {
 .signin-link {
   border: 1px solid var(--border);
   border-radius: 9px;
-  background: var(--surface);
+  background: var(--sidebar-bg);
   color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
@@ -285,7 +377,7 @@ select {
 .profile-avatar {
   width: 26px;
   height: 26px;
-  border: none;
+  border: 1px solid var(--border);
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
@@ -293,13 +385,13 @@ select {
   color: var(--text-primary);
   font-size: 0.8rem;
   font-weight: 700;
-  background: #171717;
+  background: var(--sidebar-bg);
   flex: 0 0 auto;
   transition: background 0.15s ease;
 }
 
 .profile-avatar:hover {
-  background: #212121;
+  background: var(--sidebar-bg);
 }
 
 .profile-copy {
@@ -388,6 +480,7 @@ select {
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  background: var(--main-bg);
 }
 
 .chat-main::-webkit-scrollbar {
@@ -396,7 +489,6 @@ select {
 
 .chat-main::-webkit-scrollbar-track {
   background: var(--scrollbar-track);
-  border-left: 1px solid var(--border);
 }
 
 .chat-main::-webkit-scrollbar-thumb {
@@ -415,8 +507,9 @@ select {
   right: var(--scrollbar-size);
   top: 0;
   z-index: 24;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  background: color-mix(in oklab, var(--main-bg) 80%, var(--surface));
+  box-shadow: 0 10px 24px rgba(15, 11, 8, 0.06);
+  backdrop-filter: blur(7px);
   padding: 10px 16px;
   display: flex;
   align-items: center;
@@ -448,45 +541,106 @@ select {
 
 .model-trigger {
   border: 0;
-  border-radius: 8px;
-  background: transparent;
+  border-radius: 13px;
+  background: color-mix(in oklab, var(--surface) 80%, var(--main-bg));
   color: var(--text-primary);
-  min-width: 110px;
-  max-width: 220px;
-  padding: 0.2rem 0.3rem;
+  min-width: 170px;
+  max-width: 320px;
+  padding: 0.4rem 0.6rem;
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   cursor: pointer;
-  font-size: 0.92rem;
-  font-weight: 500;
+  text-align: left;
   outline: none;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--border) 35%, transparent);
 }
 
 .model-trigger:hover {
-  background: var(--surface-elevated);
+  background: color-mix(in oklab, var(--surface) 92%, var(--main-bg));
 }
 
-.model-menu {
+.model-trigger-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+}
+
+.model-trigger-copy small {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.model-trigger-copy strong {
+  font-size: 0.84rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-trigger-provider {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 0.16rem 0.42rem;
+  background: color-mix(in oklab, var(--surface-muted) 70%, var(--surface));
+}
+
+.model-trigger-caret {
+  color: var(--text-muted);
+  transition: transform 0.18s ease;
+}
+
+.model-selector.open .model-trigger-caret {
+  transform: rotate(180deg);
+}
+
+.model-drawer {
   position: absolute;
   z-index: 20;
   left: 0;
   top: calc(100% + 8px);
-  width: min(360px, 70vw);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
+  width: min(420px, 76vw);
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--surface) 88%, var(--main-bg));
   box-shadow: var(--shadow);
-  padding: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.model-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.model-group-label {
+  margin: 0;
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  padding-left: 4px;
+}
+
+.model-group-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
 .model-option {
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 0;
+  border-radius: 11px;
   background: var(--surface-elevated);
   color: var(--text-primary);
   display: flex;
@@ -500,8 +654,7 @@ select {
 
 .model-option:hover,
 .model-option.active {
-  border-color: var(--border-strong);
-  background: var(--accent-soft);
+  background: color-mix(in oklab, var(--accent-soft) 78%, var(--surface));
 }
 
 .model-option-label {
@@ -1297,7 +1450,7 @@ select {
 
   .chat-sidebar {
     border-right: 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 0;
   }
 
   .chat-list {
@@ -1344,7 +1497,7 @@ select {
     max-width: unset;
   }
 
-  .model-menu {
+  .model-drawer {
     width: 100%;
   }
 

@@ -11,12 +11,14 @@ import {
   LoaderCircle,
   LogOut,
   Paperclip,
+  Search,
   SendHorizontal,
   Settings,
   Shield,
   Square,
   SquarePen,
   Trash2,
+  X,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -39,6 +41,15 @@ function safeParseJson<T>(raw: string | null) {
   } catch {
     return null;
   }
+}
+
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+    return true;
+  }
+  return !!target.closest("input, textarea, select, [contenteditable='true']");
 }
 
 function getInitialSessionSnapshot() {
@@ -128,33 +139,102 @@ function ModelSelector({
   onSelect: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const selectorRef = useRef<HTMLDivElement | null>(null);
   const current = models.find((model) => model.id === modelId) || models[0];
+  const groupedModels = useMemo(() => {
+    const buckets: Record<"Fast" | "Balanced" | "Deep Reasoning", ModelOption[]> = {
+      Fast: [],
+      Balanced: [],
+      "Deep Reasoning": [],
+    };
+
+    for (const model of models) {
+      const text = `${model.id} ${model.displayName}`.toLowerCase();
+      if (/(mini|haiku|flash|turbo|lite|fast)/.test(text)) {
+        buckets.Fast.push(model);
+        continue;
+      }
+      if (/(thinking|reason|o1|o3|opus|pro|r1|deep)/.test(text)) {
+        buckets["Deep Reasoning"].push(model);
+        continue;
+      }
+      buckets.Balanced.push(model);
+    }
+
+    return [
+      { label: "Fast", items: buckets.Fast },
+      { label: "Balanced", items: buckets.Balanced },
+      { label: "Deep Reasoning", items: buckets["Deep Reasoning"] },
+    ].filter((group) => group.items.length > 0);
+  }, [models]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!selectorRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    }
+
+    function onEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [open]);
 
   return (
-    <div className="model-selector">
-      <button type="button" className="model-trigger" onClick={() => setOpen((value) => !value)}>
-        <span>{current?.displayName ?? "Select model"}</span>
-        <ChevronDown size={14} />
+    <div className={`model-selector ${open ? "open" : ""}`} ref={selectorRef}>
+      <button
+        type="button"
+        className="model-trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="model-trigger-copy">
+          <small>Model</small>
+          <strong>{current?.displayName ?? "Select model"}</strong>
+        </span>
+        <span className="model-trigger-provider">{current?.provider ?? "Provider"}</span>
+        <ChevronDown size={14} className="model-trigger-caret" />
       </button>
 
       {open ? (
-        <div className="model-menu">
-          {models.map((model) => (
-            <button
-              type="button"
-              key={model.id}
-              className={`model-option ${model.id === modelId ? "active" : ""}`}
-              onClick={() => {
-                onSelect(model.id);
-                setOpen(false);
-              }}
-            >
-              <div>
-                <p className="model-option-label">{model.displayName}</p>
-                <p className="model-option-desc">{model.description}</p>
+        <div className="model-drawer" role="menu">
+          {groupedModels.map((group) => (
+            <section className="model-group" key={group.label}>
+              <p className="model-group-label">{group.label}</p>
+              <div className="model-group-list">
+                {group.items.map((model) => (
+                  <button
+                    type="button"
+                    key={model.id}
+                    className={`model-option ${model.id === modelId ? "active" : ""}`}
+                    onClick={() => {
+                      onSelect(model.id);
+                      setOpen(false);
+                    }}
+                  >
+                    <div>
+                      <p className="model-option-label">{model.displayName}</p>
+                      <p className="model-option-desc">{model.description}</p>
+                    </div>
+                    <span className="model-option-provider">{model.provider}</span>
+                  </button>
+                ))}
               </div>
-              <span className="model-option-provider">{model.provider}</span>
-            </button>
+            </section>
           ))}
         </div>
       ) : null}
@@ -217,9 +297,16 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const chatMenuRef = useRef<HTMLDivElement | null>(null);
   const [isProfileMenuOpen, setProfileMenuOpen] = useState(false);
   const [openChatMenuId, setOpenChatMenuId] = useState<string | null>(null);
+  const [sidebarQuery, setSidebarQuery] = useState("");
+  const [isMacPlatform, setIsMacPlatform] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    setIsMacPlatform(/Mac|iPhone|iPad/i.test(window.navigator.platform));
   }, []);
 
   useEffect(() => {
@@ -238,6 +325,27 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const canChat =
     !!session &&
     !(session.actor.type === "guest" && !session.settings.guestEnabled);
+  const normalizedSidebarQuery = sidebarQuery.trim().toLowerCase();
+  const filteredChats = useMemo(() => {
+    if (!normalizedSidebarQuery) return chats;
+    const queryTokens = normalizedSidebarQuery.split(/\s+/).filter(Boolean);
+    if (!queryTokens.length) return chats;
+
+    const modelSearchTextById = new Map(
+      (session?.models ?? []).map((model) => [model.id, `${model.id} ${model.displayName} ${model.provider}`.toLowerCase()]),
+    );
+    const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+    return chats.filter((chat) => {
+      const createdDate = new Date(chat.createdAt);
+      const updatedDate = new Date(chat.updatedAt);
+      const createdText = Number.isNaN(createdDate.valueOf()) ? "" : dateFormatter.format(createdDate);
+      const updatedText = Number.isNaN(updatedDate.valueOf()) ? "" : dateFormatter.format(updatedDate);
+      const haystack = `${chat.title} ${chat.modelId} ${modelSearchTextById.get(chat.modelId) || ""} ${createdText} ${updatedText}`.toLowerCase();
+      return queryTokens.every((token) => haystack.includes(token));
+    });
+  }, [chats, normalizedSidebarQuery, session?.models]);
+  const showNoResults = normalizedSidebarQuery.length > 0 && filteredChats.length === 0;
 
   const loadSession = useCallback(async ({ showLoader = false }: { showLoader?: boolean } = {}) => {
     if (showLoader) {
@@ -469,6 +577,26 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       document.removeEventListener("keydown", onEscape);
     };
   }, [openChatMenuId]);
+
+  useEffect(() => {
+    function onSearchShortcut(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "k") {
+        return;
+      }
+      const target = event.target;
+      if (isEditableTarget(target) && target !== searchInputRef.current) {
+        return;
+      }
+      event.preventDefault();
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }
+
+    document.addEventListener("keydown", onSearchShortcut);
+    return () => {
+      document.removeEventListener("keydown", onSearchShortcut);
+    };
+  }, []);
 
   useEffect(() => {
     const textarea = composerInputRef.current;
@@ -814,38 +942,72 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
             <SquarePen size={14} />
             New chat
           </button>
+          <div className="sidebar-search">
+            <Search size={14} className="sidebar-search-icon" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="sidebar-search-input"
+              placeholder="Search chats"
+              aria-label="Search chats"
+              value={sidebarQuery}
+              onChange={(event) => {
+                setSidebarQuery(event.target.value);
+                setOpenChatMenuId(null);
+              }}
+            />
+            {sidebarQuery ? (
+              <button
+                type="button"
+                className="sidebar-search-clear"
+                aria-label="Clear search"
+                onClick={() => {
+                  setSidebarQuery("");
+                  searchInputRef.current?.focus();
+                }}
+              >
+                <X size={12} />
+              </button>
+            ) : (
+              <span className="sidebar-search-hint">{isMacPlatform ? "⌘K" : "Ctrl+K"}</span>
+            )}
+          </div>
         </div>
 
         <div className="chat-list" role="list">
-          {chats.map((chat) => (
-            <div key={chat.id} className={`chat-item ${chat.id === activeChatId ? "active" : ""}`}>
-              <Link href={`/chat/${chat.id}`}>
-                <span>{chat.title}</span>
-              </Link>
-              <div className="chat-item-actions" ref={openChatMenuId === chat.id ? chatMenuRef : undefined}>
-                <button
-                  type="button"
-                  className="chat-menu-trigger"
-                  aria-haspopup="menu"
-                  aria-expanded={openChatMenuId === chat.id}
-                  title="Chat options"
-                  onClick={() => setOpenChatMenuId((current) => (current === chat.id ? null : chat.id))}
-                >
-                  <Ellipsis size={14} />
-                </button>
-                {openChatMenuId === chat.id ? (
-                  <div className="chat-item-menu" role="menu">
-                    <button type="button" onClick={() => void renameChat(chat.id)}>
-                      Rename
-                    </button>
-                    <button type="button" onClick={() => void removeChat(chat.id)}>
-                      <Trash2 size={13} /> Delete
-                    </button>
-                  </div>
-                ) : null}
+          {showNoResults ? (
+            <p className="chat-list-empty">No chats found.</p>
+          ) : (
+            filteredChats.map((chat) => (
+              <div key={chat.id} className={`chat-item ${chat.id === activeChatId ? "active" : ""}`}>
+                <Link href={`/chat/${chat.id}`}>
+                  <span>{chat.title}</span>
+                </Link>
+                <div className="chat-item-actions" ref={openChatMenuId === chat.id ? chatMenuRef : undefined}>
+                  <button
+                    type="button"
+                    className="chat-menu-trigger"
+                    aria-haspopup="menu"
+                    aria-expanded={openChatMenuId === chat.id}
+                    title="Chat options"
+                    onClick={() => setOpenChatMenuId((current) => (current === chat.id ? null : chat.id))}
+                  >
+                    <Ellipsis size={14} />
+                  </button>
+                  {openChatMenuId === chat.id ? (
+                    <div className="chat-item-menu" role="menu">
+                      <button type="button" onClick={() => void renameChat(chat.id)}>
+                        Rename
+                      </button>
+                      <button type="button" onClick={() => void removeChat(chat.id)}>
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
         <div className="sidebar-footer">
