@@ -31,6 +31,11 @@ function actorCacheKey(actor: Awaited<ReturnType<typeof resolveActor>>["actor"])
     : { type: "guest" as const, id: actor.guestId };
 }
 
+function resolveRoleKey(actor: Awaited<ReturnType<typeof resolveActor>>["actor"]) {
+  if (actor.type === "guest") return "guest" as const;
+  return actor.roles.includes("admin") ? "admin" : "user";
+}
+
 export async function POST(request: Request) {
   const resolved = await resolveActor();
   const payload = await request.json().catch(() => null);
@@ -62,7 +67,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const roleKey = resolved.actor.type === "user" && resolved.actor.roles.includes("admin") ? "admin" : resolved.actor.type === "user" ? "user" : "guest";
+  const roleKey = resolveRoleKey(resolved.actor);
   const roleLimit = await getRoleLimit(roleKey);
   if (parsed.data.attachmentIds.length > roleLimit.maxAttachmentCount) {
     return jsonError(`Attachment limit exceeded. Max ${roleLimit.maxAttachmentCount} files per message.`, 400);

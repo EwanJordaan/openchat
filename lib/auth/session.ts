@@ -36,19 +36,19 @@ export function cookieOptions(maxAgeSeconds: number) {
   };
 }
 
-export async function setSessionCookie(response: NextResponse, sessionToken: string) {
+export function setSessionCookie(response: NextResponse, sessionToken: string) {
   response.cookies.set(env.SESSION_COOKIE_NAME, sessionToken, cookieOptions(AUTH_COOKIE_MAX_AGE));
 }
 
-export async function clearSessionCookie(response: NextResponse) {
+export function clearSessionCookie(response: NextResponse) {
   response.cookies.set(env.SESSION_COOKIE_NAME, "", cookieOptions(0));
 }
 
-export async function ensureGuestCookie(response: NextResponse, guestId: string) {
+export function ensureGuestCookie(response: NextResponse, guestId: string) {
   response.cookies.set(env.GUEST_COOKIE_NAME, guestId, cookieOptions(60 * 60 * 24 * 180));
 }
 
-export async function clearGuestCookie(response: NextResponse) {
+export function clearGuestCookie(response: NextResponse) {
   response.cookies.set(env.GUEST_COOKIE_NAME, "", cookieOptions(0));
 }
 

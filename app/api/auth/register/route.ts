@@ -41,8 +41,8 @@ export async function POST(request: Request) {
     user,
   });
 
-  await setSessionCookie(response, sessionToken);
-  await clearGuestCookie(response);
+  setSessionCookie(response, sessionToken);
+  clearGuestCookie(response);
 
   return response;
 }

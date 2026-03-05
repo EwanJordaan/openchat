@@ -104,7 +104,15 @@ export function AdminDashboard() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(action),
     });
-    const result = (await response.json()) as { error?: string };
+    const raw = await response.text();
+    let result: { error?: string } = {};
+    if (raw) {
+      try {
+        result = JSON.parse(raw) as { error?: string };
+      } catch {
+        result = {};
+      }
+    }
     if (!response.ok) {
       setStatus(result.error || "Failed to save changes");
       return false;

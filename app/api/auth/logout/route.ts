@@ -7,7 +7,7 @@ export async function POST() {
   await logoutCurrentSession();
 
   const response = NextResponse.json({ ok: true });
-  await clearSessionCookie(response);
-  await ensureGuestCookie(response, resolved.actor.guestId);
+  clearSessionCookie(response);
+  ensureGuestCookie(response, resolved.actor.guestId);
   return response;
 }

@@ -49,8 +49,8 @@ export async function POST(request: Request) {
     },
   });
 
-  await setSessionCookie(response, sessionToken);
-  await clearGuestCookie(response);
+  setSessionCookie(response, sessionToken);
+  clearGuestCookie(response);
 
   if (resolved.needsSessionCleanup) {
     response.headers.set("x-session-cleaned", "1");
