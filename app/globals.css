@@ -133,7 +133,7 @@ select {
 
 .new-chat {
   width: 100%;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 12px;
   background: var(--sidebar-bg);
   color: var(--text-primary);
@@ -145,10 +145,48 @@ select {
   font-weight: 600;
   padding: 0.6rem 0.56rem;
   cursor: pointer;
+  transform: translateY(0);
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
-.new-chat:hover {
-  background: var(--sidebar-bg);
+.new-chat-label {
+  min-width: 0;
+}
+
+.new-chat-shortcut {
+  margin-left: auto;
+  border: 1px solid color-mix(in oklab, var(--border) 88%, var(--sidebar-bg));
+  border-radius: 6px;
+  padding: 0.08rem 0.35rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  color: var(--text-muted);
+  background: color-mix(in oklab, var(--surface) 42%, var(--sidebar-bg));
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(3px);
+  transition: opacity 0.16s ease, transform 0.16s ease, border-color 0.16s ease, visibility 0.16s ease;
+}
+
+.new-chat:hover,
+.new-chat:focus-visible {
+  background: color-mix(in oklab, var(--surface) 72%, var(--sidebar-bg));
+  border-color: color-mix(in oklab, var(--border-strong) 72%, var(--sidebar-bg));
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--surface) 65%, transparent);
+  transform: translateY(-1px);
+}
+
+.new-chat:hover .new-chat-shortcut,
+.new-chat:focus-visible .new-chat-shortcut {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+}
+
+.new-chat:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--border-strong) 72%, transparent);
+  outline-offset: 2px;
 }
 
 .sidebar-search {

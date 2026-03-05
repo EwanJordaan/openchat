@@ -347,6 +347,18 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   }, [chats, normalizedSidebarQuery, session?.models]);
   const showNoResults = normalizedSidebarQuery.length > 0 && filteredChats.length === 0;
 
+  const handleNewChat = useCallback(() => {
+    if (session) {
+      removeCachedChatMessages(session.actor, DRAFT_CHAT_ID);
+    }
+    setOpenChatMenuId(null);
+    router.push("/");
+    setMessages([]);
+    setError(null);
+    setPendingFiles([]);
+    setActiveChatId(undefined);
+  }, [router, session]);
+
   const loadSession = useCallback(async ({ showLoader = false }: { showLoader?: boolean } = {}) => {
     if (showLoader) {
       setSessionLoading(true);
@@ -597,6 +609,24 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       document.removeEventListener("keydown", onSearchShortcut);
     };
   }, []);
+
+  useEffect(() => {
+    function onNewChatShortcut(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || !event.shiftKey || event.key.toLowerCase() !== "o") {
+        return;
+      }
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+      event.preventDefault();
+      handleNewChat();
+    }
+
+    document.addEventListener("keydown", onNewChatShortcut);
+    return () => {
+      document.removeEventListener("keydown", onNewChatShortcut);
+    };
+  }, [handleNewChat]);
 
   useEffect(() => {
     const textarea = composerInputRef.current;
@@ -927,20 +957,14 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
           <button
             type="button"
             className="new-chat"
-            onClick={() => {
-              if (session) {
-                removeCachedChatMessages(session.actor, DRAFT_CHAT_ID);
-              }
-              setOpenChatMenuId(null);
-              router.push("/");
-              setMessages([]);
-              setError(null);
-              setPendingFiles([]);
-              setActiveChatId(undefined);
-            }}
+            onClick={handleNewChat}
+            title={isMacPlatform ? "New chat (Cmd+Shift+O)" : "New chat (Ctrl+Shift+O)"}
           >
             <SquarePen size={14} />
-            New chat
+            <span className="new-chat-label">New chat</span>
+            <span className="new-chat-shortcut" aria-hidden="true">
+              {isMacPlatform ? "Cmd+Shift+O" : "Ctrl+Shift+O"}
+            </span>
           </button>
           <div className="sidebar-search">
             <Search size={14} className="sidebar-search-icon" />
@@ -969,7 +993,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                 <X size={12} />
               </button>
             ) : (
-              <span className="sidebar-search-hint">{isMacPlatform ? "⌘K" : "Ctrl+K"}</span>
+              <span className="sidebar-search-hint">{isMacPlatform ? "Cmd+K" : "Ctrl+K"}</span>
             )}
           </div>
         </div>
@@ -1211,3 +1235,4 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     </div>
   );
 }
+
