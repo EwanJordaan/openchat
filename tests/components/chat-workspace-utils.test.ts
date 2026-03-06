@@ -55,7 +55,7 @@ describe("chat workspace helpers", () => {
     expect(getVisibleMessages([baseMessage, laterMessage], null)).toEqual([baseMessage, laterMessage]);
   });
 
-  it("shows copy for non-assistant messages and edit for persisted user messages", () => {
+  it("shows copy for all messages and edit for persisted user messages", () => {
     expect(
       getMessageActionState(baseMessage, {
         editingMessageId: null,
@@ -81,7 +81,7 @@ describe("chat workspace helpers", () => {
         },
       ),
     ).toEqual({
-      showCopy: false,
+      showCopy: true,
       showEdit: false,
       disableEdit: false,
     });

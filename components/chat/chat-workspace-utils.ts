@@ -61,7 +61,7 @@ export function getMessageActionState(
     degraded: boolean;
   },
 ) {
-  const showCopy = message.role !== "assistant";
+  const showCopy = true;
   const showEdit = message.role === "user" && isPersistedMessage(message.id) && !options.editingMessageId;
   const disableEdit = options.sending || options.degraded;
 

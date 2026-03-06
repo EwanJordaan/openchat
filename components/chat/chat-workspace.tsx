@@ -1365,8 +1365,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                               title={copiedMessageId === message.id ? "Copied" : "Copy"}
                               onClick={() => void copyMessage(message)}
                             >
-                              {copiedMessageId === message.id ? <Check size={13} /> : <Copy size={13} />}
-                              <span>{copiedMessageId === message.id ? "Copied" : "Copy"}</span>
+                              {copiedMessageId === message.id ? <Check size={15} /> : <Copy size={15} />}
                             </button>
                           ) : null}
                           {actionState.showEdit ? (
@@ -1378,8 +1377,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                               onClick={() => startEditingMessage(message)}
                               disabled={actionState.disableEdit}
                             >
-                              <SquarePen size={13} />
-                              <span>Edit</span>
+                              <SquarePen size={15} />
                             </button>
                           ) : null}
                         </div>
