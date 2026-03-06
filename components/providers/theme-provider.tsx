@@ -14,7 +14,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const STORAGE_KEY = "openchat:theme";
 
-function resolveTheme(mode: ThemeMode) {
+export function resolveTheme(mode: ThemeMode) {
   if (mode === "system") {
     if (typeof window === "undefined") return "dark" as const;
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -22,31 +22,33 @@ function resolveTheme(mode: ThemeMode) {
   return mode;
 }
 
+export function resolveInitialMode(): ThemeMode {
+  if (typeof window === "undefined") return "system";
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved === "light" || saved === "dark" || saved === "system") {
+    return saved;
+  }
+  return "system";
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setMode] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") return "system";
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved === "light" || saved === "dark" || saved === "system") {
-      return saved;
-    }
-    return "system";
-  });
+  const [mode, setMode] = useState<ThemeMode>(resolveInitialMode);
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("dark");
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
 
-    const apply = () => {
+    const applyResolvedTheme = () => {
       const next = resolveTheme(mode);
       setResolvedTheme(next);
       document.documentElement.dataset.theme = next;
     };
 
-    apply();
-    media.addEventListener("change", apply);
+    applyResolvedTheme();
+    media.addEventListener("change", applyResolvedTheme);
     localStorage.setItem(STORAGE_KEY, mode);
 
-    return () => media.removeEventListener("change", apply);
+    return () => media.removeEventListener("change", applyResolvedTheme);
   }, [mode]);
 
   const value = useMemo(

@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, LoaderCircle, Save, ShieldAlert } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { LoaderCircle, Save, ShieldAlert } from "lucide-react";
 
 import type { Actor, ModelOption, PublicAppSettings, RoleLimit } from "@/lib/types";
 
@@ -32,6 +32,16 @@ interface AdminPayload {
   users: UserItem[];
 }
 
+export function parseErrorMessage(raw: string) {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { error?: string };
+    return parsed.error || null;
+  } catch {
+    return null;
+  }
+}
+
 export function AdminDashboard() {
   const [actor, setActor] = useState<Actor | null>(null);
   const [data, setData] = useState<AdminPayload | null>(null);
@@ -40,6 +50,18 @@ export function AdminDashboard() {
 
   const [providerKeys, setProviderKeys] = useState<Record<string, string>>({});
   const [providerMessages, setProviderMessages] = useState<Record<string, string>>({});
+
+  const patchData = useCallback((updater: (current: AdminPayload) => AdminPayload) => {
+    setData((current) => (current ? updater(current) : current));
+  }, []);
+
+  const fetchAdminConfig = useCallback(async () => {
+    const response = await fetch("/api/admin/config", { cache: "no-store" });
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as AdminPayload;
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -55,8 +77,8 @@ export function AdminDashboard() {
         return;
       }
 
-      const response = await fetch("/api/admin/config", { cache: "no-store" });
-      if (!response.ok) {
+      const payload = await fetchAdminConfig();
+      if (!payload) {
         if (alive) {
           setStatus("Failed to load admin dashboard");
           setLoading(false);
@@ -64,7 +86,6 @@ export function AdminDashboard() {
         return;
       }
 
-      const payload = (await response.json()) as AdminPayload;
       if (!alive) return;
       setData(payload);
       setLoading(false);
@@ -74,22 +95,21 @@ export function AdminDashboard() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [fetchAdminConfig]);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setStatus(null);
 
-    const response = await fetch("/api/admin/config", { cache: "no-store" });
-    if (!response.ok) {
+    const payload = await fetchAdminConfig();
+    if (!payload) {
       setStatus("Failed to load admin dashboard");
       setLoading(false);
       return;
     }
-    const payload = (await response.json()) as AdminPayload;
     setData(payload);
     setLoading(false);
-  }
+  }, [fetchAdminConfig]);
 
   const modelsById = useMemo(() => {
     const map = new Map<string, ModelOption>();
@@ -100,32 +120,14 @@ export function AdminDashboard() {
   }, [data?.models]);
 
   async function update(action: unknown) {
-    try {
-      const response = await fetch("/api/admin/config", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(action),
-      });
-
-      const raw = await response.text();
-      let result: { error?: string } | null = null;
-      if (raw) {
-        try {
-          result = JSON.parse(raw) as { error?: string };
-        } catch {
-          result = null;
-        }
-      }
-
-      if (!response.ok) {
-        setStatus(result?.error || `Failed to save changes (${response.status})`);
-        return false;
-      }
-      setStatus("Saved.");
-      await load();
-      return true;
-    } catch {
-      setStatus("Failed to save changes");
+    const response = await fetch("/api/admin/config", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(action),
+    });
+    const raw = await response.text();
+    if (!response.ok) {
+      setStatus(parseErrorMessage(raw) || "Failed to save changes");
       return false;
     }
   }
@@ -233,17 +235,13 @@ export function AdminDashboard() {
             <select
               value={data.settings.defaultModelId}
               onChange={(event) => {
-                setData((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        settings: {
-                          ...prev.settings,
-                          defaultModelId: event.target.value,
-                        },
-                      }
-                    : prev,
-                );
+                patchData((current) => ({
+                  ...current,
+                  settings: {
+                    ...current.settings,
+                    defaultModelId: event.target.value,
+                  },
+                }));
               }}
             >
               {data.models.map((model) => (
@@ -284,21 +282,17 @@ export function AdminDashboard() {
                     value={provider.baseUrl}
                     onChange={(event) => {
                       const value = event.target.value;
-                      setData((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              providers: prev.providers.map((item) =>
-                                item.id === provider.id
-                                  ? {
-                                      ...item,
-                                      baseUrl: value,
-                                    }
-                                  : item,
-                              ),
-                            }
-                          : prev,
-                      );
+                      patchData((current) => ({
+                        ...current,
+                        providers: current.providers.map((item) =>
+                          item.id === provider.id
+                            ? {
+                                ...item,
+                                baseUrl: value,
+                              }
+                            : item,
+                        ),
+                      }));
                     }}
                   />
                 </label>
@@ -322,21 +316,17 @@ export function AdminDashboard() {
                     checked={provider.isEnabled}
                     onChange={(event) => {
                       const checked = event.target.checked;
-                      setData((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              providers: prev.providers.map((item) =>
-                                item.id === provider.id
-                                  ? {
-                                      ...item,
-                                      isEnabled: checked,
-                                    }
-                                  : item,
-                              ),
-                            }
-                          : prev,
-                      );
+                      patchData((current) => ({
+                        ...current,
+                        providers: current.providers.map((item) =>
+                          item.id === provider.id
+                            ? {
+                                ...item,
+                                isEnabled: checked,
+                              }
+                            : item,
+                        ),
+                      }));
                     }}
                   />
                   Provider enabled
@@ -371,21 +361,17 @@ export function AdminDashboard() {
                     checked={model.isEnabled}
                     onChange={(event) => {
                       const checked = event.target.checked;
-                      setData((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              models: prev.models.map((item) =>
-                                item.id === model.id
-                                  ? {
-                                      ...item,
-                                      isEnabled: checked,
-                                    }
-                                  : item,
-                              ),
-                            }
-                          : prev,
-                      );
+                      patchData((current) => ({
+                        ...current,
+                        models: current.models.map((item) =>
+                          item.id === model.id
+                            ? {
+                                ...item,
+                                isEnabled: checked,
+                              }
+                            : item,
+                        ),
+                      }));
                     }}
                   />
                   Enabled
@@ -396,21 +382,17 @@ export function AdminDashboard() {
                     checked={model.isGuestAllowed}
                     onChange={(event) => {
                       const checked = event.target.checked;
-                      setData((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              models: prev.models.map((item) =>
-                                item.id === model.id
-                                  ? {
-                                      ...item,
-                                      isGuestAllowed: checked,
-                                    }
-                                  : item,
-                              ),
-                            }
-                          : prev,
-                      );
+                      patchData((current) => ({
+                        ...current,
+                        models: current.models.map((item) =>
+                          item.id === model.id
+                            ? {
+                                ...item,
+                                isGuestAllowed: checked,
+                              }
+                            : item,
+                        ),
+                      }));
                     }}
                   />
                   Guest allowed
@@ -421,17 +403,13 @@ export function AdminDashboard() {
                     checked={model.isDefault}
                     onChange={(event) => {
                       const checked = event.target.checked;
-                      setData((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              models: prev.models.map((item) => ({
-                                ...item,
-                                isDefault: item.id === model.id ? checked : checked ? false : item.isDefault,
-                              })),
-                            }
-                          : prev,
-                      );
+                      patchData((current) => ({
+                        ...current,
+                        models: current.models.map((item) => ({
+                          ...item,
+                          isDefault: item.id === model.id ? checked : checked ? false : item.isDefault,
+                        })),
+                      }));
                     }}
                   />
                   Default model
@@ -472,21 +450,17 @@ export function AdminDashboard() {
                     value={limit.dailyMessageLimit}
                     onChange={(event) => {
                       const value = Number(event.target.value);
-                      setData((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              roleLimits: prev.roleLimits.map((item) =>
-                                item.role === limit.role
-                                  ? {
-                                      ...item,
-                                      dailyMessageLimit: value,
-                                    }
-                                  : item,
-                              ),
-                            }
-                          : prev,
-                      );
+                      patchData((current) => ({
+                        ...current,
+                        roleLimits: current.roleLimits.map((item) =>
+                          item.role === limit.role
+                            ? {
+                                ...item,
+                                dailyMessageLimit: value,
+                              }
+                            : item,
+                        ),
+                      }));
                     }}
                   />
                 </label>
@@ -497,21 +471,17 @@ export function AdminDashboard() {
                     value={limit.maxAttachmentCount}
                     onChange={(event) => {
                       const value = Number(event.target.value);
-                      setData((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              roleLimits: prev.roleLimits.map((item) =>
-                                item.role === limit.role
-                                  ? {
-                                      ...item,
-                                      maxAttachmentCount: value,
-                                    }
-                                  : item,
-                              ),
-                            }
-                          : prev,
-                      );
+                      patchData((current) => ({
+                        ...current,
+                        roleLimits: current.roleLimits.map((item) =>
+                          item.role === limit.role
+                            ? {
+                                ...item,
+                                maxAttachmentCount: value,
+                              }
+                            : item,
+                        ),
+                      }));
                     }}
                   />
                 </label>
@@ -522,21 +492,17 @@ export function AdminDashboard() {
                     value={limit.maxAttachmentMb}
                     onChange={(event) => {
                       const value = Number(event.target.value);
-                      setData((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              roleLimits: prev.roleLimits.map((item) =>
-                                item.role === limit.role
-                                  ? {
-                                      ...item,
-                                      maxAttachmentMb: value,
-                                    }
-                                  : item,
-                              ),
-                            }
-                          : prev,
-                      );
+                      patchData((current) => ({
+                        ...current,
+                        roleLimits: current.roleLimits.map((item) =>
+                          item.role === limit.role
+                            ? {
+                                ...item,
+                                maxAttachmentMb: value,
+                              }
+                            : item,
+                        ),
+                      }));
                     }}
                   />
                 </label>
@@ -570,21 +536,17 @@ export function AdminDashboard() {
                     value={user.roles.includes("admin") ? "admin" : "user"}
                     onChange={(event) => {
                       const value = event.target.value as "user" | "admin";
-                      setData((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              users: prev.users.map((item) =>
-                                item.id === user.id
-                                  ? {
-                                      ...item,
-                                      roles: value === "admin" ? ["user", "admin"] : ["user"],
-                                    }
-                                  : item,
-                              ),
-                            }
-                          : prev,
-                      );
+                      patchData((current) => ({
+                        ...current,
+                        users: current.users.map((item) =>
+                          item.id === user.id
+                            ? {
+                                ...item,
+                                roles: value === "admin" ? ["user", "admin"] : ["user"],
+                              }
+                            : item,
+                        ),
+                      }));
                     }}
                   >
                     <option value="user">User</option>

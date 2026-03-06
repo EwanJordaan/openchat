@@ -153,20 +153,28 @@ export function UserSettingsPanel({ mode = "page", onClose }: UserSettingsPanelP
     };
   }, [setMode]);
 
-  useEffect(() => {
-    if (!isOverlay || !onClose) return;
+  async function save() {
+    setSaving(true);
+    setMessage(null);
 
-    function onEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        requestClose();
+    try {
+      const response = await fetch("/api/settings/user", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+      const data = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        setMessage(data.error || "Failed to save settings");
+        return;
       }
-    }
 
-    document.addEventListener("keydown", onEscape);
-    return () => {
-      document.removeEventListener("keydown", onEscape);
-    };
-  }, [isOverlay, onClose, requestClose]);
+      setMessage("Settings updated successfully.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (loading || !actor || actor.type !== "user") return;

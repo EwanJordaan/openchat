@@ -14,12 +14,14 @@ import {
   getRoleLimit,
   listModelsForActor,
   logAudit,
+  rewriteUserMessageAndTrimFollowing,
   touchFilesWithChat,
 } from "@/lib/db/store";
 import { attachActorCookies, jsonError } from "@/lib/http";
 
 const sendSchema = z.object({
   chatId: z.string().min(4).max(60).optional(),
+  editMessageId: z.string().min(4).max(60).optional(),
   message: z.string().min(1).max(12000),
   modelId: z.string().min(2).max(120),
   attachmentIds: z.array(z.string().min(4).max(60)).default([]),
@@ -29,6 +31,11 @@ function actorCacheKey(actor: Awaited<ReturnType<typeof resolveActor>>["actor"])
   return actor.type === "user"
     ? { type: "user" as const, id: actor.userId }
     : { type: "guest" as const, id: actor.guestId };
+}
+
+function resolveRoleKey(actor: Awaited<ReturnType<typeof resolveActor>>["actor"]) {
+  if (actor.type === "guest") return "guest" as const;
+  return actor.roles.includes("admin") ? "admin" : "user";
 }
 
 export async function POST(request: Request) {
@@ -62,7 +69,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const roleKey = resolved.actor.type === "user" && resolved.actor.roles.includes("admin") ? "admin" : resolved.actor.type === "user" ? "user" : "guest";
+  const roleKey = resolveRoleKey(resolved.actor);
   const roleLimit = await getRoleLimit(roleKey);
   if (parsed.data.attachmentIds.length > roleLimit.maxAttachmentCount) {
     return jsonError(`Attachment limit exceeded. Max ${roleLimit.maxAttachmentCount} files per message.`, 400);
@@ -75,6 +82,14 @@ export async function POST(request: Request) {
   }
 
   let chatId = parsed.data.chatId;
+  if (parsed.data.editMessageId && !chatId) {
+    return jsonError("Editing a message requires a chat id", 400);
+  }
+
+  if (parsed.data.editMessageId && parsed.data.attachmentIds.length) {
+    return jsonError("Editing a message does not support attachment changes", 400);
+  }
+
   if (!chatId) {
     const inferredTitle = message.trim().slice(0, 72) || "New chat";
     chatId = await createChat(resolved.actor, inferredTitle, model.id);
@@ -85,15 +100,33 @@ export async function POST(request: Request) {
     }
   }
 
-  await touchFilesWithChat(files.map((file) => file.id), chatId);
+  if (parsed.data.editMessageId) {
+    const rewriteResult = await rewriteUserMessageAndTrimFollowing(resolved.actor, {
+      chatId,
+      messageId: parsed.data.editMessageId,
+      content: message,
+    });
 
-  await appendMessage({
-    chatId,
-    role: "user",
-    content: message,
-    modelId: model.id,
-    attachments: files,
-  });
+    if (!rewriteResult.ok) {
+      if (rewriteResult.reason === "chat-not-found") {
+        return jsonError("Chat not found", 404);
+      }
+      if (rewriteResult.reason === "not-user-message") {
+        return jsonError("Only user messages can be edited", 400);
+      }
+      return jsonError("Message not found", 404);
+    }
+  } else {
+    await touchFilesWithChat(files.map((file) => file.id), chatId);
+
+    await appendMessage({
+      chatId,
+      role: "user",
+      content: message,
+      modelId: model.id,
+      attachments: files,
+    });
+  }
 
   const hydratedChat = await getChat(resolved.actor, chatId);
   if (!hydratedChat) {
@@ -143,6 +176,7 @@ export async function POST(request: Request) {
             targetId: chatId,
             payload: {
               modelId: model.id,
+              editedMessageId: parsed.data.editMessageId ?? null,
               providerStatus,
               attachmentCount: files.length,
               usage,

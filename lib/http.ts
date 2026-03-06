@@ -11,7 +11,7 @@ export function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
-export async function attachActorCookies(
+export function attachActorCookies(
   response: NextResponse,
   options: {
     actor: Actor;
@@ -19,11 +19,12 @@ export async function attachActorCookies(
     needsSessionCleanup?: boolean;
   },
 ) {
-  if (options.needsGuestCookie) {
-    await ensureGuestCookie(response, options.actor.guestId);
+  const { actor, needsGuestCookie, needsSessionCleanup } = options;
+  if (needsGuestCookie) {
+    ensureGuestCookie(response, actor.guestId);
   }
-  if (options.needsSessionCleanup) {
-    await clearSessionCookie(response);
+  if (needsSessionCleanup) {
+    clearSessionCookie(response);
   }
   return response;
 }

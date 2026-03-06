@@ -1,0 +1,81 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`app/api/auth/session GET returns healthy session payload 1`] = `
+{
+  "actor": {
+    "guestId": "gst_1",
+    "roles": [
+      "guest",
+    ],
+    "type": "guest",
+    "user": null,
+    "userId": null,
+  },
+  "degraded": false,
+  "models": [
+    {
+      "description": "Fast",
+      "displayName": "GPT-4o mini",
+      "id": "gpt-4o-mini",
+      "isDefault": true,
+      "isEnabled": true,
+      "isGuestAllowed": true,
+      "maxOutputTokens": 2048,
+      "provider": "openai",
+    },
+  ],
+  "settings": {
+    "defaultModelId": "gpt-4o-mini",
+    "guestAllowedModels": [
+      "gpt-4o-mini",
+    ],
+    "guestEnabled": true,
+  },
+}
+`;
+
+exports[`app/api/auth/session GET falls back to degraded guest payload on failure 1`] = `
+{
+  "actor": {
+    "guestId": "gst_1",
+    "roles": [
+      "guest",
+    ],
+    "type": "guest",
+    "user": null,
+    "userId": null,
+  },
+  "degraded": true,
+  "error": "db unavailable",
+  "models": [
+    {
+      "description": "Fast, lightweight model for most tasks",
+      "displayName": "GPT-4o mini",
+      "id": "gpt-4o-mini",
+      "isDefault": true,
+      "isEnabled": true,
+      "isGuestAllowed": true,
+      "maxOutputTokens": 2048,
+      "provider": "openai",
+    },
+    {
+      "description": "Balanced quality and speed",
+      "displayName": "GPT-4.1 mini",
+      "id": "gpt-4.1-mini",
+      "isDefault": false,
+      "isEnabled": true,
+      "isGuestAllowed": true,
+      "maxOutputTokens": 4096,
+      "provider": "openai",
+    },
+  ],
+  "settings": {
+    "defaultModelId": "gpt-4o-mini",
+    "guestAllowedModels": [
+      "gpt-4o-mini",
+      "gpt-4.1-mini",
+    ],
+    "guestEnabled": true,
+  },
+}
+`;

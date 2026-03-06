@@ -7,6 +7,15 @@ import { LoaderCircle, LogIn, UserPlus } from "lucide-react";
 
 import type { Actor } from "@/lib/types";
 
+const DEFAULT_NEXT_PATH = "/";
+
+export function buildAuthPayload(mode: "login" | "register", email: string, password: string, name: string) {
+  if (mode === "login") {
+    return { email, password };
+  }
+  return { email, password, name };
+}
+
 export function SignInView({
   mode,
   nextPath,
@@ -15,6 +24,7 @@ export function SignInView({
   nextPath: string;
 }) {
   const router = useRouter();
+  const resolvedNextPath = nextPath || DEFAULT_NEXT_PATH;
 
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -32,7 +42,7 @@ export function SignInView({
         const data = (await response.json()) as { actor: Actor };
         if (!alive) return;
         if (data.actor.type === "user") {
-          router.replace(nextPath || "/");
+          router.replace(resolvedNextPath);
           return;
         }
       } finally {
@@ -44,15 +54,15 @@ export function SignInView({
     return () => {
       alive = false;
     };
-  }, [nextPath, router]);
+  }, [resolvedNextPath, router]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError(null);
 
-    const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
-    const payload = mode === "login" ? { email, password } : { email, password, name };
+    const endpoint = mode === "login" ? "/api/auth/sign-in/email" : "/api/auth/sign-up/email";
+    const payload = buildAuthPayload(mode, email, password, name);
 
     try {
       const response = await fetch(endpoint, {
@@ -60,13 +70,20 @@ export function SignInView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string } | string;
+        message?: string;
+      };
       if (!response.ok) {
-        setError(data.error || "Authentication failed");
+        const errorMessage =
+          typeof data.error === "string"
+            ? data.error
+            : data.error?.message || data.message || "Authentication failed";
+        setError(errorMessage);
         return;
       }
 
-      router.replace(nextPath || "/");
+      router.replace(resolvedNextPath);
       router.refresh();
     } catch {
       setError("Network error while signing in");
@@ -138,17 +155,17 @@ export function SignInView({
         <p className="signin-backlink">
           {mode === "login" ? (
             <>
-              New here? <Link href={`/signup?next=${encodeURIComponent(nextPath || "/")}`}>Create account</Link>
+              New here? <Link href={`/signup?next=${encodeURIComponent(resolvedNextPath)}`}>Create account</Link>
             </>
           ) : (
             <>
-              Already have an account? <Link href={`/signin?next=${encodeURIComponent(nextPath || "/")}`}>Sign in</Link>
+              Already have an account? <Link href={`/signin?next=${encodeURIComponent(resolvedNextPath)}`}>Sign in</Link>
             </>
           )}
         </p>
 
         <p className="signin-backlink">
-          Continue as guest? <Link href={nextPath || "/"}>Back to chat</Link>
+          Continue as guest? <Link href={resolvedNextPath}>Back to chat</Link>
         </p>
       </div>
     </div>

@@ -488,7 +488,7 @@ export async function getChat(actor: Actor, chatId: string) {
   if (!chat) return null;
 
   const messageRows = await query<Record<string, unknown>>(
-    sql`select id, chat_id, role, content, model_id, attachments_json, created_at from messages where chat_id = ${chatId} order by created_at asc`,
+    sql`select id, chat_id, role, content, model_id, attachments_json, created_at from messages where chat_id = ${chatId} order by created_at asc, id asc`,
   );
 
   const messages: ChatMessage[] = messageRows.map((row) => ({
@@ -509,6 +509,68 @@ export async function getChat(actor: Actor, chatId: string) {
     updatedAt: String(chat.updated_at),
     messages,
   };
+}
+
+export async function rewriteUserMessageAndTrimFollowing(
+  actor: Actor,
+  input: {
+    chatId: string;
+    messageId: string;
+    content: string;
+  },
+) {
+  await ensureDatabase();
+  const { withTransaction } = getDb();
+
+  return withTransaction(async (tx) => {
+    const chatRows = actor.type === "user"
+      ? await tx.query<Record<string, unknown>>(
+          sql`select id from chats where id = ${input.chatId} and user_id = ${actor.userId} limit 1`,
+        )
+      : await tx.query<Record<string, unknown>>(
+          sql`select id from chats where id = ${input.chatId} and user_id is null and guest_id = ${actor.guestId} limit 1`,
+        );
+
+    if (!chatRows[0]) {
+      return { ok: false as const, reason: "chat-not-found" as const };
+    }
+
+    const messageRows = await tx.query<Record<string, unknown>>(
+      sql`select id, role from messages where chat_id = ${input.chatId} order by created_at asc, id asc`,
+    );
+    const targetIndex = messageRows.findIndex((row) => String(row.id) === input.messageId);
+    if (targetIndex === -1) {
+      return { ok: false as const, reason: "message-not-found" as const };
+    }
+
+    if (String(messageRows[targetIndex]?.role) !== "user") {
+      return { ok: false as const, reason: "not-user-message" as const };
+    }
+
+    const laterMessageIds = messageRows.slice(targetIndex + 1).map((row) => String(row.id));
+    const now = nowIso();
+
+    await tx.query(sql`
+      update messages
+      set content = ${input.content}
+      where id = ${input.messageId} and chat_id = ${input.chatId}
+    `);
+
+    if (laterMessageIds.length) {
+      await tx.query(sql`
+        delete from messages
+        where chat_id = ${input.chatId}
+          and id in (${sql.join(laterMessageIds.map((messageId) => sql`${messageId}`), sql`, `)})
+      `);
+    }
+
+    await tx.query(sql`update chats set updated_at = ${now} where id = ${input.chatId}`);
+
+    return {
+      ok: true as const,
+      removedMessageIds: laterMessageIds,
+    };
+  });
 }
 
 export async function renameChat(actor: Actor, chatId: string, title: string) {
