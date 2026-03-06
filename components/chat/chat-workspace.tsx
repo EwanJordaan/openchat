@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
 import {
   FormEvent,
   useCallback,
@@ -35,8 +34,12 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import {
+  buildChatPath,
   getMessageActionState,
   getVisibleMessages,
+  isSameChatSelection,
+  parseChatIdFromPath,
+  syncHistoryPath,
   useAutosizeTextarea,
   shouldSubmitTextareaShortcut,
 } from "@/components/chat/chat-workspace-utils";
@@ -275,10 +278,14 @@ function ModelSelector({
 }
 
 export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
-  const router = useRouter();
-  const pathname = usePathname();
   const { setMode } = useTheme();
   const [isHydrated, setIsHydrated] = useState(false);
+  const initialPathChatIdRef = useRef<string | undefined>(undefined);
+  if (initialPathChatIdRef.current === undefined) {
+    initialPathChatIdRef.current =
+      typeof window === "undefined" ? initialChatId : parseChatIdFromPath(window.location.pathname) ?? initialChatId;
+  }
+  const seededChatId = initialPathChatIdRef.current;
 
   const initialSessionRef = useRef<SessionPayload | null | undefined>(undefined);
   if (initialSessionRef.current === undefined) {
@@ -294,7 +301,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const initialMessagesRef = useRef<ChatMessage[] | undefined>(undefined);
   if (initialMessagesRef.current === undefined) {
     if (initialSession) {
-      initialMessagesRef.current = readCachedChatMessages(initialSession.actor, initialChatId || DRAFT_CHAT_ID);
+      initialMessagesRef.current = readCachedChatMessages(initialSession.actor, seededChatId || DRAFT_CHAT_ID);
     } else {
       initialMessagesRef.current = [];
     }
@@ -306,7 +313,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
 
   const [chats, setChats] = useState<ChatSummary[]>(initialChatsRef.current || []);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessagesRef.current || []);
-  const [activeChatId, setActiveChatId] = useState<string | undefined>(initialChatId);
+  const [activeChatId, setActiveChatId] = useState<string | undefined>(seededChatId);
 
   const [draft, setDraft] = useState("");
   const [modelId, setModelId] = useState("gpt-4o-mini");
@@ -329,6 +336,9 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messageStreamRef = useRef<HTMLElement | null>(null);
   const sendAbortControllerRef = useRef<AbortController | null>(null);
+  const loadChatAbortControllerRef = useRef<AbortController | null>(null);
+  const loadChatRequestIdRef = useRef(0);
+  const activeChatIdRef = useRef<string | undefined>(seededChatId);
   const copiedMessageTimeoutRef = useRef<number | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
@@ -341,9 +351,37 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const closeAttachMenu = useCallback(() => setAttachMenuOpen(false), []);
   const closeProfileMenu = useCallback(() => setProfileMenuOpen(false), []);
   const closeChatMenu = useCallback(() => setOpenChatMenuId(null), []);
+  const syncChatPath = useCallback((chatId?: string, options?: { replace?: boolean }) => {
+    syncHistoryPath(buildChatPath(chatId), { replace: options?.replace });
+  }, []);
+  const isChatStillSelected = useCallback(
+    (originChatId?: string) => isSameChatSelection(activeChatIdRef.current, originChatId, DRAFT_CHAT_ID),
+    [],
+  );
 
   useEffect(() => {
     setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+  }, [activeChatId]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      const nextChatId = parseChatIdFromPath(window.location.pathname);
+      setOpenChatMenuId(null);
+      setEditSession(null);
+      setDraft("");
+      setPendingFiles([]);
+      setActiveChatId(nextChatId);
+      setError(null);
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+    };
   }, []);
 
   useEffect(() => {
@@ -425,13 +463,13 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     }
     setOpenChatMenuId(null);
     setEditSession(null);
-    router.push("/");
+    syncChatPath();
     setMessages([]);
     setError(null);
     setDraft("");
     setPendingFiles([]);
     setActiveChatId(undefined);
-  }, [router, session]);
+  }, [session, syncChatPath]);
 
   const loadSession = useCallback(async ({ showLoader = false }: { showLoader?: boolean } = {}) => {
     if (showLoader) {
@@ -511,17 +549,40 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
         return;
       }
 
+      loadChatAbortControllerRef.current?.abort();
+      const abortController = new AbortController();
+      loadChatAbortControllerRef.current = abortController;
+      const requestId = ++loadChatRequestIdRef.current;
+
       const cachedMessages = readCachedChatMessages(session.actor, chatId);
-      if (cachedMessages.length) {
+      if (cachedMessages.length && activeChatIdRef.current === chatId) {
         setMessages(cachedMessages);
       }
 
       if (session.degraded) {
-        setError(session.error || "Database is unavailable. Showing saved local chat data when available.");
+        if (activeChatIdRef.current === chatId) {
+          setError(session.error || "Database is unavailable. Showing saved local chat data when available.");
+        }
         return;
       }
 
-      const response = await fetch(`/api/chats/${chatId}`, { cache: "no-store" });
+      let response: Response;
+      try {
+        response = await fetch(`/api/chats/${chatId}`, { cache: "no-store", signal: abortController.signal });
+      } catch (fetchError) {
+        const aborted = fetchError instanceof Error && fetchError.name === "AbortError";
+        if (!aborted && activeChatIdRef.current === chatId) {
+          setError("Could not refresh this chat from the server. Showing local copy.");
+        }
+        return;
+      }
+
+      const isCurrentRequest = loadChatRequestIdRef.current === requestId;
+      const isCurrentChat = activeChatIdRef.current === chatId;
+      if (!isCurrentRequest || !isCurrentChat) {
+        return;
+      }
+
       if (!response.ok) {
         if (cachedMessages.length) {
           setError("Could not refresh this chat from the server. Showing local copy.");
@@ -539,7 +600,6 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
         };
       };
 
-      setActiveChatId(data.chat.id);
       setModelId(data.chat.modelId);
       setMessages(data.chat.messages);
       writeCachedChatMessages(session.actor, data.chat.id, data.chat.messages);
@@ -560,19 +620,20 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   useEffect(() => {
     if (!session) return;
 
-    setActiveChatId(initialChatId);
     setEditSession(null);
     setDraft("");
-    if (initialChatId) {
-      const cachedMessages = readCachedChatMessages(session.actor, initialChatId);
+    if (activeChatId) {
+      const cachedMessages = readCachedChatMessages(session.actor, activeChatId);
       setMessages(cachedMessages);
-      void loadChat(initialChatId);
+      void loadChat(activeChatId);
       return;
     }
 
-    setMessages([]);
+    loadChatAbortControllerRef.current?.abort();
+    const cachedDraftMessages = readCachedChatMessages(session.actor, DRAFT_CHAT_ID);
+    setMessages(cachedDraftMessages);
     setError(null);
-  }, [initialChatId, loadChat, session]);
+  }, [activeChatId, loadChat, session]);
 
   useEffect(() => {
     if (!session) return;
@@ -580,10 +641,8 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       writeCachedChatMessages(session.actor, activeChatId, messages);
       return;
     }
-    if (pathname === "/") {
-      writeCachedChatMessages(session.actor, DRAFT_CHAT_ID, messages);
-    }
-  }, [activeChatId, messages, pathname, session]);
+    writeCachedChatMessages(session.actor, DRAFT_CHAT_ID, messages);
+  }, [activeChatId, messages, session]);
 
   useDismissibleMenu({
     enabled: isAttachMenuOpen,
@@ -661,6 +720,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
 
   useEffect(() => {
     return () => {
+      loadChatAbortControllerRef.current?.abort();
       if (copiedMessageTimeoutRef.current !== null) {
         window.clearTimeout(copiedMessageTimeoutRef.current);
       }
@@ -727,7 +787,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     return message;
   }
 
-  async function readAssistantStream(response: Response, messageId: string) {
+  async function readAssistantStream(response: Response, messageId: string, shouldApply?: () => boolean) {
     const reader = response.body?.getReader();
     if (!reader) {
       throw new Error("The server stream is unavailable");
@@ -740,6 +800,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
 
     const flush = () => {
       rafId = null;
+      if (shouldApply && !shouldApply()) return;
       if (painted === accumulated) return;
       painted = accumulated;
       updateStreamingMessage(messageId, painted);
@@ -802,6 +863,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
 
     setMessages([...optimisticMessages, optimisticAssistant]);
     const currentDraft = sanitizedDraft;
+    const originChatId = activeChatId;
     setDraft("");
     setSending(true);
 
@@ -822,11 +884,15 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
         };
 
         const offlineMessages = [...optimisticMessages, degradedReply];
-        setMessages(offlineMessages);
-        if (session) {
-          writeCachedChatMessages(session.actor, activeChatId || DRAFT_CHAT_ID, offlineMessages);
+        if (isChatStillSelected(originChatId)) {
+          setMessages(offlineMessages);
         }
-        setPendingFiles([]);
+        if (session) {
+          writeCachedChatMessages(session.actor, originChatId || DRAFT_CHAT_ID, offlineMessages);
+        }
+        if (isChatStillSelected(originChatId)) {
+          setPendingFiles([]);
+        }
         return;
       }
 
@@ -863,38 +929,45 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
         removeCachedChatMessages(session.actor, DRAFT_CHAT_ID);
       }
 
-      setActiveChatId(responseChatId);
-      setMessages(persistedMessages);
-      setPendingFiles([]);
-      if (pathname === "/" || activeChatId !== responseChatId) {
-        router.push(`/chat/${responseChatId}`);
+      const shouldApplyToVisibleChat = isChatStillSelected(originChatId);
+      if (shouldApplyToVisibleChat) {
+        setActiveChatId(responseChatId);
+        setMessages(persistedMessages);
+        setPendingFiles([]);
+        syncChatPath(responseChatId);
       }
 
-      const accumulated = await readAssistantStream(response, optimisticAssistantId);
+      const accumulated = await readAssistantStream(response, optimisticAssistantId, () => isChatStillSelected(originChatId));
 
       const finalizedMessages = persistedMessages.map((msg) =>
         msg.id === optimisticAssistantId ? { ...msg, content: accumulated, chatId: responseChatId } : msg,
       );
-      setMessages(finalizedMessages);
+      if (isChatStillSelected(originChatId)) {
+        setMessages(finalizedMessages);
+      }
 
       if (session) {
         writeCachedChatMessages(session.actor, responseChatId, finalizedMessages);
       }
 
       await loadChats();
-      await loadChat(responseChatId);
+      if (isChatStillSelected(responseChatId)) {
+        await loadChat(responseChatId);
+      }
     } catch (sendError) {
       const aborted = sendError instanceof Error && sendError.name === "AbortError";
-      if (!aborted) {
+      if (!aborted && isChatStillSelected(originChatId)) {
         setError(sendError instanceof Error ? sendError.message : "Failed to send message");
       }
-      setMessages((prev) => {
-        if (aborted) {
-          return prev.filter((msg) => !(msg.id === optimisticAssistantId && !msg.content.trim()));
-        }
-        return prev.filter((msg) => msg.id !== optimisticMessage.id && msg.id !== optimisticAssistantId);
-      });
-      if (!aborted) {
+      if (isChatStillSelected(originChatId)) {
+        setMessages((prev) => {
+          if (aborted) {
+            return prev.filter((msg) => !(msg.id === optimisticAssistantId && !msg.content.trim()));
+          }
+          return prev.filter((msg) => msg.id !== optimisticMessage.id && msg.id !== optimisticAssistantId);
+        });
+      }
+      if (!aborted && isChatStillSelected(originChatId)) {
         setDraft(currentDraft);
       }
     } finally {
@@ -969,6 +1042,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     };
     const optimisticMessages = [...trimmedMessages, optimisticAssistant];
     const currentDraft = sanitizedDraft;
+    const originChatId = activeChatId;
 
     setEditSession(null);
     setMessages(optimisticMessages);
@@ -1008,32 +1082,40 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
         writeCachedChatMessages(session.actor, responseChatId, optimisticMessages);
       }
 
-      setActiveChatId(responseChatId);
-      setMessages(optimisticMessages);
+      if (isChatStillSelected(originChatId)) {
+        setActiveChatId(responseChatId);
+        setMessages(optimisticMessages);
+      }
 
-      const accumulated = await readAssistantStream(response, optimisticAssistantId);
+      const accumulated = await readAssistantStream(response, optimisticAssistantId, () => isChatStillSelected(originChatId));
       const finalizedMessages = optimisticMessages.map((entry) =>
         entry.id === optimisticAssistantId ? { ...entry, content: accumulated, chatId: responseChatId } : entry,
       );
 
-      setMessages(finalizedMessages);
+      if (isChatStillSelected(originChatId)) {
+        setMessages(finalizedMessages);
+      }
       if (session) {
         writeCachedChatMessages(session.actor, responseChatId, finalizedMessages);
       }
 
       await loadChats();
-      await loadChat(responseChatId);
+      if (isChatStillSelected(responseChatId)) {
+        await loadChat(responseChatId);
+      }
     } catch (sendError) {
       const aborted = sendError instanceof Error && sendError.name === "AbortError";
-      if (!aborted) {
+      if (!aborted && isChatStillSelected(originChatId)) {
         setError(sendError instanceof Error ? sendError.message : "Failed to send message");
       }
-      setMessages(originalMessages);
-      setEditSession(editSession);
-      setDraft(currentDraft);
-      setPendingFiles([]);
+      if (isChatStillSelected(originChatId)) {
+        setMessages(originalMessages);
+        setEditSession(editSession);
+        setDraft(currentDraft);
+        setPendingFiles([]);
+      }
       if (session) {
-        writeCachedChatMessages(session.actor, activeChatId, originalMessages);
+        writeCachedChatMessages(session.actor, originChatId || DRAFT_CHAT_ID, originalMessages);
       }
     } finally {
       sendAbortControllerRef.current = null;
@@ -1071,7 +1153,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     }
     await loadChats();
     if (chatId === activeChatId) {
-      router.push("/");
+      syncChatPath();
       if (session) {
         removeCachedChatMessages(session.actor, DRAFT_CHAT_ID);
       }
@@ -1108,7 +1190,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   async function logout() {
     await fetch("/api/auth/sign-out", { method: "POST" });
     clearSessionSnapshot();
-    router.push("/");
+    syncChatPath(undefined, { replace: true });
     await loadSession();
     await loadChats();
     setMessages([]);
@@ -1136,7 +1218,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     );
   }
 
-  const nextPath = encodeURIComponent(pathname || "/");
+  const nextPath = encodeURIComponent(buildChatPath(activeChatId));
   const composerDisabled = sending || uploading || !canChat;
 
   return (
@@ -1194,9 +1276,20 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
           ) : (
             filteredChats.map((chat) => (
               <div key={chat.id} className={`chat-item ${chat.id === activeChatId ? "active" : ""}`}>
-                <Link href={`/chat/${chat.id}`}>
+                <a
+                  href={buildChatPath(chat.id)}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    if (chat.id !== activeChatId) {
+                      setActiveChatId(chat.id);
+                      setError(null);
+                      syncChatPath(chat.id);
+                    }
+                    setOpenChatMenuId(null);
+                  }}
+                >
                   <span>{chat.title}</span>
-                </Link>
+                </a>
                 <div className="chat-item-actions" ref={openChatMenuId === chat.id ? chatMenuRef : undefined}>
                   <button
                     type="button"

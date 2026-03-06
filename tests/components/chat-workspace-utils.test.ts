@@ -1,11 +1,16 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 
 import {
+  buildChatPath,
   getMessageActionState,
+  getChatSelectionKey,
   getVisibleMessages,
+  isSameChatSelection,
   isPersistedMessage,
   measureTextareaHeight,
+  parseChatIdFromPath,
   shouldSubmitTextareaShortcut,
+  syncHistoryPath,
 } from "@/components/chat/chat-workspace-utils";
 import type { ChatMessage } from "@/lib/types";
 
@@ -37,6 +42,55 @@ describe("chat workspace helpers", () => {
     expect(shouldSubmitTextareaShortcut({ key: "a", shiftKey: false, isComposing: false })).toBeFalse();
   });
 
+  it("parses chat ids from paths", () => {
+    expect(parseChatIdFromPath("/")).toBeUndefined();
+    expect(parseChatIdFromPath("/chat/cht_123")).toBe("cht_123");
+    expect(parseChatIdFromPath("/settings")).toBeUndefined();
+  });
+
+  it("builds chat paths from chat ids", () => {
+    expect(buildChatPath()).toBe("/");
+    expect(buildChatPath("cht_123")).toBe("/chat/cht_123");
+  });
+
+  it("skips history writes when target path already matches current path", () => {
+    const historyApi = {
+      pushState: () => undefined,
+      replaceState: () => undefined,
+    };
+    const pushStateSpy = spyOn(historyApi, "pushState");
+
+    const changed = syncHistoryPath("/chat/cht_123", {
+      currentPath: "/chat/cht_123",
+      historyApi,
+    });
+
+    expect(changed).toBeFalse();
+    expect(pushStateSpy).not.toHaveBeenCalled();
+  });
+
+  it("applies only the currently selected chat after rapid switch A to B", () => {
+    expect(isSameChatSelection("cht_b", "cht_a")).toBeFalse();
+    expect(isSameChatSelection("cht_b", "cht_b")).toBeTrue();
+  });
+
+  it("keeps send completion scoped to the origin chat selection", () => {
+    expect(isSameChatSelection("cht_b", "cht_a")).toBeFalse();
+    expect(isSameChatSelection(undefined, undefined)).toBeTrue();
+  });
+
+  it("keeps edit completion scoped to the origin chat selection", () => {
+    expect(isSameChatSelection("cht_b", "cht_a")).toBeFalse();
+    expect(getChatSelectionKey(undefined)).toBe("draft");
+  });
+
+  it("maps back and forward paths to the selected chat id", () => {
+    const backTarget = parseChatIdFromPath("/chat/cht_a");
+    const forwardTarget = parseChatIdFromPath("/chat/cht_b");
+    expect(isSameChatSelection(backTarget, "cht_a")).toBeTrue();
+    expect(isSameChatSelection(forwardTarget, "cht_b")).toBeTrue();
+  });
+
   it("distinguishes persisted messages from optimistic placeholders", () => {
     expect(isPersistedMessage("msg_1")).toBeTrue();
     expect(isPersistedMessage("optimistic-1")).toBeFalse();
@@ -55,7 +109,7 @@ describe("chat workspace helpers", () => {
     expect(getVisibleMessages([baseMessage, laterMessage], null)).toEqual([baseMessage, laterMessage]);
   });
 
-  it("shows copy for all messages and edit for persisted user messages", () => {
+  it("shows copy for non-streamed messages and edit for persisted user messages", () => {
     expect(
       getMessageActionState(baseMessage, {
         editingMessageId: null,
@@ -84,6 +138,25 @@ describe("chat workspace helpers", () => {
       showCopy: true,
       showEdit: false,
       disableEdit: false,
+    });
+
+    expect(
+      getMessageActionState(
+        {
+          ...baseMessage,
+          id: "assistant-stream-1",
+          role: "assistant",
+        },
+        {
+          editingMessageId: null,
+          sending: true,
+          degraded: false,
+        },
+      ),
+    ).toEqual({
+      showCopy: false,
+      showEdit: false,
+      disableEdit: true,
     });
 
     expect(

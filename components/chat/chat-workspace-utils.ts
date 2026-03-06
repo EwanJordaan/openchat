@@ -53,6 +53,51 @@ export function shouldSubmitTextareaShortcut(input: {
   return input.key === "Enter" && !input.shiftKey && !input.isComposing;
 }
 
+export function parseChatIdFromPath(pathname: string) {
+  const match = /^\/chat\/([^/?#]+)/.exec(pathname);
+  if (!match) return undefined;
+  return decodeURIComponent(match[1]);
+}
+
+export function buildChatPath(chatId?: string) {
+  if (!chatId) return "/";
+  return `/chat/${encodeURIComponent(chatId)}`;
+}
+
+export function syncHistoryPath(
+  targetPath: string,
+  options?: {
+    replace?: boolean;
+    currentPath?: string;
+    historyApi?: Pick<History, "pushState" | "replaceState">;
+  },
+) {
+  const currentPath = options?.currentPath ?? (typeof window === "undefined" ? undefined : window.location.pathname);
+  if (!currentPath || currentPath === targetPath) {
+    return false;
+  }
+
+  const historyApi = options?.historyApi ?? (typeof window === "undefined" ? null : window.history);
+  if (!historyApi) {
+    return false;
+  }
+
+  if (options?.replace) {
+    historyApi.replaceState(null, "", targetPath);
+  } else {
+    historyApi.pushState(null, "", targetPath);
+  }
+  return true;
+}
+
+export function getChatSelectionKey(chatId?: string, draftChatId = "draft") {
+  return chatId || draftChatId;
+}
+
+export function isSameChatSelection(currentChatId: string | undefined, originChatId: string | undefined, draftChatId = "draft") {
+  return getChatSelectionKey(currentChatId, draftChatId) === getChatSelectionKey(originChatId, draftChatId);
+}
+
 export function getMessageActionState(
   message: ChatMessage,
   options: {
@@ -61,7 +106,7 @@ export function getMessageActionState(
     degraded: boolean;
   },
 ) {
-  const showCopy = true;
+  const showCopy = !message.id.startsWith("assistant-stream-");
   const showEdit = message.role === "user" && isPersistedMessage(message.id) && !options.editingMessageId;
   const disableEdit = options.sending || options.degraded;
 

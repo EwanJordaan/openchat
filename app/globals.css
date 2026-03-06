@@ -1,22 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #efe7db;
-  --main-bg: #f6f1e9;
-  --surface: #fffaf3;
-  --surface-elevated: #fffdf9;
-  --surface-muted: #ece3d6;
-  --sidebar-bg: #e2d5c5;
-  --sidebar-bg-strong: #d7c7b2;
-  --text-primary: #2f2418;
-  --text-secondary: #534236;
-  --text-muted: #746456;
-  --border: #d8c7b3;
-  --border-strong: #bda68f;
-  --accent: #111111;
-  --accent-soft: #e8d8c4;
-  --danger: #d14343;
-  --shadow: 0 10px 30px rgba(47, 36, 24, 0.11);
+  --bg: #e5e5e5;
+  --main-bg: #f2f2f2;
+  --surface: #fafafa;
+  --surface-elevated: #ffffff;
+  --surface-muted: #e0e0e0;
+  --sidebar-bg: #d4d4d4;
+  --sidebar-bg-strong: #c7c7c7;
+  --text-primary: #1f1f1f;
+  --text-secondary: #3f3f3f;
+  --text-muted: #6a6a6a;
+  --border: #c9c9c9;
+  --border-strong: #b39cff;
+  --accent: #9669ff;
+  --accent-soft: #f1ebff;
+  --danger: #7a4de8;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
   --chat-content-max-width: 900px;
   --sidebar-width: 300px;
   --chat-header-height: 58px;
@@ -28,22 +28,22 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #17120d;
-  --main-bg: #1d1711;
-  --surface: #272019;
-  --surface-elevated: #2f261e;
-  --surface-muted: #221b14;
-  --sidebar-bg: #1b150f;
-  --sidebar-bg-strong: #221a13;
-  --text-primary: #efe1d1;
-  --text-secondary: #cdb89f;
-  --text-muted: #b09b85;
-  --border: #493b2d;
-  --border-strong: #66533f;
-  --accent: #ececec;
-  --accent-soft: #3c2f22;
-  --danger: #ef7f7f;
-  --shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+  --bg: #121212;
+  --main-bg: #1b1b1b;
+  --surface: #262626;
+  --surface-elevated: #303030;
+  --surface-muted: #202020;
+  --sidebar-bg: #171717;
+  --sidebar-bg-strong: #1f1f1f;
+  --text-primary: #f3f3f3;
+  --text-secondary: #d0d0d0;
+  --text-muted: #a0a0a0;
+  --border: #4f4f4f;
+  --border-strong: #d0c2ff;
+  --accent: #b095ff;
+  --accent-soft: #3e1a78;
+  --danger: #e6ddff;
+  --shadow: 0 10px 24px rgba(0, 0, 0, 0.42);
 }
 
 * {
@@ -1246,7 +1246,7 @@ select {
 }
 
 .send-icon-button {
-  background: #2f7cf6;
+  background: var(--accent);
   color: #ffffff;
 }
 
