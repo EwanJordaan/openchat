@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject,
+} from "react";
 import {
   AlertTriangle,
   ChevronDown,
@@ -129,6 +138,41 @@ function useAutoScroll(dep: unknown) {
   return anchorRef;
 }
 
+function useDismissibleMenu({
+  enabled,
+  containerRef,
+  onDismiss,
+}: {
+  enabled: boolean;
+  containerRef: RefObject<HTMLElement | null>;
+  onDismiss: () => void;
+}) {
+  useEffect(() => {
+    if (!enabled) return;
+
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!containerRef.current?.contains(target)) {
+        onDismiss();
+      }
+    }
+
+    function onEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onDismiss();
+      }
+    }
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [containerRef, enabled, onDismiss]);
+}
+
 function ModelSelector({
   models,
   modelId,
@@ -168,30 +212,11 @@ function ModelSelector({
     ].filter((group) => group.items.length > 0);
   }, [models]);
 
-  useEffect(() => {
-    if (!open) return;
-
-    function onPointerDown(event: MouseEvent) {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (!selectorRef.current?.contains(target)) {
-        setOpen(false);
-      }
-    }
-
-    function onEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onEscape);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onEscape);
-    };
-  }, [open]);
+  useDismissibleMenu({
+    enabled: open,
+    containerRef: selectorRef,
+    onDismiss: () => setOpen(false),
+  });
 
   return (
     <div className={`model-selector ${open ? "open" : ""}`} ref={selectorRef}>
@@ -300,6 +325,9 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const [sidebarQuery, setSidebarQuery] = useState("");
   const [isMacPlatform, setIsMacPlatform] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const closeAttachMenu = useCallback(() => setAttachMenuOpen(false), []);
+  const closeProfileMenu = useCallback(() => setProfileMenuOpen(false), []);
+  const closeChatMenu = useCallback(() => setOpenChatMenuId(null), []);
 
   useEffect(() => {
     setIsHydrated(true);
@@ -509,30 +537,11 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     }
   }, [activeChatId, messages, pathname, session]);
 
-  useEffect(() => {
-    if (!isAttachMenuOpen) return;
-
-    function onPointerDown(event: MouseEvent) {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (!attachMenuRef.current?.contains(target)) {
-        setAttachMenuOpen(false);
-      }
-    }
-
-    function onEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setAttachMenuOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onEscape);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onEscape);
-    };
-  }, [isAttachMenuOpen]);
+  useDismissibleMenu({
+    enabled: isAttachMenuOpen,
+    containerRef: attachMenuRef,
+    onDismiss: closeAttachMenu,
+  });
 
   useEffect(() => {
     if (!canChat) {
@@ -540,55 +549,17 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     }
   }, [canChat]);
 
-  useEffect(() => {
-    if (!isProfileMenuOpen) return;
+  useDismissibleMenu({
+    enabled: isProfileMenuOpen,
+    containerRef: profileMenuRef,
+    onDismiss: closeProfileMenu,
+  });
 
-    function onPointerDown(event: MouseEvent) {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (!profileMenuRef.current?.contains(target)) {
-        setProfileMenuOpen(false);
-      }
-    }
-
-    function onEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setProfileMenuOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onEscape);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onEscape);
-    };
-  }, [isProfileMenuOpen]);
-
-  useEffect(() => {
-    if (!openChatMenuId) return;
-
-    function onPointerDown(event: MouseEvent) {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (!chatMenuRef.current?.contains(target)) {
-        setOpenChatMenuId(null);
-      }
-    }
-
-    function onEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setOpenChatMenuId(null);
-      }
-    }
-
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onEscape);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onEscape);
-    };
-  }, [openChatMenuId]);
+  useDismissibleMenu({
+    enabled: Boolean(openChatMenuId),
+    containerRef: chatMenuRef,
+    onDismiss: closeChatMenu,
+  });
 
   useEffect(() => {
     function onSearchShortcut(event: KeyboardEvent) {
@@ -917,7 +888,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   }
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await fetch("/api/auth/sign-out", { method: "POST" });
     clearSessionSnapshot();
     router.push("/");
     await loadSession();

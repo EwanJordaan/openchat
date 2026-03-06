@@ -5,6 +5,7 @@ import mysql from "mysql2/promise";
 import { Pool } from "pg";
 
 import { env } from "@/lib/env";
+import { mysqlAuthSchema, pgAuthSchema } from "@/lib/db/schema";
 
 type Provider = "postgres" | "supabase" | "neon" | "mysql";
 
@@ -64,7 +65,7 @@ function createContext(): DbContext {
 
   if (provider === "mysql") {
     const pool = mysql.createPool(env.DATABASE_URL);
-    const db = drizzleMysql(pool) as ExecutableDb;
+    const db = drizzleMysql(pool, { schema: mysqlAuthSchema, mode: "default" }) as ExecutableDb;
 
     return {
       provider,
@@ -85,7 +86,7 @@ function createContext(): DbContext {
     connectionString: env.DATABASE_URL,
     max: 20,
   });
-  const db = drizzlePg(pool) as unknown as ExecutableDb;
+  const db = drizzlePg(pool, { schema: pgAuthSchema }) as unknown as ExecutableDb;
 
   return {
     provider,

@@ -1,13 +1,7 @@
-import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth/better-auth";
 
-import { clearSessionCookie, ensureGuestCookie, logoutCurrentSession, resolveActor } from "@/lib/auth/session";
-
-export async function POST() {
-  const resolved = await resolveActor();
-  await logoutCurrentSession();
-
-  const response = NextResponse.json({ ok: true });
-  clearSessionCookie(response);
-  ensureGuestCookie(response, resolved.actor.guestId);
-  return response;
+export async function POST(request: Request) {
+  const url = new URL(request.url);
+  url.pathname = "/api/auth/sign-out";
+  return auth.handler(new Request(url, request));
 }

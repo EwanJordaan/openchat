@@ -58,21 +58,23 @@ export function UserSettingsPanel() {
     setSaving(true);
     setMessage(null);
 
-    const response = await fetch("/api/settings/user", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(settings),
-    });
-    const data = (await response.json()) as { error?: string };
+    try {
+      const response = await fetch("/api/settings/user", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+      const data = (await response.json()) as { error?: string };
 
-    if (!response.ok) {
-      setMessage(data.error || "Failed to save settings");
+      if (!response.ok) {
+        setMessage(data.error || "Failed to save settings");
+        return;
+      }
+
+      setMessage("Settings updated successfully.");
+    } finally {
       setSaving(false);
-      return;
     }
-
-    setMessage("Settings updated successfully.");
-    setSaving(false);
   }
 
   if (loading) {

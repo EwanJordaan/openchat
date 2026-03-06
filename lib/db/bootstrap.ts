@@ -177,6 +177,7 @@ async function runBootstrap() {
   }
 
   await seedAdminUser(provider, query);
+  await backfillBetterAuthCredentials(provider, query);
 }
 
 async function seedAdminUser(
@@ -228,6 +229,71 @@ async function seedAdminUser(
   );
 }
 
+async function backfillBetterAuthCredentials(
+  provider: "postgres" | "supabase" | "neon" | "mysql",
+  query: ReturnType<typeof getDb>["query"],
+) {
+  const users = await query<{ id: string; password_hash: string }>(
+    sql`select id, password_hash from users where password_hash is not null`,
+  );
+  if (!users.length) return;
+
+  const now = nowIso();
+  for (const user of users) {
+    if (provider === "mysql") {
+      await query(sql`
+        insert into auth_accounts (
+          id,
+          account_id,
+          provider_id,
+          user_id,
+          password,
+          created_at,
+          updated_at
+        )
+        values (
+          ${createId("acc")},
+          ${user.id},
+          ${"credential"},
+          ${user.id},
+          ${user.password_hash},
+          ${now},
+          ${now}
+        )
+        on duplicate key update
+          password = values(password),
+          updated_at = values(updated_at)
+      `);
+      continue;
+    }
+
+    await query(sql`
+      insert into auth_accounts (
+        id,
+        account_id,
+        provider_id,
+        user_id,
+        password,
+        created_at,
+        updated_at
+      )
+      values (
+        ${createId("acc")},
+        ${user.id},
+        ${"credential"},
+        ${user.id},
+        ${user.password_hash},
+        ${now},
+        ${now}
+      )
+      on conflict (provider_id, account_id) do update
+      set
+        password = excluded.password,
+        updated_at = excluded.updated_at
+    `);
+  }
+}
+
 const postgresBootstrapStatements = [
   `
   create table if not exists users (
@@ -257,6 +323,46 @@ const postgresBootstrapStatements = [
     token_hash text not null unique,
     expires_at text not null,
     created_at text not null
+  )
+  `,
+  `
+  create table if not exists auth_sessions (
+    id text primary key,
+    expires_at text not null,
+    token text not null unique,
+    created_at text not null,
+    updated_at text not null,
+    ip_address text,
+    user_agent text,
+    user_id text not null references users(id) on delete cascade
+  )
+  `,
+  `
+  create table if not exists auth_accounts (
+    id text primary key,
+    account_id text not null,
+    provider_id text not null,
+    user_id text not null references users(id) on delete cascade,
+    access_token text,
+    refresh_token text,
+    id_token text,
+    access_token_expires_at text,
+    refresh_token_expires_at text,
+    scope text,
+    password text,
+    created_at text not null,
+    updated_at text not null,
+    unique (provider_id, account_id)
+  )
+  `,
+  `
+  create table if not exists auth_verifications (
+    id text primary key,
+    identifier text not null,
+    value text not null,
+    expires_at text not null,
+    created_at text not null,
+    updated_at text not null
   )
   `,
   `
@@ -375,6 +481,9 @@ const postgresBootstrapStatements = [
   `create index if not exists idx_chats_guest on chats(guest_id, updated_at)`,
   `create index if not exists idx_messages_chat on messages(chat_id, created_at)`,
   `create index if not exists idx_sessions_user on sessions(user_id, expires_at)`,
+  `create index if not exists idx_auth_sessions_user on auth_sessions(user_id, expires_at)`,
+  `create index if not exists idx_auth_accounts_user on auth_accounts(user_id, provider_id)`,
+  `create index if not exists idx_auth_verifications_identifier on auth_verifications(identifier, expires_at)`,
   `create index if not exists idx_usage_user_day on usage_counters(user_id, date_key)`,
 ];
 
@@ -409,6 +518,48 @@ const mysqlBootstrapStatements = [
     expires_at varchar(40) not null,
     created_at varchar(40) not null,
     constraint fk_sessions_user foreign key (user_id) references users(id) on delete cascade
+  )
+  `,
+  `
+  create table if not exists auth_sessions (
+    id varchar(191) primary key,
+    expires_at varchar(40) not null,
+    token varchar(255) not null unique,
+    created_at varchar(40) not null,
+    updated_at varchar(40) not null,
+    ip_address varchar(191),
+    user_agent text,
+    user_id varchar(191) not null,
+    constraint fk_auth_sessions_user foreign key (user_id) references users(id) on delete cascade
+  )
+  `,
+  `
+  create table if not exists auth_accounts (
+    id varchar(191) primary key,
+    account_id varchar(191) not null,
+    provider_id varchar(191) not null,
+    user_id varchar(191) not null,
+    access_token longtext,
+    refresh_token longtext,
+    id_token longtext,
+    access_token_expires_at varchar(40),
+    refresh_token_expires_at varchar(40),
+    scope text,
+    password text,
+    created_at varchar(40) not null,
+    updated_at varchar(40) not null,
+    unique key uniq_auth_provider_account (provider_id, account_id),
+    constraint fk_auth_accounts_user foreign key (user_id) references users(id) on delete cascade
+  )
+  `,
+  `
+  create table if not exists auth_verifications (
+    id varchar(191) primary key,
+    identifier varchar(255) not null,
+    value longtext not null,
+    expires_at varchar(40) not null,
+    created_at varchar(40) not null,
+    updated_at varchar(40) not null
   )
   `,
   `
@@ -534,5 +685,8 @@ const mysqlBootstrapStatements = [
   `create index idx_chats_guest on chats(guest_id, updated_at)`,
   `create index idx_messages_chat on messages(chat_id, created_at)`,
   `create index idx_sessions_user on sessions(user_id, expires_at)`,
+  `create index idx_auth_sessions_user on auth_sessions(user_id, expires_at)`,
+  `create index idx_auth_accounts_user on auth_accounts(user_id, provider_id)`,
+  `create index idx_auth_verifications_identifier on auth_verifications(identifier, expires_at)`,
   `create index idx_usage_user_day on usage_counters(user_id, date_key)`,
 ];
