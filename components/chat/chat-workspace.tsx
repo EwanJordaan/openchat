@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type RefObject,
 } from "react";
 import {
@@ -403,6 +404,11 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const [isAttachMenuOpen, setAttachMenuOpen] = useState(false);
   const [editSession, setEditSession] = useState<EditSession | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [copiedAssistantMessageId, setCopiedAssistantMessageId] = useState<string | null>(null);
+  const [copiedUserMessageId, setCopiedUserMessageId] = useState<string | null>(null);
+  const [userContextMenu, setUserContextMenu] = useState<UserMessageContextMenuState | null>(null);
+  const [confirmDeleteChatId, setConfirmDeleteChatId] = useState<string | null>(null);
+  const [isSettingsOverlayOpen, setSettingsOverlayOpen] = useState(false);
 
   const activeChat = useMemo(() => chats.find((chat) => chat.id === activeChatId) || null, [chats, activeChatId]);
   const chatLayoutRef = useRef<HTMLDivElement | null>(null);
@@ -434,6 +440,8 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const closeAttachMenu = useCallback(() => setAttachMenuOpen(false), []);
   const closeProfileMenu = useCallback(() => setProfileMenuOpen(false), []);
   const closeChatMenu = useCallback(() => setOpenChatMenuId(null), []);
+  const openSettingsOverlay = useCallback(() => setSettingsOverlayOpen(true), []);
+  const closeSettingsOverlay = useCallback(() => setSettingsOverlayOpen(false), []);
   const syncChatPath = useCallback((chatId?: string, options?: { replace?: boolean }) => {
     syncHistoryPath(buildChatPath(chatId), { replace: options?.replace });
   }, []);
@@ -516,9 +524,12 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const canChat =
     !!session &&
     !(session.actor.type === "guest" && !session.settings.guestEnabled);
+  const isSidebarCollapsed = false;
   const editingMessageId = editSession?.messageId ?? null;
   const visibleMessages = useMemo(() => getVisibleMessages(messages, editingMessageId), [messages, editingMessageId]);
+  const messageAnchor = useAutoScroll(visibleMessages);
   const normalizedSidebarQuery = sidebarQuery.trim().toLowerCase();
+  const chatSearchQuery = normalizedSidebarQuery;
   const filteredChats = useMemo(() => {
     if (!normalizedSidebarQuery) return chats;
     const queryTokens = normalizedSidebarQuery.split(/\s+/).filter(Boolean);
@@ -538,6 +549,21 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       return queryTokens.every((token) => haystack.includes(token));
     });
   }, [chats, normalizedSidebarQuery, session?.models]);
+  const groupedChats = useMemo(() => {
+    const buckets = new Map<ChatGroupKey, ChatSummary[]>();
+    for (const key of CHAT_GROUP_ORDER) {
+      buckets.set(key, []);
+    }
+    for (const chat of filteredChats) {
+      const key = getChatGroupKey(chat);
+      buckets.get(key)?.push(chat);
+    }
+    return CHAT_GROUP_ORDER.map((key) => ({
+      key,
+      label: chatGroupLabel(key),
+      chats: buckets.get(key) ?? [],
+    })).filter((group) => group.chats.length > 0);
+  }, [filteredChats]);
   const showNoResults = normalizedSidebarQuery.length > 0 && filteredChats.length === 0;
 
   const handleNewChat = useCallback(() => {
