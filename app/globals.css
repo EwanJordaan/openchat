@@ -134,7 +134,7 @@ select {
 .new-chat {
   width: 100%;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--sidebar-bg);
   color: var(--text-primary);
   display: inline-flex;
@@ -248,7 +248,7 @@ select {
   color: var(--text-muted);
   width: 20px;
   height: 20px;
-  border-radius: 999px;
+  border-radius: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -283,7 +283,7 @@ select {
 
 .chat-item {
   border: 0;
-  border-radius: 12px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -298,12 +298,19 @@ select {
 }
 
 .chat-item.active {
-  box-shadow: inset 3px 0 0 color-mix(in oklab, var(--text-primary) 65%, var(--surface));
+  box-shadow: none;
 }
 
 .chat-item a {
   flex: 1;
   min-width: 0;
+  border-radius: inherit;
+}
+
+.chat-item a:focus,
+.chat-item a:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .chat-item span {
@@ -353,7 +360,7 @@ select {
   border: 0;
   background: transparent;
   color: var(--text-secondary);
-  border-radius: 7px;
+  border-radius: 6px;
   padding: 0.42rem 0.5rem;
   font-size: 0.75rem;
   text-align: left;
@@ -383,7 +390,7 @@ select {
 .profile-trigger,
 .signin-link {
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 6px;
   background: var(--sidebar-bg);
   color: var(--text-secondary);
   display: inline-flex;
@@ -475,7 +482,7 @@ select {
 .profile-menu button {
   width: 100%;
   border: 0;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   color: var(--text-secondary);
   display: inline-flex;
@@ -581,56 +588,35 @@ select {
 
 .model-trigger {
   border: 0;
-  border-radius: 13px;
-  background: color-mix(in oklab, var(--surface) 80%, var(--main-bg));
+  border-radius: 6px;
+  background: transparent;
   color: var(--text-primary);
-  min-width: 170px;
-  max-width: 320px;
-  padding: 0.4rem 0.6rem;
+  min-width: 120px;
+  max-width: 260px;
+  padding: 0.35rem 0.5rem;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 8px;
   cursor: pointer;
   text-align: left;
   outline: none;
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--border) 35%, transparent);
+  transition: background-color 0.18s ease;
 }
 
 .model-trigger:hover {
-  background: color-mix(in oklab, var(--surface) 92%, var(--main-bg));
+  background: var(--surface-elevated);
 }
 
-.model-trigger-copy {
+.model-trigger-label {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  flex: 1;
-}
-
-.model-trigger-copy small {
-  font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-}
-
-.model-trigger-copy strong {
-  font-size: 0.84rem;
+  font-size: 0.82rem;
+  font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.model-trigger-provider {
-  font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-secondary);
-  border-radius: 999px;
-  padding: 0.16rem 0.42rem;
-  background: color-mix(in oklab, var(--surface-muted) 70%, var(--surface));
+  flex: 1;
 }
 
 .model-trigger-caret {
@@ -680,41 +666,24 @@ select {
 
 .model-option {
   border: 0;
-  border-radius: 11px;
-  background: var(--surface-elevated);
+  border-radius: 9px;
+  background: transparent;
   color: var(--text-primary);
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+  display: block;
   text-align: left;
-  padding: 0.45rem 0.55rem;
+  padding: 0.42rem 0.52rem;
   cursor: pointer;
 }
 
 .model-option:hover,
 .model-option.active {
-  background: color-mix(in oklab, var(--accent-soft) 78%, var(--surface));
+  background: color-mix(in oklab, var(--accent-soft) 78%, transparent);
 }
 
 .model-option-label {
   margin: 0;
-  font-size: 0.79rem;
+  font-size: 0.78rem;
   font-weight: 600;
-}
-
-.model-option-desc {
-  margin: 2px 0 0;
-  font-size: 0.69rem;
-  color: var(--text-muted);
-  line-height: 1.35;
-}
-
-.model-option-provider {
-  font-size: 0.64rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
 }
 
 .status-chip {

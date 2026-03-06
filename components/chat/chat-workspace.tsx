@@ -242,11 +242,7 @@ function ModelSelector({
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <span className="model-trigger-copy">
-          <small>Model</small>
-          <strong>{current?.displayName ?? "Select model"}</strong>
-        </span>
-        <span className="model-trigger-provider">{current?.provider ?? "Provider"}</span>
+        <span className="model-trigger-label">{current?.displayName ?? "Select model"}</span>
         <ChevronDown size={14} className="model-trigger-caret" />
       </button>
 
@@ -266,11 +262,7 @@ function ModelSelector({
                       setOpen(false);
                     }}
                   >
-                    <div>
-                      <p className="model-option-label">{model.displayName}</p>
-                      <p className="model-option-desc">{model.description}</p>
-                    </div>
-                    <span className="model-option-provider">{model.provider}</span>
+                    <p className="model-option-label">{model.displayName}</p>
                   </button>
                 ))}
               </div>
