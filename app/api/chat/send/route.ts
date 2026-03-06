@@ -14,12 +14,14 @@ import {
   getRoleLimit,
   listModelsForActor,
   logAudit,
+  rewriteUserMessageAndTrimFollowing,
   touchFilesWithChat,
 } from "@/lib/db/store";
 import { attachActorCookies, jsonError } from "@/lib/http";
 
 const sendSchema = z.object({
   chatId: z.string().min(4).max(60).optional(),
+  editMessageId: z.string().min(4).max(60).optional(),
   message: z.string().min(1).max(12000),
   modelId: z.string().min(2).max(120),
   attachmentIds: z.array(z.string().min(4).max(60)).default([]),
@@ -80,6 +82,14 @@ export async function POST(request: Request) {
   }
 
   let chatId = parsed.data.chatId;
+  if (parsed.data.editMessageId && !chatId) {
+    return jsonError("Editing a message requires a chat id", 400);
+  }
+
+  if (parsed.data.editMessageId && parsed.data.attachmentIds.length) {
+    return jsonError("Editing a message does not support attachment changes", 400);
+  }
+
   if (!chatId) {
     const inferredTitle = message.trim().slice(0, 72) || "New chat";
     chatId = await createChat(resolved.actor, inferredTitle, model.id);
@@ -90,15 +100,33 @@ export async function POST(request: Request) {
     }
   }
 
-  await touchFilesWithChat(files.map((file) => file.id), chatId);
+  if (parsed.data.editMessageId) {
+    const rewriteResult = await rewriteUserMessageAndTrimFollowing(resolved.actor, {
+      chatId,
+      messageId: parsed.data.editMessageId,
+      content: message,
+    });
 
-  await appendMessage({
-    chatId,
-    role: "user",
-    content: message,
-    modelId: model.id,
-    attachments: files,
-  });
+    if (!rewriteResult.ok) {
+      if (rewriteResult.reason === "chat-not-found") {
+        return jsonError("Chat not found", 404);
+      }
+      if (rewriteResult.reason === "not-user-message") {
+        return jsonError("Only user messages can be edited", 400);
+      }
+      return jsonError("Message not found", 404);
+    }
+  } else {
+    await touchFilesWithChat(files.map((file) => file.id), chatId);
+
+    await appendMessage({
+      chatId,
+      role: "user",
+      content: message,
+      modelId: model.id,
+      attachments: files,
+    });
+  }
 
   const hydratedChat = await getChat(resolved.actor, chatId);
   if (!hydratedChat) {
@@ -148,6 +176,7 @@ export async function POST(request: Request) {
             targetId: chatId,
             payload: {
               modelId: model.id,
+              editedMessageId: parsed.data.editMessageId ?? null,
               providerStatus,
               attachmentCount: files.length,
               usage,

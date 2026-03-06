@@ -13,10 +13,15 @@ type ExecutableDb = {
   execute: (statement: never) => Promise<unknown>;
 };
 
+export interface DbRunner {
+  query: <T>(statement: SQL) => Promise<T[]>;
+}
+
 interface DbContext {
   provider: Provider;
   db: ExecutableDb;
   query: <T>(statement: SQL) => Promise<T[]>;
+  withTransaction: <T>(callback: (tx: DbRunner) => Promise<T>) => Promise<T>;
 }
 
 declare global {
@@ -60,24 +65,46 @@ function normalizeError(error: unknown) {
   return error;
 }
 
+function createRunner(db: ExecutableDb): DbRunner {
+  return {
+    query: async <T>(statement: SQL) => {
+      let result: unknown;
+      try {
+        result = await db.execute(statement as never);
+      } catch (error) {
+        throw normalizeError(error);
+      }
+      return extractRows<T>(result);
+    },
+  };
+}
+
 function createContext(): DbContext {
   const provider = env.DATABASE_PROVIDER as Provider;
 
   if (provider === "mysql") {
     const pool = mysql.createPool(env.DATABASE_URL);
     const db = drizzleMysql(pool, { schema: mysqlAuthSchema, mode: "default" }) as ExecutableDb;
+    const runner = createRunner(db);
 
     return {
       provider,
       db,
-      query: async <T>(statement: SQL) => {
-        let result: unknown;
+      query: runner.query,
+      withTransaction: async <T>(callback: (tx: DbRunner) => Promise<T>) => {
+        const connection = await pool.getConnection();
         try {
-          result = await db.execute(statement as never);
+          await connection.beginTransaction();
+          const txDb = drizzleMysql(connection, { schema: mysqlAuthSchema, mode: "default" }) as ExecutableDb;
+          const result = await callback(createRunner(txDb));
+          await connection.commit();
+          return result;
         } catch (error) {
+          await connection.rollback().catch(() => undefined);
           throw normalizeError(error);
+        } finally {
+          connection.release();
         }
-        return extractRows<T>(result);
       },
     };
   }
@@ -87,18 +114,26 @@ function createContext(): DbContext {
     max: 20,
   });
   const db = drizzlePg(pool, { schema: pgAuthSchema }) as unknown as ExecutableDb;
+  const runner = createRunner(db);
 
   return {
     provider,
     db,
-    query: async <T>(statement: SQL) => {
-      let result: unknown;
+    query: runner.query,
+    withTransaction: async <T>(callback: (tx: DbRunner) => Promise<T>) => {
+      const client = await pool.connect();
       try {
-        result = await db.execute(statement as never);
+        await client.query("BEGIN");
+        const txDb = drizzlePg(client, { schema: pgAuthSchema }) as unknown as ExecutableDb;
+        const result = await callback(createRunner(txDb));
+        await client.query("COMMIT");
+        return result;
       } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
         throw normalizeError(error);
+      } finally {
+        client.release();
       }
-      return extractRows<T>(result);
     },
   };
 }

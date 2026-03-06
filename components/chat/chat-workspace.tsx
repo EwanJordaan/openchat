@@ -14,7 +14,9 @@ import {
 } from "react";
 import {
   AlertTriangle,
+  Check,
   ChevronDown,
+  Copy,
   Ellipsis,
   FileText,
   LoaderCircle,
@@ -32,9 +34,22 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import {
+  getMessageActionState,
+  getVisibleMessages,
+  useAutosizeTextarea,
+  shouldSubmitTextareaShortcut,
+} from "@/components/chat/chat-workspace-utils";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useTheme } from "@/components/providers/theme-provider";
 import type { Actor, ChatMessage, ChatSummary, ModelOption, PublicAppSettings, UploadedFile } from "@/lib/types";
+
+interface EditSession {
+  messageId: string;
+  originalMessages: ChatMessage[];
+  savedDraft: string;
+  savedPendingFiles: File[];
+}
 
 const CHAT_CACHE_KEY = "openchat:chat-list";
 const CHAT_MESSAGES_CACHE_KEY = "openchat:chat-messages";
@@ -308,6 +323,8 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isAttachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [editSession, setEditSession] = useState<EditSession | null>(null);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   const messageAnchor = useAutoScroll(messages.length);
   const activeChat = useMemo(() => chats.find((chat) => chat.id === activeChatId) || null, [chats, activeChatId]);
@@ -320,6 +337,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messageStreamRef = useRef<HTMLElement | null>(null);
   const sendAbortControllerRef = useRef<AbortController | null>(null);
+  const copiedMessageTimeoutRef = useRef<number | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const chatMenuRef = useRef<HTMLDivElement | null>(null);
@@ -385,6 +403,8 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const canChat =
     !!session &&
     !(session.actor.type === "guest" && !session.settings.guestEnabled);
+  const editingMessageId = editSession?.messageId ?? null;
+  const visibleMessages = useMemo(() => getVisibleMessages(messages, editingMessageId), [messages, editingMessageId]);
   const normalizedSidebarQuery = sidebarQuery.trim().toLowerCase();
   const filteredChats = useMemo(() => {
     if (!normalizedSidebarQuery) return chats;
@@ -412,9 +432,11 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       removeCachedChatMessages(session.actor, DRAFT_CHAT_ID);
     }
     setOpenChatMenuId(null);
+    setEditSession(null);
     router.push("/");
     setMessages([]);
     setError(null);
+    setDraft("");
     setPendingFiles([]);
     setActiveChatId(undefined);
   }, [router, session]);
@@ -547,6 +569,8 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     if (!session) return;
 
     setActiveChatId(initialChatId);
+    setEditSession(null);
+    setDraft("");
     if (initialChatId) {
       const cachedMessages = readCachedChatMessages(session.actor, initialChatId);
       setMessages(cachedMessages);
@@ -580,6 +604,12 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       setAttachMenuOpen(false);
     }
   }, [canChat]);
+
+  useEffect(() => {
+    if (editSession) {
+      setAttachMenuOpen(false);
+    }
+  }, [editSession]);
 
   useDismissibleMenu({
     enabled: isProfileMenuOpen,
@@ -631,16 +661,19 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     };
   }, [handleNewChat]);
 
+  useAutosizeTextarea(composerInputRef, draft);
   useEffect(() => {
-    const textarea = composerInputRef.current;
-    if (!textarea) return;
+    if (!editingMessageId) return;
+    composerInputRef.current?.focus();
+  }, [editingMessageId]);
 
-    const maxHeight = 140;
-    textarea.style.height = "0px";
-    const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
-    textarea.style.height = `${Math.max(44, nextHeight)}px`;
-    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
-  }, [draft]);
+  useEffect(() => {
+    return () => {
+      if (copiedMessageTimeoutRef.current !== null) {
+        window.clearTimeout(copiedMessageTimeoutRef.current);
+      }
+    };
+  }, []);
 
   function updateStreamingMessage(messageId: string, content: string) {
     setMessages((prev) => prev.map((msg) => (msg.id === messageId ? { ...msg, content } : msg)));
@@ -688,10 +721,63 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     }
   }
 
+  async function readResponseError(response: Response) {
+    let message = "Failed to send message";
+    try {
+      const data = (await response.json()) as { error?: string };
+      message = data.error || message;
+    } catch {
+      const fallback = await response.text();
+      if (fallback.trim()) {
+        message = fallback.slice(0, 240);
+      }
+    }
+    return message;
+  }
+
+  async function readAssistantStream(response: Response, messageId: string) {
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("The server stream is unavailable");
+    }
+
+    const decoder = new TextDecoder();
+    let accumulated = "";
+    let painted = "";
+    let rafId: number | null = null;
+
+    const flush = () => {
+      rafId = null;
+      if (painted === accumulated) return;
+      painted = accumulated;
+      updateStreamingMessage(messageId, painted);
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      accumulated += decoder.decode(value, { stream: true });
+      if (rafId === null) {
+        rafId = requestAnimationFrame(flush);
+      }
+    }
+
+    accumulated += decoder.decode();
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+    }
+    flush();
+    return accumulated;
+  }
+
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const sanitizedDraft = draft.trimEnd();
     if (!sanitizedDraft.trim() || sending || !canChat) return;
+    if (editingMessageId) {
+      await submitEditedMessage();
+      return;
+    }
     setError(null);
 
     const optimisticMessage: ChatMessage = {
@@ -768,17 +854,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       });
 
       if (!response.ok) {
-        let message = "Failed to send message";
-        try {
-          const data = (await response.json()) as { error?: string };
-          message = data.error || message;
-        } catch {
-          const fallback = await response.text();
-          if (fallback.trim()) {
-            message = fallback.slice(0, 240);
-          }
-        }
-        throw new Error(message);
+        throw new Error(await readResponseError(response));
       }
 
       const responseChatId = response.headers.get("x-chat-id") || activeChatId;
@@ -802,37 +878,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
         router.push(`/chat/${responseChatId}`);
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error("The server stream is unavailable");
-      }
-
-      const decoder = new TextDecoder();
-      let accumulated = "";
-      let painted = "";
-      let rafId: number | null = null;
-
-      const flush = () => {
-        rafId = null;
-        if (painted === accumulated) return;
-        painted = accumulated;
-        updateStreamingMessage(optimisticAssistantId, painted);
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        accumulated += decoder.decode(value, { stream: true });
-        if (rafId === null) {
-          rafId = requestAnimationFrame(flush);
-        }
-      }
-
-      accumulated += decoder.decode();
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-      }
-      flush();
+      const accumulated = await readAssistantStream(response, optimisticAssistantId);
 
       const finalizedMessages = persistedMessages.map((msg) =>
         msg.id === optimisticAssistantId ? { ...msg, content: accumulated, chatId: responseChatId } : msg,
@@ -865,10 +911,158 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     }
   }
 
+  async function copyMessage(message: ChatMessage) {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopiedMessageId(message.id);
+      if (copiedMessageTimeoutRef.current !== null) {
+        window.clearTimeout(copiedMessageTimeoutRef.current);
+      }
+      copiedMessageTimeoutRef.current = window.setTimeout(() => {
+        setCopiedMessageId((current) => (current === message.id ? null : current));
+        copiedMessageTimeoutRef.current = null;
+      }, 1600);
+    } catch {
+      setError("Could not copy message");
+    }
+  }
+
+  function startEditingMessage(message: ChatMessage) {
+    setError(null);
+    setEditSession({
+      messageId: message.id,
+      originalMessages: messages,
+      savedDraft: draft,
+      savedPendingFiles: pendingFiles,
+    });
+    setDraft(message.content);
+    setPendingFiles([]);
+  }
+
+  function cancelEditingMessage() {
+    if (!editSession) return;
+    setMessages(editSession.originalMessages);
+    setDraft(editSession.savedDraft);
+    setPendingFiles(editSession.savedPendingFiles);
+    setEditSession(null);
+    setError(null);
+  }
+
+  async function submitEditedMessage() {
+    if (!editSession || !activeChatId) return;
+    const sanitizedDraft = draft.trimEnd();
+    if (!sanitizedDraft.trim() || sending || !canChat || session?.degraded) return;
+
+    const targetIndex = editSession.originalMessages.findIndex((entry) => entry.id === editSession.messageId);
+    if (targetIndex === -1) return;
+
+    setError(null);
+
+    const originalMessages = editSession.originalMessages;
+    const optimisticAssistantId = `assistant-stream-${Date.now()}`;
+    const message = originalMessages[targetIndex];
+    const updatedMessage: ChatMessage = {
+      ...message,
+      content: sanitizedDraft,
+    };
+    const trimmedMessages = [...originalMessages.slice(0, targetIndex), updatedMessage];
+    const optimisticAssistant: ChatMessage = {
+      id: optimisticAssistantId,
+      chatId: activeChatId,
+      role: "assistant",
+      content: "",
+      modelId,
+      attachments: [],
+      createdAt: new Date().toISOString(),
+    };
+    const optimisticMessages = [...trimmedMessages, optimisticAssistant];
+    const currentDraft = sanitizedDraft;
+
+    setEditSession(null);
+    setMessages(optimisticMessages);
+    setDraft("");
+    setPendingFiles([]);
+    setSending(true);
+
+    const abortController = new AbortController();
+    sendAbortControllerRef.current = abortController;
+
+    try {
+      const response = await fetch("/api/chat/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          chatId: activeChatId,
+          editMessageId: editSession.messageId,
+          modelId,
+          message: currentDraft,
+          attachmentIds: [],
+        }),
+        signal: abortController.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(await readResponseError(response));
+      }
+
+      const responseChatId = response.headers.get("x-chat-id") || activeChatId;
+      if (!responseChatId) {
+        throw new Error("The server did not return a chat id");
+      }
+
+      if (session) {
+        writeCachedChatMessages(session.actor, responseChatId, optimisticMessages);
+      }
+
+      setActiveChatId(responseChatId);
+      setMessages(optimisticMessages);
+
+      const accumulated = await readAssistantStream(response, optimisticAssistantId);
+      const finalizedMessages = optimisticMessages.map((entry) =>
+        entry.id === optimisticAssistantId ? { ...entry, content: accumulated, chatId: responseChatId } : entry,
+      );
+
+      setMessages(finalizedMessages);
+      if (session) {
+        writeCachedChatMessages(session.actor, responseChatId, finalizedMessages);
+      }
+
+      await loadChats();
+      await loadChat(responseChatId);
+    } catch (sendError) {
+      const aborted = sendError instanceof Error && sendError.name === "AbortError";
+      if (!aborted) {
+        setError(sendError instanceof Error ? sendError.message : "Failed to send message");
+      }
+      setMessages(originalMessages);
+      setEditSession(editSession);
+      setDraft(currentDraft);
+      setPendingFiles([]);
+      if (session) {
+        writeCachedChatMessages(session.actor, activeChatId, originalMessages);
+      }
+    } finally {
+      sendAbortControllerRef.current = null;
+      setSending(false);
+    }
+  }
+
   function handleComposerKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key !== "Enter") return;
-    if (event.shiftKey) return;
-    if (event.nativeEvent.isComposing) return;
+    if (event.key === "Escape" && editingMessageId) {
+      event.preventDefault();
+      cancelEditingMessage();
+      return;
+    }
+
+    if (!shouldSubmitTextareaShortcut({
+      key: event.key,
+      shiftKey: event.shiftKey,
+      isComposing: event.nativeEvent.isComposing,
+    })) {
+      return;
+    }
 
     event.preventDefault();
     if (!draft.trim() || sending || uploading || !canChat) {
@@ -951,6 +1145,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   }
 
   const nextPath = encodeURIComponent(pathname || "/");
+  const composerDisabled = sending || uploading || !canChat;
 
   return (
     <div ref={chatLayoutRef} className="chat-layout">
@@ -1112,45 +1307,90 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
         </header>
 
         <section className="message-stream">
-          {!messages.length ? (
+          {!visibleMessages.length ? (
             <div className="empty-state">
               <h3>Start a new conversation</h3>
               <p>Ask anything, add files, and switch models from the top-left selector.</p>
             </div>
           ) : (
-            messages.map((message) => (
+            visibleMessages.map((message) => (
               <div key={message.id} className={`message-row ${message.role}`}>
-                <article className={`message ${message.role}`}>
-                  {message.role === "user" ? (
-                    <header>
-                      <strong>You</strong>
-                      <small>{new Date(message.createdAt).toLocaleTimeString()}</small>
-                    </header>
+                <div className={`message-stack ${message.role}`}>
+                  <article className={`message ${message.role} ${editingMessageId === message.id ? "editing" : ""}`}>
+                    {message.role === "user" ? (
+                      <header>
+                        <strong>You</strong>
+                        <small>{new Date(message.createdAt).toLocaleTimeString()}</small>
+                      </header>
+                    ) : null}
+                    <div className={`message-content ${message.role === "assistant" ? "markdown-content" : ""}`}>
+                      {message.role === "assistant" ? (
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                      ) : (
+                        <p>{message.content}</p>
+                      )}
+                    </div>
+                    {message.attachments.length ? (
+                      <ul>
+                        {message.attachments.map((file) => (
+                          <li key={file.id}>
+                            <FileText size={12} />
+                            <a href={`/api/files/${file.id}`} target="_blank" rel="noreferrer">
+                              {file.fileName}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </article>
+                  {editingMessageId !== message.id ? (
+                    (() => {
+                      const actionState = getMessageActionState(message, {
+                        editingMessageId,
+                        sending,
+                        degraded: Boolean(session.degraded),
+                      });
+
+                      if (!actionState.showCopy && !actionState.showEdit) {
+                        return null;
+                      }
+
+                      return (
+                        <div className={`message-actions ${message.role}`}>
+                          {actionState.showCopy ? (
+                            <button
+                              type="button"
+                              className={`message-action-button ${copiedMessageId === message.id ? "copied" : ""}`}
+                              aria-label={copiedMessageId === message.id ? "Copied message" : "Copy message"}
+                              title={copiedMessageId === message.id ? "Copied" : "Copy"}
+                              onClick={() => void copyMessage(message)}
+                            >
+                              {copiedMessageId === message.id ? <Check size={13} /> : <Copy size={13} />}
+                              <span>{copiedMessageId === message.id ? "Copied" : "Copy"}</span>
+                            </button>
+                          ) : null}
+                          {actionState.showEdit ? (
+                            <button
+                              type="button"
+                              className="message-action-button"
+                              aria-label="Edit message"
+                              title="Edit"
+                              onClick={() => startEditingMessage(message)}
+                              disabled={actionState.disableEdit}
+                            >
+                              <SquarePen size={13} />
+                              <span>Edit</span>
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    })()
                   ) : null}
-                  <div className={`message-content ${message.role === "assistant" ? "markdown-content" : ""}`}>
-                    {message.role === "assistant" ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-                    ) : (
-                      <p>{message.content}</p>
-                    )}
-                  </div>
-                  {message.attachments.length ? (
-                    <ul>
-                      {message.attachments.map((file) => (
-                        <li key={file.id}>
-                          <FileText size={12} />
-                          <a href={`/api/files/${file.id}`} target="_blank" rel="noreferrer">
-                            {file.fileName}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </article>
+                </div>
               </div>
             ))
           )}
-          <div ref={messageAnchor} className={messages.length ? "message-anchor has-messages" : "message-anchor"} />
+          <div ref={messageAnchor} className={visibleMessages.length ? "message-anchor has-messages" : "message-anchor"} />
         </section>
 
         <footer ref={composerWrapRef} className="composer-wrap">
@@ -1159,6 +1399,14 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
               onSubmit={sendMessage}
               className="composer expanded"
             >
+            {editSession ? (
+              <div className="composer-editing">
+                <span>Editing earlier message. Send to regenerate from here.</span>
+                <button type="button" className="composer-editing-cancel" onClick={cancelEditingMessage} disabled={sending}>
+                  Cancel
+                </button>
+              </div>
+            ) : null}
             <div className="attach-menu-wrap" ref={attachMenuRef}>
               <button
                 type="button"
@@ -1166,7 +1414,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                 title="Add files"
                 aria-haspopup="menu"
                 aria-expanded={isAttachMenuOpen}
-                disabled={!canChat || sending || uploading}
+                disabled={composerDisabled || Boolean(editSession)}
                 onClick={() => setAttachMenuOpen((value) => !value)}
               >
                 <Paperclip size={16} />
@@ -1208,9 +1456,9 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={handleComposerKeyDown}
-              placeholder="Ask anything"
+              placeholder={editingMessageId ? "Edit the message, then send to regenerate" : "Ask anything"}
               rows={1}
-              disabled={sending || uploading || !canChat}
+              disabled={composerDisabled}
             />
 
             {sending ? (
@@ -1218,7 +1466,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                 <Square size={13} />
               </button>
             ) : (
-              <button className="send-icon-button" type="submit" disabled={uploading || !canChat || !draft.trim()}>
+              <button className="send-icon-button" type="submit" disabled={composerDisabled || !draft.trim()}>
                 <SendHorizontal size={14} />
               </button>
             )}
