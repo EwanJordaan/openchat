@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LoaderCircle, Save, ShieldAlert } from "lucide-react";
+import { CheckCircle2, LoaderCircle, Save, ShieldAlert } from "lucide-react";
 
 import type { Actor, ModelOption, PublicAppSettings, RoleLimit } from "@/lib/types";
 
