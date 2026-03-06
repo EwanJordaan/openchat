@@ -20,6 +20,8 @@ import {
   FileText,
   LoaderCircle,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   Paperclip,
   Search,
   SendHorizontal,
@@ -30,8 +32,10 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import rehypeKatex from "rehype-katex";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 
 import {
   buildChatPath,
@@ -45,6 +49,7 @@ import {
 } from "@/components/chat/chat-workspace-utils";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useTheme } from "@/components/providers/theme-provider";
+import { UserSettingsPanel } from "@/components/settings/user-settings-panel";
 import type { Actor, ChatMessage, ChatSummary, ModelOption, PublicAppSettings, UploadedFile } from "@/lib/types";
 
 interface EditSession {
@@ -58,6 +63,10 @@ const CHAT_CACHE_KEY = "openchat:chat-list";
 const CHAT_MESSAGES_CACHE_KEY = "openchat:chat-messages";
 const SESSION_CACHE_KEY = "openchat:session";
 const DRAFT_CHAT_ID = "draft";
+const COPY_FEEDBACK_MS = 1600;
+const CHAT_GROUP_ORDER = ["today", "yesterday", "previous7Days", "previous30Days", "older"] as const;
+
+type ChatGroupKey = (typeof CHAT_GROUP_ORDER)[number];
 
 let sessionMemoryCache: SessionPayload | null = null;
 
@@ -141,6 +150,12 @@ interface SessionPayload {
   models: ModelOption[];
   degraded?: boolean;
   error?: string;
+}
+
+interface UserMessageContextMenuState {
+  messageId: string;
+  x: number;
+  y: number;
 }
 
 function actorCacheKey(actor: Actor | null) {
@@ -277,6 +292,70 @@ function ModelSelector({
   );
 }
 
+function OpenChatGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <rect x="2.75" y="2.75" width="18.5" height="18.5" rx="6.5" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M9.4 8.25a3.6 3.6 0 1 0 0 7.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M14.6 8.25h0.35a3.6 3.6 0 1 1 0 7.5h-0.35" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M12 8.25v7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.65" />
+    </svg>
+  );
+}
+
+function normalizeMathDelimiters(content: string) {
+  const codeBlocks: string[] = [];
+  const withoutCodeBlocks = content.replace(/(```[\s\S]*?```|~~~[\s\S]*?~~~)/g, (block) => {
+    const index = codeBlocks.push(block) - 1;
+    return `__OPENCHAT_CODE_BLOCK_${index}__`;
+  });
+
+  const normalized = withoutCodeBlocks
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, formula: string) => `$${formula}$`)
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, formula: string) => `$$${formula}$$`);
+
+  return normalized.replace(/__OPENCHAT_CODE_BLOCK_(\d+)__/g, (_, rawIndex: string) => {
+    const index = Number(rawIndex);
+    return Number.isNaN(index) ? "" : codeBlocks[index] || "";
+  });
+}
+
+function startOfLocalDay(input: Date) {
+  return new Date(input.getFullYear(), input.getMonth(), input.getDate());
+}
+
+function getChatGroupKey(chat: ChatSummary, now = new Date()): ChatGroupKey {
+  const updatedAt = new Date(chat.updatedAt);
+  if (Number.isNaN(updatedAt.getTime())) {
+    return "older";
+  }
+
+  const todayStart = startOfLocalDay(now);
+  const updatedStart = startOfLocalDay(updatedAt);
+  const dayDiff = Math.floor((todayStart.getTime() - updatedStart.getTime()) / 86_400_000);
+
+  if (dayDiff <= 0) return "today";
+  if (dayDiff === 1) return "yesterday";
+  if (dayDiff <= 7) return "previous7Days";
+  if (dayDiff <= 30) return "previous30Days";
+  return "older";
+}
+
+function chatGroupLabel(key: ChatGroupKey) {
+  switch (key) {
+    case "today":
+      return "Today";
+    case "yesterday":
+      return "Yesterday";
+    case "previous7Days":
+      return "Previous 7 Days";
+    case "previous30Days":
+      return "Previous 30 Days";
+    default:
+      return "Older";
+  }
+}
+
 export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const { setMode } = useTheme();
   const [isHydrated, setIsHydrated] = useState(false);
@@ -325,7 +404,6 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const [editSession, setEditSession] = useState<EditSession | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
-  const messageAnchor = useAutoScroll(messages.length);
   const activeChat = useMemo(() => chats.find((chat) => chat.id === activeChatId) || null, [chats, activeChatId]);
   const chatLayoutRef = useRef<HTMLDivElement | null>(null);
   const chatHeaderRef = useRef<HTMLElement | null>(null);
@@ -343,6 +421,11 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const shouldStickToBottomRef = useRef(true);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const chatMenuRef = useRef<HTMLDivElement | null>(null);
+  const searchMenuRef = useRef<HTMLDivElement | null>(null);
+  const userContextMenuRef = useRef<HTMLDivElement | null>(null);
+  const assistantCopyTimerRef = useRef<number | null>(null);
+  const userCopyTimerRef = useRef<number | null>(null);
+  const chatSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [isProfileMenuOpen, setProfileMenuOpen] = useState(false);
   const [openChatMenuId, setOpenChatMenuId] = useState<string | null>(null);
   const [sidebarQuery, setSidebarQuery] = useState("");
@@ -656,6 +739,18 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     }
   }, [canChat]);
 
+  useEffect(
+    () => () => {
+      if (assistantCopyTimerRef.current !== null) {
+        clearTimeout(assistantCopyTimerRef.current);
+      }
+      if (userCopyTimerRef.current !== null) {
+        clearTimeout(userCopyTimerRef.current);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     if (editSession) {
       setAttachMenuOpen(false);
@@ -740,14 +835,120 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     if (!stream) return;
     const distanceToBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight;
     shouldStickToBottomRef.current = distanceToBottom < 80;
+    if (userContextMenu) {
+      setUserContextMenu(null);
+    }
   }
 
   useEffect(() => {
     const stream = messageStreamRef.current;
     if (!stream) return;
     if (!shouldStickToBottomRef.current) return;
-    stream.scrollTop = stream.scrollHeight;
+    stream.scrollTo({
+      top: stream.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages]);
+
+  async function copyText(content: string) {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(content);
+        return true;
+      } catch {
+        // Fall back when clipboard API is blocked.
+      }
+    }
+
+    if (typeof document === "undefined") {
+      return false;
+    }
+
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = content;
+      textarea.setAttribute("readonly", "true");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const copied = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      return copied;
+    } catch {
+      return false;
+    }
+  }
+
+  async function handleCopyAssistantMessage(messageId: string, content: string) {
+    const copied = await copyText(content);
+    if (!copied) {
+      setError("Could not copy assistant message.");
+      return;
+    }
+
+    setError(null);
+    setCopiedAssistantMessageId(messageId);
+    if (assistantCopyTimerRef.current !== null) {
+      clearTimeout(assistantCopyTimerRef.current);
+    }
+    assistantCopyTimerRef.current = window.setTimeout(() => {
+      setCopiedAssistantMessageId((current) => (current === messageId ? null : current));
+    }, COPY_FEEDBACK_MS);
+  }
+
+  async function handleCopyUserMessage(messageId: string) {
+    const targetMessage = messages.find((message) => message.id === messageId && message.role === "user");
+    if (!targetMessage) {
+      setUserContextMenu(null);
+      return;
+    }
+
+    const copied = await copyText(targetMessage.content);
+    if (!copied) {
+      setError("Could not copy message.");
+      return;
+    }
+
+    setError(null);
+    setCopiedUserMessageId(messageId);
+    setUserContextMenu(null);
+    if (userCopyTimerRef.current !== null) {
+      clearTimeout(userCopyTimerRef.current);
+    }
+    userCopyTimerRef.current = window.setTimeout(() => {
+      setCopiedUserMessageId((current) => (current === messageId ? null : current));
+    }, COPY_FEEDBACK_MS);
+  }
+
+  function handleEditUserMessage(messageId: string) {
+    const targetMessage = messages.find((message) => message.id === messageId && message.role === "user");
+    if (!targetMessage) {
+      setUserContextMenu(null);
+      return;
+    }
+
+    setDraft(targetMessage.content);
+    setUserContextMenu(null);
+    requestAnimationFrame(() => {
+      const textarea = composerInputRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.selectionStart = textarea.value.length;
+      textarea.selectionEnd = textarea.value.length;
+    });
+  }
+
+  function openUserContextMenu(event: ReactMouseEvent<HTMLElement>, messageId: string) {
+    event.preventDefault();
+    const menuWidth = 176;
+    const menuHeight = 92;
+    const viewportPadding = 8;
+    const clampedX = Math.max(viewportPadding, Math.min(event.clientX, window.innerWidth - menuWidth - viewportPadding));
+    const clampedY = Math.max(viewportPadding, Math.min(event.clientY, window.innerHeight - menuHeight - viewportPadding));
+    setUserContextMenu({ messageId, x: clampedX, y: clampedY });
+  }
 
   async function uploadPendingFiles() {
     if (!pendingFiles.length) return [] as UploadedFile[];
@@ -1148,6 +1349,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   async function removeChat(chatId: string) {
     await fetch(`/api/chats/${chatId}`, { method: "DELETE" });
     setOpenChatMenuId(null);
+    setConfirmDeleteChatId(null);
     if (session) {
       removeCachedChatMessages(session.actor, chatId);
     }
@@ -1317,57 +1519,136 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
           )}
         </div>
 
-        <div className="sidebar-footer">
-          {session.actor.type === "user" ? (
-            <div className="profile-menu-wrap" ref={profileMenuRef}>
-              <button
-                type="button"
-                className="profile-trigger"
-                aria-haspopup="menu"
-                aria-expanded={isProfileMenuOpen}
-                onClick={() => setProfileMenuOpen((value) => !value)}
-              >
-                <span className="profile-avatar">{session.actor.user.name.slice(0, 1).toUpperCase()}</span>
-                <span className="profile-copy">
-                  <span className="profile-name">{session.actor.user.name}</span>
-                  <span className="profile-email">{session.actor.user.email}</span>
-                </span>
-                <ChevronDown
-                  size={14}
-                  className="profile-caret"
-                  style={{ transform: isProfileMenuOpen ? "rotate(180deg)" : "rotate(0deg)" }}
-                />
-              </button>
+        {!isSidebarCollapsed ? (
+          <div className="chat-list-section">
+            <p className="chat-list-heading">Your chats</p>
 
-              {isProfileMenuOpen ? (
-                <div className="profile-menu" role="menu">
-                  <Link href="/settings" onClick={() => setProfileMenuOpen(false)}>
-                    <Settings size={14} /> Settings
-                  </Link>
-                  {session.actor.roles.includes("admin") ? (
-                    <Link href="/admin" onClick={() => setProfileMenuOpen(false)}>
-                      <Shield size={14} /> Admin
-                    </Link>
-                  ) : null}
-                  <button type="button" onClick={() => void logout()}>
-                    <LogOut size={14} /> Logout
-                  </button>
-                </div>
-              ) : null}
+            <div className="chat-list" role="list">
+              {groupedChats.length ? (
+                groupedChats.map((group) => (
+                  <section key={group.key} className="chat-list-group" aria-label={group.label}>
+                    <h3 className="chat-list-group-heading">{group.label}</h3>
+                    {group.chats.map((chat) => (
+                      <div key={chat.id} className={`chat-item ${chat.id === activeChatId ? "active" : ""}`}>
+                        <Link href={`/chat/${chat.id}`} title={chat.title}>
+                          <span>{chat.title}</span>
+                        </Link>
+                        <div className="chat-item-actions" ref={openChatMenuId === chat.id ? chatMenuRef : undefined}>
+                          <button
+                            type="button"
+                            className="chat-menu-trigger"
+                            aria-haspopup="menu"
+                            aria-expanded={openChatMenuId === chat.id}
+                            title="Chat options"
+                            onClick={() => {
+                              setConfirmDeleteChatId(null);
+                              setOpenChatMenuId((current) => (current === chat.id ? null : chat.id));
+                            }}
+                          >
+                            <Ellipsis size={16} strokeWidth={2} />
+                          </button>
+                          {openChatMenuId === chat.id ? (
+                            <div className="chat-item-menu" role="menu">
+                              <button type="button" onClick={() => void renameChat(chat.id)}>
+                                Rename
+                              </button>
+                              {confirmDeleteChatId === chat.id ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="chat-item-menu-delete-confirm"
+                                    onClick={() => void removeChat(chat.id)}
+                                  >
+                                    <Trash2 size={13} /> Confirm delete
+                                  </button>
+                                  <button type="button" onClick={() => setConfirmDeleteChatId(null)}>
+                                    Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="chat-item-menu-delete"
+                                  onClick={() => setConfirmDeleteChatId(chat.id)}
+                                >
+                                  <Trash2 size={13} /> Delete
+                                </button>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </section>
+                ))
+              ) : (
+                <p className="chat-list-empty">
+                  {chatSearchQuery ? "No chats match your search." : "No chats yet."}
+                </p>
+              )}
             </div>
-          ) : (
-            <>
-              <p className="guest-note">
-                {session.settings.guestEnabled
-                  ? "Guest mode is enabled. Sign in to save long-term history and personalize settings."
-                  : "Guest mode is currently disabled by admin."}
-              </p>
-              <Link href={`/signin?next=${nextPath}`} className="signin-link">
-                Sign in
-              </Link>
-            </>
-          )}
-        </div>
+          </div>
+        ) : null}
+
+        {!isSidebarCollapsed ? (
+          <div className="sidebar-footer">
+            {session.actor.type === "user" ? (
+              <div className="profile-menu-wrap" ref={profileMenuRef}>
+                <button
+                  type="button"
+                  className="profile-trigger"
+                  aria-haspopup="menu"
+                  aria-expanded={isProfileMenuOpen}
+                  onClick={() => setProfileMenuOpen((value) => !value)}
+                >
+                  <span className="profile-avatar">{session.actor.user.name.slice(0, 1).toUpperCase()}</span>
+                  <span className="profile-copy">
+                    <span className="profile-name">{session.actor.user.name}</span>
+                    <span className="profile-email">{session.actor.user.email}</span>
+                  </span>
+                  <ChevronDown
+                    size={14}
+                    className="profile-caret"
+                    style={{ transform: isProfileMenuOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+                  />
+                </button>
+
+                {isProfileMenuOpen ? (
+                  <div className="profile-menu" role="menu">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileMenuOpen(false);
+                        openSettingsOverlay();
+                      }}
+                    >
+                      <Settings size={14} /> Settings
+                    </button>
+                    {session.actor.roles.includes("admin") ? (
+                      <Link href="/admin" onClick={() => setProfileMenuOpen(false)}>
+                        <Shield size={14} /> Admin
+                      </Link>
+                    ) : null}
+                    <button type="button" onClick={() => void logout()}>
+                      <LogOut size={14} /> Logout
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <>
+                <p className="guest-note">
+                  {session.settings.guestEnabled
+                    ? "Guest mode is enabled. Sign in to save long-term history and personalize settings."
+                    : "Guest mode is currently disabled by admin."}
+                </p>
+                <Link href={`/signin?next=${nextPath}`} className="signin-link">
+                  Sign in
+                </Link>
+              </>
+            )}
+          </div>
+        ) : null}
       </aside>
 
       <main ref={messageStreamRef} className="chat-main" onScroll={handleMessageStreamScroll}>
@@ -1475,6 +1756,31 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
           )}
           <div ref={messageAnchor} className={visibleMessages.length ? "message-anchor has-messages" : "message-anchor"} />
         </section>
+        {userContextMenu ? (
+          <div
+            ref={userContextMenuRef}
+            className="message-context-menu"
+            role="menu"
+            style={{ left: `${userContextMenu.x}px`, top: `${userContextMenu.y}px` }}
+          >
+            <button
+              type="button"
+              className="message-context-menu-item"
+              onClick={() => handleEditUserMessage(userContextMenu.messageId)}
+            >
+              <SquarePen size={14} />
+              Edit
+            </button>
+            <button
+              type="button"
+              className="message-context-menu-item"
+              onClick={() => void handleCopyUserMessage(userContextMenu.messageId)}
+            >
+              {copiedUserMessageId === userContextMenu.messageId ? <Check size={14} /> : <Copy size={14} />}
+              {copiedUserMessageId === userContextMenu.messageId ? "Copied" : "Copy"}
+            </button>
+          </div>
+        ) : null}
 
         <footer ref={composerWrapRef} className="composer-wrap">
             <form
@@ -1566,6 +1872,8 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
           </form>
         </footer>
       </main>
+
+      {isSettingsOverlayOpen ? <UserSettingsPanel mode="overlay" onClose={closeSettingsOverlay} /> : null}
     </div>
   );
 }

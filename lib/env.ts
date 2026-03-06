@@ -2,6 +2,9 @@ import { z } from "zod";
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  VERCEL: z.string().optional(),
+  CF_PAGES: z.string().optional(),
+  CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   APP_URL: z.string().default("http://localhost:3000"),
   BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
   DATABASE_PROVIDER: z
@@ -26,6 +29,12 @@ const envSchema = z.object({
   ADMIN_SEED_PASSWORD: z.string().default(""),
   OPENAI_BASE_URL: z.string().default("https://api.openai.com/v1"),
   OPENAI_API_KEY: z.string().optional(),
+  OPENAI_BASE_URL_LOCAL: z.string().optional(),
+  OPENAI_BASE_URL_VERCEL: z.string().optional(),
+  OPENAI_BASE_URL_CLOUDFLARE: z.string().optional(),
+  OPENAI_API_KEY_LOCAL: z.string().optional(),
+  OPENAI_API_KEY_VERCEL: z.string().optional(),
+  OPENAI_API_KEY_CLOUDFLARE: z.string().optional(),
   MAX_UPLOAD_MB: z.coerce.number().positive().default(12),
 });
 
@@ -43,3 +52,33 @@ export const adminSeedEmail =
 export const adminSeedPassword = env.ADMIN_SEED_PASSWORD.trim();
 
 export const isProduction = env.NODE_ENV === "production";
+
+export type RuntimePlatform = "local" | "vercel" | "cloudflare";
+
+export const runtimePlatform: RuntimePlatform = env.CF_PAGES || env.CLOUDFLARE_ACCOUNT_ID
+  ? "cloudflare"
+  : env.VERCEL
+    ? "vercel"
+    : "local";
+
+export function resolveOpenAiEnvironmentConfig() {
+  const apiKeyByPlatform =
+    runtimePlatform === "cloudflare"
+      ? env.OPENAI_API_KEY_CLOUDFLARE
+      : runtimePlatform === "vercel"
+        ? env.OPENAI_API_KEY_VERCEL
+        : env.OPENAI_API_KEY_LOCAL;
+
+  const baseUrlByPlatform =
+    runtimePlatform === "cloudflare"
+      ? env.OPENAI_BASE_URL_CLOUDFLARE
+      : runtimePlatform === "vercel"
+        ? env.OPENAI_BASE_URL_VERCEL
+        : env.OPENAI_BASE_URL_LOCAL;
+
+  return {
+    platform: runtimePlatform,
+    apiKey: apiKeyByPlatform || env.OPENAI_API_KEY || "",
+    baseUrl: (baseUrlByPlatform || env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, ""),
+  };
+}

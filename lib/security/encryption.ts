@@ -1,13 +1,15 @@
 import crypto from "node:crypto";
 
-import { env } from "@/lib/env";
+import { env, isProduction } from "@/lib/env";
 
 function resolveKey() {
   const source = env.SETTINGS_ENCRYPTION_KEY?.trim();
-  if (!source) {
+  if (!source && isProduction) {
     throw new Error("SETTINGS_ENCRYPTION_KEY is required to encrypt or decrypt provider secrets.");
   }
-  return crypto.createHash("sha256").update(source).digest();
+
+  const keySource = source || "openchat-local-dev-insecure-key";
+  return crypto.createHash("sha256").update(keySource).digest();
 }
 
 let key: Buffer | null = null;

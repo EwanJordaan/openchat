@@ -17,6 +17,7 @@
     "better-auth": "^1.5.3",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.1",
+    "katex": "^0.16.33",
     "lucide-react": "^0.575.0",
     "mysql2": "^3.18.0",
     "nanoid": "^5.1.6",
@@ -25,7 +26,9 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

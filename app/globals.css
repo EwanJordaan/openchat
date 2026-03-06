@@ -19,8 +19,10 @@
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
   --chat-content-max-width: 900px;
   --sidebar-width: 300px;
+  --sidebar-collapsed-width: 76px;
   --chat-header-height: 58px;
   --chat-composer-height: 176px;
+  --chat-end-scroll-space: 100px;
   --scrollbar-size: 18px;
   --scrollbar-track: color-mix(in oklab, var(--surface-muted) 70%, var(--surface));
   --scrollbar-thumb: color-mix(in oklab, var(--text-muted) 38%, var(--surface));
@@ -118,6 +120,20 @@ select {
   padding: 16px 12px 12px;
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-top-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-brand-row {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
   gap: 10px;
   background: var(--sidebar-bg);
 }
@@ -131,7 +147,7 @@ select {
   padding: 0 4px;
 }
 
-.new-chat {
+.sidebar-nav-item {
   width: 100%;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -281,12 +297,29 @@ select {
   background: color-mix(in oklab, var(--surface) 58%, var(--sidebar-bg));
 }
 
+.chat-list-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-list-group-heading {
+  margin: 0;
+  padding: 2px 8px 1px;
+  font-size: 0.76rem;
+  font-family: var(--font-ui), sans-serif;
+  font-weight: 600;
+  color: color-mix(in oklab, var(--text-secondary) 86%, var(--text-muted));
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .chat-item {
   border: 0;
   border-radius: 6px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   background: transparent;
   padding: 7px 8px;
   position: relative;
@@ -315,10 +348,43 @@ select {
 
 .chat-item span {
   display: block;
-  font-size: 0.82rem;
+  font-size: 0.85rem;
+  color: color-mix(in oklab, var(--text-secondary) 92%, var(--text-muted));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.chat-layout.sidebar-collapsed .sidebar-brand {
+  display: none;
+}
+
+.chat-layout.sidebar-collapsed .sidebar-nav,
+.chat-layout.sidebar-collapsed .chat-list-section,
+.chat-layout.sidebar-collapsed .sidebar-footer {
+  display: none;
+}
+
+.chat-layout.sidebar-collapsed .sidebar-header {
+  align-items: center;
+}
+
+.chat-layout.sidebar-collapsed .sidebar-top-row {
+  width: 100%;
+  justify-content: center;
+}
+
+.chat-layout.sidebar-collapsed .sidebar-brand-row {
+  width: 40px;
+  flex: 0 0 40px;
+  min-width: 40px;
+  padding: 4px;
+  gap: 0;
+  justify-content: center;
+}
+
+.chat-layout.sidebar-collapsed .sidebar-collapse-toggle {
+  flex: 0 0 40px;
 }
 
 .chat-item-actions {
@@ -329,13 +395,13 @@ select {
   border: 0;
   background: transparent;
   color: var(--text-muted);
-  padding: 4px;
-  border-radius: 6px;
+  padding: 5px;
+  border-radius: 8px;
   cursor: pointer;
 }
 
 .chat-menu-trigger:hover {
-  background: var(--surface-muted);
+  background: color-mix(in oklab, var(--surface-muted) 80%, transparent);
   color: var(--text-primary);
 }
 
@@ -373,6 +439,25 @@ select {
 .chat-item-menu button:hover {
   background: var(--accent-soft);
   color: var(--text-primary);
+}
+
+.chat-item-menu button.chat-item-menu-delete {
+  color: var(--danger) !important;
+}
+
+.chat-item-menu button.chat-item-menu-delete:hover {
+  background: color-mix(in oklab, var(--danger) 12%, var(--surface-elevated));
+  color: var(--danger) !important;
+}
+
+.chat-item-menu button.chat-item-menu-delete-confirm {
+  background: color-mix(in oklab, var(--danger) 14%, var(--surface-elevated));
+  color: var(--danger) !important;
+}
+
+.chat-item-menu button.chat-item-menu-delete-confirm:hover {
+  background: color-mix(in oklab, var(--danger) 22%, var(--surface-elevated));
+  color: var(--danger) !important;
 }
 
 .sidebar-footer {
@@ -549,9 +634,7 @@ select {
 }
 
 .chat-main-header {
-  position: fixed;
-  left: var(--sidebar-width);
-  right: var(--scrollbar-size);
+  position: sticky;
   top: 0;
   z-index: 24;
   background: color-mix(in oklab, var(--main-bg) 80%, var(--surface));
@@ -706,7 +789,7 @@ select {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .message-stream::after {
@@ -725,7 +808,6 @@ select {
 .message-row {
   width: min(var(--chat-content-max-width), 100%);
   margin: 0 auto;
-  padding-right: 10px;
   display: flex;
 }
 
@@ -753,7 +835,7 @@ select {
 }
 
 .message-row.assistant .message {
-  width: 100%;
+  width: min(100%, calc(var(--chat-content-max-width) - 44px));
 }
 
 .message-row.user .message {
@@ -780,14 +862,16 @@ select {
   border-radius: 0;
   background: transparent;
   padding: 0;
+  position: relative;
 }
 
 .message.user {
-  background: var(--accent-soft);
-  border-color: var(--border-strong);
+  background: color-mix(in oklab, var(--accent-soft) 74%, var(--surface));
+  border-color: color-mix(in oklab, var(--border-strong) 72%, transparent);
   text-align: left;
-  border-radius: 14px;
-  padding: 10px 14px;
+  border-radius: 18px;
+  padding: 11px 15px;
+  box-shadow: 0 4px 14px rgba(16, 18, 22, 0.05);
 }
 
 .message.user header {
@@ -830,7 +914,7 @@ select {
 }
 
 .markdown-content {
-  font-size: 1.04rem;
+  font-size: 1.08rem;
   line-height: 1.75;
   color: var(--text-primary);
   overflow-wrap: break-word;
@@ -876,7 +960,7 @@ select {
 .markdown-content pre,
 .markdown-content blockquote,
 .markdown-content table {
-  margin: 0.8rem 0;
+  margin: 1rem 0;
 }
 
 .markdown-content ul,
@@ -952,6 +1036,136 @@ select {
   vertical-align: top;
   font-size: 0.97rem;
   word-break: break-word;
+}
+
+.message-assistant-footer {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 0.3rem;
+}
+
+.assistant-message-shell {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.message-copy-button {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0.78;
+  transition: color 140ms ease, transform 140ms ease, opacity 140ms ease;
+}
+
+.message-copy-button span {
+  display: none;
+}
+
+.message-copy-button::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -3px;
+  width: 10px;
+  height: 2px;
+  border-radius: 99px;
+  background: currentColor;
+  opacity: 0.12;
+  transform: translateX(-50%) scaleX(0.2);
+  transform-origin: center;
+  transition: transform 140ms ease, opacity 140ms ease;
+}
+
+@media (hover: hover) {
+  .message-copy-button:hover {
+    color: var(--text-primary);
+    transform: translateY(-1px);
+    opacity: 1;
+  }
+
+  .message-copy-button:hover::after {
+    opacity: 0.95;
+    transform: translateX(-50%) scaleX(1);
+  }
+}
+
+.message-copy-button:focus,
+.message-copy-button:focus-visible {
+  outline: 1px solid color-mix(in oklab, var(--text-primary) 40%, transparent);
+  outline-offset: 2px;
+  box-shadow: none;
+  opacity: 1;
+}
+
+.message-copy-button:focus::after,
+.message-copy-button:focus-visible::after {
+  opacity: 0.95;
+  transform: translateX(-50%) scaleX(1);
+}
+
+.message-context-menu {
+  position: fixed;
+  min-width: 170px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow);
+  padding: 4px;
+  z-index: 44;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.message-context-menu-item {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  text-align: left;
+  font-size: 0.77rem;
+  line-height: 1.2;
+  padding: 0.42rem 0.5rem;
+  cursor: pointer;
+}
+
+.message-context-menu-item:hover {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.markdown-content .katex {
+  max-width: 100%;
+}
+
+.markdown-content .katex-display {
+  margin: 0.95rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.15rem;
+}
+
+.markdown-content .katex-display > .katex {
+  display: inline-block;
+  min-width: max-content;
 }
 
 .message > ul {
@@ -1095,10 +1309,8 @@ select {
 }
 
 .composer-wrap {
-  position: fixed;
-  left: var(--sidebar-width);
-  right: var(--scrollbar-size);
-  bottom: 0;
+  position: sticky;
+  bottom: 8px;
   width: auto;
   z-index: 24;
   isolation: isolate;
@@ -1131,11 +1343,11 @@ select {
   z-index: 1;
   max-width: min(var(--chat-content-max-width), 100%);
   margin: 0 auto;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in oklab, var(--border) 75%, transparent);
   border-radius: 999px;
-  background: var(--surface-elevated);
-  box-shadow: var(--shadow);
-  padding: 7px 8px;
+  background: color-mix(in oklab, var(--surface-elevated) 88%, var(--surface));
+  box-shadow: 0 22px 34px rgba(24, 24, 27, 0.14), 0 2px 8px rgba(24, 24, 27, 0.09);
+  padding: 8px 10px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1147,21 +1359,21 @@ select {
 }
 
 .composer.expanded {
-  border-radius: 16px;
-  padding: 11px 12px 10px;
+  border-radius: 26px;
+  padding: 14px 15px 12px;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-rows: auto auto;
-  min-height: 104px;
+  min-height: 112px;
   align-items: end;
   column-gap: 12px;
-  row-gap: 10px;
+  row-gap: 11px;
 }
 
 .composer.expanded .composer-input {
   grid-column: 1 / -1;
   grid-row: 1;
-  min-height: 44px;
+  min-height: 48px;
   align-self: start;
 }
 
@@ -1194,7 +1406,7 @@ select {
   color: var(--text-primary);
   resize: none;
   min-height: 26px;
-  max-height: 120px;
+  max-height: 140px;
   overflow-y: hidden;
   overflow-x: hidden;
   line-height: 1.5;
@@ -1424,6 +1636,41 @@ select {
   padding: 26px 20px 40px;
 }
 
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: color-mix(in oklab, var(--bg) 58%, rgba(8, 10, 14, 0.54));
+  backdrop-filter: blur(3px);
+}
+
+.settings-overlay-panel {
+  width: min(880px, 100%);
+  max-height: calc(100dvh - 44px);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-shell.settings-shell-overlay {
+  max-width: none;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .settings-topbar {
   display: flex;
   justify-content: space-between;
@@ -1446,6 +1693,33 @@ select {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.settings-close-button {
+  width: 32px;
+  height: 32px;
+  padding: 0 !important;
+  justify-content: center;
+  gap: 0;
+}
+
+.settings-close-button:hover {
+  border-color: color-mix(in oklab, var(--danger) 48%, var(--border));
+  color: var(--danger);
+  background: color-mix(in oklab, var(--danger) 11%, var(--surface));
+}
+
+.settings-close-button:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--danger) 50%, var(--border-strong));
+  outline-offset: 2px;
+}
+
+.settings-sync-indicator {
+  color: var(--text-muted);
+  font-size: 0.77rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .theme-toggle-button {
@@ -1484,6 +1758,35 @@ select {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.user-settings-grid {
+  align-content: start;
+}
+
+.settings-shell-overlay .settings-topbar {
+  margin: 0;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.settings-shell-overlay .settings-grid {
+  grid-template-columns: 1fr;
+  overflow: auto;
+  padding: 14px 20px 20px;
+}
+
+.settings-shell-overlay .settings-status {
+  margin: 0 20px 18px;
+  align-self: flex-start;
+}
+
+.settings-shell-overlay .settings-loading {
+  min-height: 100%;
 }
 
 .settings-grid article {
@@ -1597,9 +1900,23 @@ select {
     grid-template-rows: minmax(180px, 38dvh) minmax(0, 1fr);
   }
 
+  .chat-layout.sidebar-collapsed {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
   .chat-sidebar {
     border-right: 0;
     border-bottom: 0;
+  }
+
+  .chat-layout.sidebar-collapsed .chat-sidebar {
+    height: auto;
+    min-height: 0;
+  }
+
+  .chat-layout.sidebar-collapsed .sidebar-header {
+    padding-bottom: 8px;
   }
 
   .chat-list {
@@ -1614,12 +1931,29 @@ select {
     flex-direction: column;
   }
 
+  .settings-overlay {
+    padding: 10px;
+  }
+
+  .settings-overlay-panel {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    border-radius: 14px;
+  }
+
+  .settings-shell-overlay .settings-topbar,
+  .settings-shell-overlay .settings-grid {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .settings-shell-overlay .settings-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
   .chat-main-header {
     position: sticky;
-    left: auto;
-    right: auto;
-    width: calc(100% - var(--scrollbar-size));
-    margin-right: var(--scrollbar-size);
     z-index: 10;
   }
 
@@ -1663,13 +1997,12 @@ select {
   }
 
   .message-stream {
-    padding-top: 14px;
-    padding-right: 0;
+    padding-top: 16px;
   }
 
   .markdown-content {
-    font-size: 0.98rem;
-    line-height: 1.68;
+    font-size: 1.01rem;
+    line-height: 1.72;
   }
 
   .markdown-content h2 {
@@ -1681,14 +2014,14 @@ select {
   }
 
   .composer {
-    border-radius: 18px;
-    padding: 8px;
+    border-radius: 20px;
+    padding: 9px;
   }
 
   .composer.expanded {
-    border-radius: 12px;
-    padding: 8px;
-    min-height: 96px;
+    border-radius: 19px;
+    padding: 10px;
+    min-height: 102px;
   }
 
   .attach-icon-button,
@@ -1696,4 +2029,9 @@ select {
     width: 38px;
     height: 38px;
   }
+
+  .assistant-message-shell {
+    gap: 0;
+  }
+
 }

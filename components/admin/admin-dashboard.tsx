@@ -49,6 +49,7 @@ export function AdminDashboard() {
   const [status, setStatus] = useState<string | null>(null);
 
   const [providerKeys, setProviderKeys] = useState<Record<string, string>>({});
+  const [providerMessages, setProviderMessages] = useState<Record<string, string>>({});
 
   const patchData = useCallback((updater: (current: AdminPayload) => AdminPayload) => {
     setData((current) => (current ? updater(current) : current));
@@ -129,9 +130,37 @@ export function AdminDashboard() {
       setStatus(parseErrorMessage(raw) || "Failed to save changes");
       return false;
     }
-    setStatus("Saved.");
-    await load();
-    return true;
+  }
+
+  async function saveProvider(provider: ProviderItem) {
+    const pendingApiKey = (providerKeys[provider.provider] || "").trim();
+    const ok = await update({
+      action: "provider",
+      payload: {
+        provider: provider.provider,
+        baseUrl: provider.baseUrl,
+        isEnabled: provider.isEnabled,
+        apiKey: pendingApiKey || undefined,
+      },
+    });
+
+    if (!ok) {
+      setProviderMessages((prev) => ({
+        ...prev,
+        [provider.provider]: "Failed to save provider settings.",
+      }));
+      return;
+    }
+
+    setProviderKeys((prev) => ({
+      ...prev,
+      [provider.provider]: "",
+    }));
+
+    setProviderMessages((prev) => ({
+      ...prev,
+      [provider.provider]: pendingApiKey ? "API key added successfully." : "Provider settings saved.",
+    }));
   }
 
   if (loading) {
@@ -304,21 +333,16 @@ export function AdminDashboard() {
                 </label>
                 <button
                   type="button"
-                  onClick={() =>
-                    void update({
-                      action: "provider",
-                      payload: {
-                        provider: provider.provider,
-                        baseUrl: provider.baseUrl,
-                        isEnabled: provider.isEnabled,
-                        apiKey: providerKeys[provider.provider] || undefined,
-                      },
-                    })
-                  }
+                  onClick={() => void saveProvider(provider)}
                 >
                   <Save size={14} />
                   Save provider
                 </button>
+                {providerMessages[provider.provider] ? (
+                  <p className="subtle" role="status" aria-live="polite">
+                    <CheckCircle2 size={14} /> {providerMessages[provider.provider]}
+                  </p>
+                ) : null}
               </div>
             ))}
           </div>

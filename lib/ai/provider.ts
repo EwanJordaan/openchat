@@ -1,4 +1,4 @@
-import { env } from "@/lib/env";
+import { resolveOpenAiEnvironmentConfig } from "@/lib/env";
 import { getProviderCredential } from "@/lib/db/store";
 import type { ChatMessage, ModelOption } from "@/lib/types";
 
@@ -54,8 +54,9 @@ export async function streamAssistantReply({ model, messages, signal, onToken }:
   const userPrompt = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
 
   const provider = await getProviderCredential(model.provider);
-  const apiKey = provider?.apiKey || env.OPENAI_API_KEY || "";
-  const baseUrl = (provider?.baseUrl || env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+  const envProvider = resolveOpenAiEnvironmentConfig();
+  const apiKey = provider?.apiKey || envProvider.apiKey;
+  const baseUrl = (provider?.baseUrl || envProvider.baseUrl).replace(/\/$/, "");
   const providerEnabled = provider ? provider.isEnabled : true;
 
   if (!providerEnabled || !apiKey) {
