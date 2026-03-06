@@ -518,20 +518,7 @@ select {
 }
 
 .chat-main::after {
-  content: "";
-  position: fixed;
-  left: var(--sidebar-width);
-  right: var(--scrollbar-size);
-  bottom: var(--chat-composer-height);
-  height: 120px;
-  pointer-events: none;
-  z-index: 20;
-  background: linear-gradient(
-    to top,
-    color-mix(in oklab, var(--main-bg) 82%, var(--surface)) 0%,
-    color-mix(in oklab, var(--main-bg) 58%, transparent) 48%,
-    transparent 100%
-  );
+  content: none;
 }
 
 .chat-main::-webkit-scrollbar {
@@ -1017,7 +1004,21 @@ select {
 }
 
 .composer-wrap::before {
-  content: none;
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 92px;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in oklab, var(--main-bg) 32%, transparent) 42%,
+    color-mix(in oklab, var(--main-bg) 82%, var(--surface)) 80%,
+    var(--main-bg) 100%
+  );
 }
 
 .composer {
