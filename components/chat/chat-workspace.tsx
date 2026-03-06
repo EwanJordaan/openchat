@@ -311,7 +311,10 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
 
   const messageAnchor = useAutoScroll(messages.length);
   const activeChat = useMemo(() => chats.find((chat) => chat.id === activeChatId) || null, [chats, activeChatId]);
+  const chatLayoutRef = useRef<HTMLDivElement | null>(null);
+  const chatHeaderRef = useRef<HTMLElement | null>(null);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
+  const composerWrapRef = useRef<HTMLElement | null>(null);
   const attachMenuRef = useRef<HTMLDivElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -335,6 +338,35 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
 
   useEffect(() => {
     setIsMacPlatform(/Mac|iPhone|iPad/i.test(window.navigator.platform));
+  }, []);
+
+  useEffect(() => {
+    const layout = chatLayoutRef.current;
+    const header = chatHeaderRef.current;
+    const composerWrap = composerWrapRef.current;
+    if (!layout || !header || !composerWrap) return;
+
+    const syncChatChromeOffsets = () => {
+      layout.style.setProperty("--chat-header-height", `${Math.ceil(header.getBoundingClientRect().height)}px`);
+      layout.style.setProperty("--chat-composer-height", `${Math.ceil(composerWrap.getBoundingClientRect().height)}px`);
+    };
+
+    syncChatChromeOffsets();
+
+    const observer = new ResizeObserver(() => {
+      syncChatChromeOffsets();
+    });
+
+    observer.observe(header);
+    observer.observe(composerWrap);
+    window.addEventListener("resize", syncChatChromeOffsets);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", syncChatChromeOffsets);
+      layout.style.removeProperty("--chat-header-height");
+      layout.style.removeProperty("--chat-composer-height");
+    };
   }, []);
 
   useEffect(() => {
@@ -921,7 +953,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const nextPath = encodeURIComponent(pathname || "/");
 
   return (
-    <div className="chat-layout">
+    <div ref={chatLayoutRef} className="chat-layout">
       <aside className="chat-sidebar">
         <div className="sidebar-header">
           <p className="sidebar-brand">OpenChat</p>
@@ -1059,7 +1091,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       </aside>
 
       <main ref={messageStreamRef} className="chat-main" onScroll={handleMessageStreamScroll}>
-        <header className="chat-main-header">
+        <header ref={chatHeaderRef} className="chat-main-header">
           <div className="header-left">
             <ModelSelector models={session.models} modelId={modelId} onSelect={setModelId} />
             <h2 className="header-title">{activeChat?.title || "New chat"}</h2>
@@ -1118,10 +1150,10 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
               </div>
             ))
           )}
-          <div ref={messageAnchor} />
+          <div ref={messageAnchor} className={messages.length ? "message-anchor has-messages" : "message-anchor"} />
         </section>
 
-        <footer className="composer-wrap">
+        <footer ref={composerWrapRef} className="composer-wrap">
             <form
               ref={composerFormRef}
               onSubmit={sendMessage}
