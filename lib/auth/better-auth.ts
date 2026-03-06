@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { sql } from "drizzle-orm";
 
@@ -21,6 +22,32 @@ function resolvePasswordHash(account: Record<string, unknown>) {
   return null;
 }
 
+interface ActiveUserRow {
+  is_active: number | boolean;
+}
+
+function toActiveFlag(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") return value === "1" || value.toLowerCase() === "true";
+  return false;
+}
+
+const blockInactiveUserOnSignIn = createAuthMiddleware(async (ctx) => {
+  if (ctx.path !== "/sign-in/email") return;
+  const email = typeof ctx.body.email === "string" ? ctx.body.email.trim().toLowerCase() : "";
+  if (!email) return;
+
+  const { query } = getDb();
+  const rows = await query<ActiveUserRow>(
+    sql`select is_active from users where lower(email) = ${email} limit 1`,
+  );
+  const user = rows[0];
+  if (user && !toActiveFlag(user.is_active)) {
+    throw new APIError("FORBIDDEN", { message: "Account is deactivated" });
+  }
+});
+
 export const auth = betterAuth({
   // Better Auth's Drizzle adapter requires an explicit schema in this setup.
   // Without it, runtime lookup can fail with "model was not found in schema object".
@@ -33,6 +60,9 @@ export const auth = betterAuth({
   baseURL: env.APP_URL,
   secret: env.BETTER_AUTH_SECRET,
   plugins: [nextCookies()],
+  hooks: {
+    before: blockInactiveUserOnSignIn,
+  },
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
