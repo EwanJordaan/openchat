@@ -2,10 +2,10 @@ import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth/better-auth";
-import { getUserRoles } from "@/lib/db/store";
+import { findUserById, getUserRoles } from "@/lib/db/store";
 import { env, isProduction } from "@/lib/env";
 import type { Actor } from "@/lib/types";
-import { createId } from "@/lib/utils";
+import { createId, toBool } from "@/lib/utils";
 
 export const AUTH_COOKIE_MAX_AGE = env.SESSION_TTL_DAYS * 24 * 60 * 60;
 
@@ -40,8 +40,17 @@ async function resolveAuthUser() {
   const sessionResult = await auth.api.getSession({
     headers: requestHeaders,
   });
-  if (!sessionResult?.user) return null;
-  return sessionResult.user;
+  if (!sessionResult?.user) {
+    return { user: null, needsSessionCleanup: false };
+  }
+
+  const userId = String(sessionResult.user.id);
+  const dbUser = await findUserById(userId);
+  if (!dbUser || !toBool(dbUser.is_active)) {
+    return { user: null, needsSessionCleanup: true };
+  }
+
+  return { user: sessionResult.user, needsSessionCleanup: false };
 }
 
 export async function resolveActor() {
@@ -49,7 +58,7 @@ export async function resolveActor() {
   const existingGuestId = cookieStore.get(env.GUEST_COOKIE_NAME)?.value;
   const guestId = existingGuestId || createId("gst");
 
-  const user = await resolveAuthUser();
+  const { user, needsSessionCleanup } = await resolveAuthUser();
   if (!user) {
     const guestActor: Actor = {
       type: "guest",
@@ -61,7 +70,7 @@ export async function resolveActor() {
     return {
       actor: guestActor,
       needsGuestCookie: !existingGuestId,
-      needsSessionCleanup: false,
+      needsSessionCleanup,
     };
   }
 

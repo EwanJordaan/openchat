@@ -48,6 +48,7 @@ npm run dev
 
 - `DATABASE_PROVIDER`: `postgres | supabase | neon | mysql`
 - `DATABASE_URL`: SQL connection string
+- `BETTER_AUTH_SECRET`: required session signing secret (minimum 32 characters)
 - `ADMIN_EMAILS`: comma-separated emails auto-assigned admin role
 - `ADMIN_SEED_EMAIL` / `ADMIN_SEED_PASSWORD`: optional bootstrap admin account created at startup
 - `SETTINGS_ENCRYPTION_KEY`: encrypts provider API keys stored in DB
