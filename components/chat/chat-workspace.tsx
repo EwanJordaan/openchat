@@ -41,6 +41,7 @@ import {
   getVisibleMessages,
   isSameChatSelection,
   parseChatIdFromPath,
+  shouldResetDraftOnSelectionChange,
   type ConversationStatus,
   type SessionStatus,
   syncHistoryPath,
@@ -318,6 +319,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const loadChatAbortControllerRef = useRef<AbortController | null>(null);
   const loadChatRequestIdRef = useRef(0);
   const activeChatIdRef = useRef<string | undefined>(initialChatId);
+  const lastDraftResetChatIdRef = useRef<string | undefined>(initialChatId);
   const copiedMessageTimeoutRef = useRef<number | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
@@ -666,7 +668,10 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     }
 
     setEditSession(null);
-    setDraft("");
+    if (shouldResetDraftOnSelectionChange(lastDraftResetChatIdRef.current, activeChatId, DRAFT_CHAT_ID)) {
+      setDraft("");
+    }
+    lastDraftResetChatIdRef.current = activeChatId;
     setConversationError(null);
     if (activeChatId) {
       const cachedMessages = readCachedChatMessages(session.actor, activeChatId);

@@ -101,6 +101,14 @@ export function isSameChatSelection(currentChatId: string | undefined, originCha
   return getChatSelectionKey(currentChatId, draftChatId) === getChatSelectionKey(originChatId, draftChatId);
 }
 
+export function shouldResetDraftOnSelectionChange(
+  previousChatId: string | undefined,
+  nextChatId: string | undefined,
+  draftChatId = "draft",
+) {
+  return getChatSelectionKey(previousChatId, draftChatId) !== getChatSelectionKey(nextChatId, draftChatId);
+}
+
 export function getMessageActionState(
   message: ChatMessage,
   options: {

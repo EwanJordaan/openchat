@@ -11,6 +11,7 @@ import {
   isPersistedMessage,
   measureTextareaHeight,
   parseChatIdFromPath,
+  shouldResetDraftOnSelectionChange,
   shouldSubmitTextareaShortcut,
   syncHistoryPath,
 } from "@/components/chat/chat-workspace-utils";
@@ -84,6 +85,16 @@ describe("chat workspace helpers", () => {
   it("keeps edit completion scoped to the origin chat selection", () => {
     expect(isSameChatSelection("cht_b", "cht_a")).toBeFalse();
     expect(getChatSelectionKey(undefined)).toBe("draft");
+  });
+
+  it("does not reset draft when session hydration keeps same draft selection", () => {
+    expect(shouldResetDraftOnSelectionChange(undefined, undefined)).toBeFalse();
+  });
+
+  it("resets draft when switching between draft and persisted chats", () => {
+    expect(shouldResetDraftOnSelectionChange(undefined, "cht_a")).toBeTrue();
+    expect(shouldResetDraftOnSelectionChange("cht_a", undefined)).toBeTrue();
+    expect(shouldResetDraftOnSelectionChange("cht_a", "cht_b")).toBeTrue();
   });
 
   it("maps back and forward paths to the selected chat id", () => {
