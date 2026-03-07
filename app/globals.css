@@ -1094,6 +1094,38 @@ select {
   line-height: 1.5;
 }
 
+.conversation-state {
+  margin: auto;
+  max-width: 540px;
+  padding: 18px 14px;
+  text-align: center;
+  color: var(--text-secondary);
+  display: grid;
+  gap: 0.55rem;
+  justify-items: center;
+}
+
+.conversation-state h3 {
+  font-size: 1.02rem;
+  color: var(--text-primary);
+}
+
+.conversation-state p {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.conversation-state.loading {
+  color: var(--text-muted);
+}
+
+.conversation-state.error {
+  border: 1px solid color-mix(in oklab, var(--danger) 24%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--danger) 4%, var(--surface));
+}
+
 .composer-wrap {
   position: fixed;
   left: var(--sidebar-width);
@@ -1237,6 +1269,11 @@ select {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+}
+
+.attach-icon-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .attach-icon-button:hover,
@@ -1416,6 +1453,12 @@ select {
   color: var(--text-secondary);
   padding: 0.45rem 0.72rem;
   cursor: pointer;
+}
+
+.sidebar-placeholder {
+  display: grid;
+  gap: 8px;
+  align-items: start;
 }
 
 .settings-shell {

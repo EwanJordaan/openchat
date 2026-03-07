@@ -35,10 +35,14 @@ import remarkGfm from "remark-gfm";
 
 import {
   buildChatPath,
+  getComposerAvailability,
+  getConversationPaneState,
   getMessageActionState,
   getVisibleMessages,
   isSameChatSelection,
   parseChatIdFromPath,
+  type ConversationStatus,
+  type SessionStatus,
   syncHistoryPath,
   useAutosizeTextarea,
   shouldSubmitTextareaShortcut,
@@ -279,41 +283,16 @@ function ModelSelector({
 
 export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const { setMode } = useTheme();
-  const [isHydrated, setIsHydrated] = useState(false);
-  const initialPathChatIdRef = useRef<string | undefined>(undefined);
-  if (initialPathChatIdRef.current === undefined) {
-    initialPathChatIdRef.current =
-      typeof window === "undefined" ? initialChatId : parseChatIdFromPath(window.location.pathname) ?? initialChatId;
-  }
-  const seededChatId = initialPathChatIdRef.current;
-
-  const initialSessionRef = useRef<SessionPayload | null | undefined>(undefined);
-  if (initialSessionRef.current === undefined) {
-    initialSessionRef.current = getInitialSessionSnapshot();
-  }
-  const initialSession = initialSessionRef.current;
-
-  const initialChatsRef = useRef<ChatSummary[] | undefined>(undefined);
-  if (initialChatsRef.current === undefined) {
-    initialChatsRef.current = initialSession ? readCachedChats(initialSession.actor) : [];
-  }
-
-  const initialMessagesRef = useRef<ChatMessage[] | undefined>(undefined);
-  if (initialMessagesRef.current === undefined) {
-    if (initialSession) {
-      initialMessagesRef.current = readCachedChatMessages(initialSession.actor, seededChatId || DRAFT_CHAT_ID);
-    } else {
-      initialMessagesRef.current = [];
-    }
-  }
-
-  const [session, setSession] = useState<SessionPayload | null>(initialSession || null);
-  const [sessionLoading, setSessionLoading] = useState(!initialSession);
+  const [session, setSession] = useState<SessionPayload | null>(null);
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus>("booting");
+  const [chatListStatus, setChatListStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [conversationStatus, setConversationStatus] = useState<ConversationStatus>(initialChatId ? "loading" : "idle");
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [conversationError, setConversationError] = useState<string | null>(null);
 
-  const [chats, setChats] = useState<ChatSummary[]>(initialChatsRef.current || []);
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessagesRef.current || []);
-  const [activeChatId, setActiveChatId] = useState<string | undefined>(seededChatId);
+  const [chats, setChats] = useState<ChatSummary[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | undefined>(initialChatId);
 
   const [draft, setDraft] = useState("");
   const [modelId, setModelId] = useState("gpt-4o-mini");
@@ -338,7 +317,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const sendAbortControllerRef = useRef<AbortController | null>(null);
   const loadChatAbortControllerRef = useRef<AbortController | null>(null);
   const loadChatRequestIdRef = useRef(0);
-  const activeChatIdRef = useRef<string | undefined>(seededChatId);
+  const activeChatIdRef = useRef<string | undefined>(initialChatId);
   const copiedMessageTimeoutRef = useRef<number | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
@@ -360,7 +339,25 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   );
 
   useEffect(() => {
-    setIsHydrated(true);
+    const cachedSession = getInitialSessionSnapshot();
+    if (!cachedSession) {
+      if (activeChatIdRef.current) {
+        setConversationStatus("loading");
+      }
+      return;
+    }
+
+    setSession(cachedSession);
+    setSessionStatus("ready");
+    setModelId(cachedSession.settings.defaultModelId || "gpt-4o-mini");
+
+    const cachedChats = readCachedChats(cachedSession.actor);
+    setChats(cachedChats);
+    setChatListStatus(cachedChats.length ? "ready" : "idle");
+
+    const cachedMessages = readCachedChatMessages(cachedSession.actor, activeChatIdRef.current || DRAFT_CHAT_ID);
+    setMessages(cachedMessages);
+    setConversationStatus(activeChatIdRef.current ? "loading" : "idle");
   }, []);
 
   useEffect(() => {
@@ -433,8 +430,26 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const canChat =
     !!session &&
     !(session.actor.type === "guest" && !session.settings.guestEnabled);
+  const hasActiveChat = Boolean(activeChatId);
   const editingMessageId = editSession?.messageId ?? null;
   const visibleMessages = useMemo(() => getVisibleMessages(messages, editingMessageId), [messages, editingMessageId]);
+  const paneState = getConversationPaneState({
+    hasActiveChat,
+    conversationStatus,
+    messageCount: visibleMessages.length,
+  });
+  const composerAvailability = getComposerAvailability({
+    sessionStatus,
+    canChat,
+    sending,
+    uploading,
+    hasDraft: Boolean(draft.trim()),
+    hasActiveChat,
+    conversationStatus,
+    editingMessage: Boolean(editingMessageId),
+  });
+  const composerCanType = composerAvailability.canType;
+  const composerCanSend = composerAvailability.canSend;
   const normalizedSidebarQuery = sidebarQuery.trim().toLowerCase();
   const filteredChats = useMemo(() => {
     if (!normalizedSidebarQuery) return chats;
@@ -471,10 +486,8 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     setActiveChatId(undefined);
   }, [session, syncChatPath]);
 
-  const loadSession = useCallback(async ({ showLoader = false }: { showLoader?: boolean } = {}) => {
-    if (showLoader) {
-      setSessionLoading(true);
-    }
+  const loadSession = useCallback(async () => {
+    setSessionStatus((current) => (current === "ready" ? "ready" : "booting"));
     setSessionError(null);
 
     try {
@@ -485,6 +498,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
 
       const data = (await response.json()) as SessionPayload;
       setSession(data);
+      setSessionStatus("ready");
       cacheSessionSnapshot(data);
       setModelId(data.settings.defaultModelId || "gpt-4o-mini");
 
@@ -498,12 +512,12 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     } catch {
       if (sessionMemoryCache) {
         setSession(sessionMemoryCache);
+        setSessionStatus("ready");
         setSessionError("Could not refresh session; showing the last local snapshot.");
       } else {
+        setSessionStatus("error");
         setSessionError("Could not load session data");
       }
-    } finally {
-      setSessionLoading(false);
     }
   }, [setMode]);
 
@@ -515,12 +529,16 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     const cachedChats = readCachedChats(session.actor);
     if (cachedChats.length) {
       setChats(cachedChats);
+      setChatListStatus("ready");
+    } else {
+      setChatListStatus("loading");
     }
 
     if (session.degraded) {
       if (!cachedChats.length) {
         setChats([]);
       }
+      setChatListStatus("ready");
       return;
     }
 
@@ -528,7 +546,8 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       const response = await fetch("/api/chats", { cache: "no-store" });
       if (!response.ok) {
         if (!cachedChats.length) {
-          setError("Could not load chat history right now.");
+          setSessionError("Could not load chat history right now.");
+          setChatListStatus("error");
         }
         return;
       }
@@ -536,9 +555,11 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       const data = (await response.json()) as { chats: ChatSummary[] };
       setChats(data.chats);
       writeCachedChats(session.actor, data.chats);
+      setChatListStatus("ready");
     } catch {
       if (!cachedChats.length) {
-        setError("Could not load chat history right now.");
+        setSessionError("Could not load chat history right now.");
+        setChatListStatus("error");
       }
     }
   }, [session]);
@@ -554,14 +575,22 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       loadChatAbortControllerRef.current = abortController;
       const requestId = ++loadChatRequestIdRef.current;
 
+      setConversationError(null);
+      setConversationStatus("loading");
+
       const cachedMessages = readCachedChatMessages(session.actor, chatId);
-      if (cachedMessages.length && activeChatIdRef.current === chatId) {
+      if (activeChatIdRef.current === chatId) {
         setMessages(cachedMessages);
       }
 
       if (session.degraded) {
         if (activeChatIdRef.current === chatId) {
-          setError(session.error || "Database is unavailable. Showing saved local chat data when available.");
+          if (cachedMessages.length) {
+            setConversationStatus("ready");
+          } else {
+            setConversationStatus("error");
+            setConversationError(session.error || "Database is unavailable. Showing saved local chat data when available.");
+          }
         }
         return;
       }
@@ -572,7 +601,13 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       } catch (fetchError) {
         const aborted = fetchError instanceof Error && fetchError.name === "AbortError";
         if (!aborted && activeChatIdRef.current === chatId) {
-          setError("Could not refresh this chat from the server. Showing local copy.");
+          if (cachedMessages.length) {
+            setConversationStatus("ready");
+            setConversationError("Could not refresh this chat from the server. Showing local copy.");
+          } else {
+            setConversationStatus("error");
+            setConversationError("Could not load this conversation");
+          }
         }
         return;
       }
@@ -585,9 +620,11 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
 
       if (!response.ok) {
         if (cachedMessages.length) {
-          setError("Could not refresh this chat from the server. Showing local copy.");
+          setConversationStatus("ready");
+          setConversationError("Could not refresh this chat from the server. Showing local copy.");
         } else {
-          setError("This chat is unavailable");
+          setConversationStatus("error");
+          setConversationError("Could not load this conversation");
         }
         return;
       }
@@ -603,14 +640,15 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       setModelId(data.chat.modelId);
       setMessages(data.chat.messages);
       writeCachedChatMessages(session.actor, data.chat.id, data.chat.messages);
-      setError(null);
+      setConversationStatus("ready");
+      setConversationError(null);
     },
     [session],
   );
 
   useEffect(() => {
-    void loadSession({ showLoader: !initialSession });
-  }, [loadSession, initialSession]);
+    void loadSession();
+  }, [loadSession]);
 
   useEffect(() => {
     if (!session) return;
@@ -618,13 +656,22 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   }, [session, loadChats]);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session) {
+      if (activeChatId) {
+        setConversationStatus("loading");
+      } else {
+        setConversationStatus("idle");
+      }
+      return;
+    }
 
     setEditSession(null);
     setDraft("");
+    setConversationError(null);
     if (activeChatId) {
       const cachedMessages = readCachedChatMessages(session.actor, activeChatId);
       setMessages(cachedMessages);
+      setConversationStatus("loading");
       void loadChat(activeChatId);
       return;
     }
@@ -632,6 +679,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     loadChatAbortControllerRef.current?.abort();
     const cachedDraftMessages = readCachedChatMessages(session.actor, DRAFT_CHAT_ID);
     setMessages(cachedDraftMessages);
+    setConversationStatus("idle");
     setError(null);
   }, [activeChatId, loadChat, session]);
 
@@ -826,7 +874,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const sanitizedDraft = draft.trimEnd();
-    if (!sanitizedDraft.trim() || sending || !canChat) return;
+    if (!sanitizedDraft.trim() || !composerCanSend) return;
     if (editingMessageId) {
       await submitEditedMessage();
       return;
@@ -1016,7 +1064,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   async function submitEditedMessage() {
     if (!editSession || !activeChatId) return;
     const sanitizedDraft = draft.trimEnd();
-    if (!sanitizedDraft.trim() || sending || !canChat || session?.degraded) return;
+    if (!sanitizedDraft.trim() || !composerCanSend || session?.degraded) return;
 
     const targetIndex = editSession.originalMessages.findIndex((entry) => entry.id === editSession.messageId);
     if (targetIndex === -1) return;
@@ -1139,7 +1187,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     }
 
     event.preventDefault();
-    if (!draft.trim() || sending || uploading || !canChat) {
+    if (!draft.trim() || !composerCanSend) {
       return;
     }
     composerFormRef.current?.requestSubmit();
@@ -1198,28 +1246,23 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     setProfileMenuOpen(false);
   }
 
-  if (!isHydrated || (sessionLoading && !session)) {
-    return (
-      <div className="chat-loading">
-        <LoaderCircle className="spin" size={28} />
-        <p>Loading chat...</p>
-      </div>
-    );
-  }
-
-  if (sessionError || !session) {
-    return (
-      <div className="chat-loading">
-        <p>{sessionError || "Could not initialize session"}</p>
-        <button type="button" onClick={() => void loadSession()} className="retry-button">
-          Retry
-        </button>
-      </div>
-    );
-  }
-
   const nextPath = encodeURIComponent(buildChatPath(activeChatId));
-  const composerDisabled = sending || uploading || !canChat;
+  const activeChatTitle = activeChat?.title || (activeChatId ? "Conversation" : "New chat");
+  const modelOptions: ModelOption[] =
+    session?.models.length
+      ? session.models
+      : [
+          {
+            id: modelId,
+            displayName: "Loading models...",
+            provider: "system",
+            description: "Model list will load shortly",
+            isEnabled: true,
+            isDefault: true,
+            isGuestAllowed: true,
+            maxOutputTokens: 2048,
+          },
+        ];
 
   return (
     <div ref={chatLayoutRef} className="chat-layout">
@@ -1273,6 +1316,10 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
         <div className="chat-list" role="list">
           {showNoResults ? (
             <p className="chat-list-empty">No chats found.</p>
+          ) : !filteredChats.length && chatListStatus === "loading" ? (
+            <p className="chat-list-empty">Loading chats...</p>
+          ) : !filteredChats.length ? (
+            <p className="chat-list-empty">No chats yet.</p>
           ) : (
             filteredChats.map((chat) => (
               <div key={chat.id} className={`chat-item ${chat.id === activeChatId ? "active" : ""}`}>
@@ -1318,7 +1365,16 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
         </div>
 
         <div className="sidebar-footer">
-          {session.actor.type === "user" ? (
+          {!session ? (
+            <div className="sidebar-placeholder">
+              <p className="guest-note">{sessionStatus === "error" ? "Could not load account details." : "Loading account..."}</p>
+              {sessionStatus === "error" ? (
+                <button type="button" onClick={() => void loadSession()} className="retry-button">
+                  Retry
+                </button>
+              ) : null}
+            </div>
+          ) : session.actor.type === "user" ? (
             <div className="profile-menu-wrap" ref={profileMenuRef}>
               <button
                 type="button"
@@ -1373,29 +1429,59 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       <main ref={messageStreamRef} className="chat-main" onScroll={handleMessageStreamScroll}>
         <header ref={chatHeaderRef} className="chat-main-header">
           <div className="header-left">
-            <ModelSelector models={session.models} modelId={modelId} onSelect={setModelId} />
-            <h2 className="header-title">{activeChat?.title || "New chat"}</h2>
+            <ModelSelector models={modelOptions} modelId={modelId} onSelect={setModelId} />
+            <h2 className="header-title">{activeChatTitle}</h2>
           </div>
           <div className="header-actions">
+            {sessionStatus === "booting" ? (
+              <span className="status-chip">
+                <LoaderCircle className="spin" size={13} /> Connecting
+              </span>
+            ) : null}
+            {sessionStatus === "error" ? (
+              <span className="status-chip" title={sessionError || "Could not load session data"}>
+                <AlertTriangle size={13} /> Session issue
+              </span>
+            ) : null}
             {sessionError ? (
               <span className="status-chip" title={sessionError}>
                 <AlertTriangle size={13} /> Sync issue
               </span>
             ) : null}
-            {session.degraded ? (
+            {session?.degraded ? (
               <span className="status-chip" title={session.error || "Database unavailable"}>
                 <AlertTriangle size={13} /> Offline mode
               </span>
             ) : null}
-            {session.actor.type === "guest" ? <ThemeToggle /> : null}
+            {session?.actor.type === "guest" ? <ThemeToggle /> : null}
           </div>
         </header>
 
         <section className="message-stream">
-          {!visibleMessages.length ? (
+          {paneState === "loading" ? (
+            <div className="conversation-state loading">
+              <LoaderCircle className="spin" size={24} />
+              <h3>Loading conversation...</h3>
+              <p>You can type while we load previous messages.</p>
+            </div>
+          ) : paneState === "error" ? (
+            <div className="conversation-state error">
+              <h3>Could not load this conversation</h3>
+              <p>{conversationError || "Try again in a moment."}</p>
+              {activeChatId ? (
+                <button type="button" onClick={() => void loadChat(activeChatId)} className="retry-button">
+                  Retry
+                </button>
+              ) : null}
+            </div>
+          ) : paneState === "empty" ? (
             <div className="empty-state">
-              <h3>Start a new conversation</h3>
-              <p>Ask anything, add files, and switch models from the top-left selector.</p>
+              <h3>{activeChatId ? "No messages in this conversation yet" : "Start a new conversation"}</h3>
+              <p>
+                {activeChatId
+                  ? "Send a message to begin."
+                  : "Ask anything, add files, and switch models from the top-left selector."}
+              </p>
             </div>
           ) : (
             visibleMessages.map((message) => (
@@ -1433,7 +1519,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                       const actionState = getMessageActionState(message, {
                         editingMessageId,
                         sending,
-                        degraded: Boolean(session.degraded),
+                        degraded: Boolean(session?.degraded),
                       });
 
                       if (!actionState.showCopy && !actionState.showEdit) {
@@ -1497,7 +1583,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                 title="Add files"
                 aria-haspopup="menu"
                 aria-expanded={isAttachMenuOpen}
-                disabled={composerDisabled || Boolean(editSession)}
+                disabled={composerAvailability.disableAttachments}
                 onClick={() => setAttachMenuOpen((value) => !value)}
               >
                 <Paperclip size={16} />
@@ -1541,15 +1627,15 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
               onKeyDown={handleComposerKeyDown}
               placeholder={editingMessageId ? "Edit the message, then send to regenerate" : "Ask anything"}
               rows={1}
-              disabled={composerDisabled}
+              disabled={!composerCanType}
             />
 
             {sending ? (
-              <button className="send-icon-button" type="button" onClick={stopGenerating} disabled={uploading || !canChat} title="Stop generation">
+              <button className="send-icon-button" type="button" onClick={stopGenerating} disabled={uploading} title="Stop generation">
                 <Square size={13} />
               </button>
             ) : (
-              <button className="send-icon-button" type="submit" disabled={composerDisabled || !draft.trim()}>
+              <button className="send-icon-button" type="submit" disabled={!composerCanSend}>
                 <SendHorizontal size={14} />
               </button>
             )}

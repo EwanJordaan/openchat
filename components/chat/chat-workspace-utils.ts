@@ -4,6 +4,9 @@ import { useEffect, type RefObject } from "react";
 
 import type { ChatMessage } from "@/lib/types";
 
+export type SessionStatus = "booting" | "ready" | "error";
+export type ConversationStatus = "idle" | "loading" | "ready" | "error";
+
 export function isPersistedMessage(messageId: string) {
   return !messageId.startsWith("optimistic-") && !messageId.startsWith("assistant-stream-") && !messageId.startsWith("degraded-");
 }
@@ -114,5 +117,42 @@ export function getMessageActionState(
     showCopy,
     showEdit,
     disableEdit,
+  };
+}
+
+export function getConversationPaneState(input: {
+  hasActiveChat: boolean;
+  conversationStatus: ConversationStatus;
+  messageCount: number;
+}) {
+  if (input.messageCount > 0) return "messages" as const;
+  if (input.hasActiveChat && input.conversationStatus === "loading") return "loading" as const;
+  if (input.hasActiveChat && input.conversationStatus === "error") return "error" as const;
+  return "empty" as const;
+}
+
+export function getComposerAvailability(input: {
+  sessionStatus: SessionStatus;
+  canChat: boolean;
+  sending: boolean;
+  uploading: boolean;
+  hasDraft: boolean;
+  hasActiveChat: boolean;
+  conversationStatus: ConversationStatus;
+  editingMessage: boolean;
+}) {
+  const blockedByNetwork = input.sending || input.uploading;
+  const sessionReady = input.sessionStatus === "ready";
+  const conversationReady = !input.hasActiveChat || input.conversationStatus === "ready";
+  const readyForActions = !blockedByNetwork && sessionReady && input.canChat && conversationReady;
+
+  const canType = !blockedByNetwork && (!sessionReady || input.canChat);
+  const canSend = readyForActions && input.hasDraft;
+  const disableAttachments = !readyForActions || input.editingMessage;
+
+  return {
+    canType,
+    canSend,
+    disableAttachments,
   };
 }

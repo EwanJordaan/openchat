@@ -2,6 +2,8 @@ import { describe, expect, it, spyOn } from "bun:test";
 
 import {
   buildChatPath,
+  getComposerAvailability,
+  getConversationPaneState,
   getMessageActionState,
   getChatSelectionKey,
   getVisibleMessages,
@@ -169,6 +171,118 @@ describe("chat workspace helpers", () => {
       showCopy: true,
       showEdit: false,
       disableEdit: true,
+    });
+  });
+
+  it("derives loading, error, and empty conversation pane states", () => {
+    expect(
+      getConversationPaneState({
+        hasActiveChat: true,
+        conversationStatus: "loading",
+        messageCount: 0,
+      }),
+    ).toBe("loading");
+
+    expect(
+      getConversationPaneState({
+        hasActiveChat: true,
+        conversationStatus: "error",
+        messageCount: 0,
+      }),
+    ).toBe("error");
+
+    expect(
+      getConversationPaneState({
+        hasActiveChat: false,
+        conversationStatus: "idle",
+        messageCount: 0,
+      }),
+    ).toBe("empty");
+  });
+
+  it("keeps showing messages while conversation refresh is loading", () => {
+    expect(
+      getConversationPaneState({
+        hasActiveChat: true,
+        conversationStatus: "loading",
+        messageCount: 2,
+      }),
+    ).toBe("messages");
+  });
+
+  it("allows typing but disables send while hydrating an existing chat", () => {
+    expect(
+      getComposerAvailability({
+        sessionStatus: "ready",
+        canChat: true,
+        sending: false,
+        uploading: false,
+        hasDraft: true,
+        hasActiveChat: true,
+        conversationStatus: "loading",
+        editingMessage: false,
+      }),
+    ).toEqual({
+      canType: true,
+      canSend: false,
+      disableAttachments: true,
+    });
+  });
+
+  it("keeps send disabled until session is ready on cold boot", () => {
+    expect(
+      getComposerAvailability({
+        sessionStatus: "booting",
+        canChat: false,
+        sending: false,
+        uploading: false,
+        hasDraft: true,
+        hasActiveChat: false,
+        conversationStatus: "idle",
+        editingMessage: false,
+      }),
+    ).toEqual({
+      canType: true,
+      canSend: false,
+      disableAttachments: true,
+    });
+  });
+
+  it("allows send when session and conversation are ready", () => {
+    expect(
+      getComposerAvailability({
+        sessionStatus: "ready",
+        canChat: true,
+        sending: false,
+        uploading: false,
+        hasDraft: true,
+        hasActiveChat: true,
+        conversationStatus: "ready",
+        editingMessage: false,
+      }),
+    ).toEqual({
+      canType: true,
+      canSend: true,
+      disableAttachments: false,
+    });
+  });
+
+  it("keeps attachments enabled when ready even without a draft", () => {
+    expect(
+      getComposerAvailability({
+        sessionStatus: "ready",
+        canChat: true,
+        sending: false,
+        uploading: false,
+        hasDraft: false,
+        hasActiveChat: false,
+        conversationStatus: "idle",
+        editingMessage: false,
+      }),
+    ).toEqual({
+      canType: true,
+      canSend: false,
+      disableAttachments: false,
     });
   });
 });
