@@ -19,7 +19,7 @@ describe("lib/cache/chat-cache", () => {
   it("returns a cached chat list before expiration", () => {
     Date.now = () => 1_000;
     const chats: ChatSummary[] = [
-      { id: "c1", title: "One", modelId: "gpt-4o-mini", createdAt: "a", updatedAt: "b" },
+      { id: "c1", title: "One", modelId: "gpt-4o-mini", isPinned: false, createdAt: "a", updatedAt: "b" },
     ];
 
     setCachedChatList("guest", "g-1", chats);

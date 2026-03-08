@@ -436,13 +436,14 @@ export async function createChat(actor: Actor, title: string, modelId: string) {
   const chatId = createId("cht");
 
   await query(sql`
-    insert into chats (id, user_id, guest_id, title, model_id, archived, created_at, updated_at)
+    insert into chats (id, user_id, guest_id, title, model_id, archived, is_pinned, created_at, updated_at)
     values (
       ${chatId},
       ${actor.type === "user" ? actor.userId : null},
       ${actor.guestId},
       ${title},
       ${modelId},
+      ${0},
       ${0},
       ${now},
       ${now}
@@ -457,16 +458,17 @@ export async function listChats(actor: Actor): Promise<ChatSummary[]> {
   const { query } = getDb();
   const rows = actor.type === "user"
     ? await query<Record<string, unknown>>(
-        sql`select id, title, model_id, created_at, updated_at from chats where user_id = ${actor.userId} and archived = 0 order by updated_at desc`,
+        sql`select id, title, model_id, is_pinned, created_at, updated_at from chats where user_id = ${actor.userId} and archived = 0 order by is_pinned desc, updated_at desc`,
       )
     : await query<Record<string, unknown>>(
-        sql`select id, title, model_id, created_at, updated_at from chats where user_id is null and guest_id = ${actor.guestId} and archived = 0 order by updated_at desc`,
+        sql`select id, title, model_id, is_pinned, created_at, updated_at from chats where user_id is null and guest_id = ${actor.guestId} and archived = 0 order by is_pinned desc, updated_at desc`,
       );
 
   return rows.map((row) => ({
     id: String(row.id),
     title: String(row.title),
     modelId: String(row.model_id),
+    isPinned: toBool(row.is_pinned),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   }));
@@ -478,10 +480,10 @@ export async function getChat(actor: Actor, chatId: string) {
 
   const chatRows = actor.type === "user"
     ? await query<Record<string, unknown>>(
-        sql`select id, title, model_id, created_at, updated_at from chats where id = ${chatId} and user_id = ${actor.userId} limit 1`,
+        sql`select id, title, model_id, is_pinned, created_at, updated_at from chats where id = ${chatId} and user_id = ${actor.userId} limit 1`,
       )
     : await query<Record<string, unknown>>(
-        sql`select id, title, model_id, created_at, updated_at from chats where id = ${chatId} and user_id is null and guest_id = ${actor.guestId} limit 1`,
+        sql`select id, title, model_id, is_pinned, created_at, updated_at from chats where id = ${chatId} and user_id is null and guest_id = ${actor.guestId} limit 1`,
       );
 
   const chat = chatRows[0];
@@ -505,6 +507,7 @@ export async function getChat(actor: Actor, chatId: string) {
     id: String(chat.id),
     title: String(chat.title),
     modelId: String(chat.model_id),
+    isPinned: toBool(chat.is_pinned),
     createdAt: String(chat.created_at),
     updatedAt: String(chat.updated_at),
     messages,
@@ -602,6 +605,22 @@ export async function archiveChat(actor: Actor, chatId: string) {
   }
   await query(
     sql`update chats set archived = 1, updated_at = ${now} where id = ${chatId} and user_id is null and guest_id = ${actor.guestId}`,
+  );
+}
+
+export async function setChatPinned(actor: Actor, chatId: string, isPinned: boolean) {
+  await ensureDatabase();
+  const { query } = getDb();
+  const now = nowIso();
+
+  if (actor.type === "user") {
+    await query(
+      sql`update chats set is_pinned = ${isPinned ? 1 : 0}, updated_at = ${now} where id = ${chatId} and user_id = ${actor.userId}`,
+    );
+    return;
+  }
+  await query(
+    sql`update chats set is_pinned = ${isPinned ? 1 : 0}, updated_at = ${now} where id = ${chatId} and user_id is null and guest_id = ${actor.guestId}`,
   );
 }
 

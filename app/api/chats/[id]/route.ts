@@ -3,12 +3,17 @@ import { z } from "zod";
 
 import { resolveActor } from "@/lib/auth/session";
 import { invalidateChatListCache } from "@/lib/cache/chat-cache";
-import { archiveChat, getChat, renameChat } from "@/lib/db/store";
+import { archiveChat, getChat, renameChat, setChatPinned } from "@/lib/db/store";
 import { attachActorCookies, jsonError } from "@/lib/http";
 
-const renameSchema = z.object({
-  title: z.string().min(1).max(120),
-});
+const patchChatSchema = z.union([
+  z.object({
+    title: z.string().min(1).max(120),
+  }).strict(),
+  z.object({
+    isPinned: z.boolean(),
+  }).strict(),
+]);
 
 function invalidateForActor(actor: Awaited<ReturnType<typeof resolveActor>>["actor"]) {
   if (actor.type === "user") {
@@ -36,12 +41,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const resolved = await resolveActor();
 
   const payload = await request.json().catch(() => null);
-  const parsed = renameSchema.safeParse(payload);
+  const parsed = patchChatSchema.safeParse(payload);
   if (!parsed.success) {
     return jsonError(parsed.error.issues[0]?.message || "Invalid payload", 400);
   }
 
-  await renameChat(resolved.actor, id, parsed.data.title.trim());
+  if ("title" in parsed.data) {
+    await renameChat(resolved.actor, id, parsed.data.title.trim());
+  } else {
+    await setChatPinned(resolved.actor, id, parsed.data.isPinned);
+  }
   invalidateForActor(resolved.actor);
 
   const response = NextResponse.json({ ok: true });

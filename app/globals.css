@@ -281,6 +281,15 @@ select {
   background: color-mix(in oklab, var(--surface) 58%, var(--sidebar-bg));
 }
 
+.chat-section-label {
+  margin: 8px 6px 2px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 .chat-item {
   border: 0;
   border-radius: 6px;
@@ -313,7 +322,15 @@ select {
   box-shadow: none;
 }
 
-.chat-item span {
+.chat-item-content {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.chat-item-title {
+  min-width: 0;
   display: block;
   font-size: 0.82rem;
   white-space: nowrap;

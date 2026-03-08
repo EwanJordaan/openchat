@@ -66,9 +66,18 @@ async function runBootstrap() {
       await query(sql.raw(statement));
     } catch (error) {
       const message = error instanceof Error ? error.message.toLowerCase() : "";
+      const normalized = error as {
+        code?: string;
+        cause?: { code?: string; cause?: { code?: string } };
+      };
+      const code = normalized.code || normalized.cause?.code || normalized.cause?.cause?.code;
       const safeToIgnore =
+        code === "42701" || // postgres duplicate_column
+        code === "1060" || // mysql ER_DUP_FIELDNAME
         message.includes("already exists") ||
         message.includes("duplicate key") ||
+        message.includes("duplicate column") ||
+        message.includes("duplicate column name") ||
         message.includes("duplicate index") ||
         message.includes("errno 1061");
 
@@ -373,6 +382,7 @@ const postgresBootstrapStatements = [
     title text not null,
     model_id text not null,
     archived integer not null default 0,
+    is_pinned integer not null default 0,
     created_at text not null,
     updated_at text not null
   )
@@ -477,6 +487,7 @@ const postgresBootstrapStatements = [
     created_at text not null
   )
   `,
+  `alter table chats add column if not exists is_pinned integer not null default 0`,
   `create index if not exists idx_chats_user on chats(user_id, updated_at)`,
   `create index if not exists idx_chats_guest on chats(guest_id, updated_at)`,
   `create index if not exists idx_messages_chat on messages(chat_id, created_at)`,
@@ -570,6 +581,7 @@ const mysqlBootstrapStatements = [
     title text not null,
     model_id varchar(191) not null,
     archived tinyint not null default 0,
+    is_pinned tinyint not null default 0,
     created_at varchar(40) not null,
     updated_at varchar(40) not null,
     constraint fk_chats_user foreign key (user_id) references users(id) on delete cascade
@@ -681,6 +693,7 @@ const mysqlBootstrapStatements = [
     constraint fk_audit_user foreign key (actor_user_id) references users(id) on delete set null
   )
   `,
+  `alter table chats add column if not exists is_pinned tinyint not null default 0`,
   `create index idx_chats_user on chats(user_id, updated_at)`,
   `create index idx_chats_guest on chats(guest_id, updated_at)`,
   `create index idx_messages_chat on messages(chat_id, created_at)`,

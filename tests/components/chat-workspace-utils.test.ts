@@ -4,6 +4,7 @@ import {
   buildChatPath,
   getComposerAvailability,
   getConversationPaneState,
+  getChatTimeGroup,
   getMessageActionState,
   getChatSelectionKey,
   getVisibleMessages,
@@ -11,11 +12,12 @@ import {
   isPersistedMessage,
   measureTextareaHeight,
   parseChatIdFromPath,
+  sortChatsForSidebar,
   shouldResetDraftOnSelectionChange,
   shouldSubmitTextareaShortcut,
   syncHistoryPath,
 } from "@/components/chat/chat-workspace-utils";
-import type { ChatMessage } from "@/lib/types";
+import type { ChatMessage, ChatSummary } from "@/lib/types";
 
 const baseMessage: ChatMessage = {
   id: "msg_1",
@@ -25,6 +27,15 @@ const baseMessage: ChatMessage = {
   modelId: "gpt-4o-mini",
   createdAt: "2026-03-06T10:00:00.000Z",
   attachments: [],
+};
+
+const baseChatSummary: ChatSummary = {
+  id: "cht_1",
+  title: "Chat",
+  modelId: "gpt-4o-mini",
+  isPinned: false,
+  createdAt: "2026-03-06T10:00:00.000Z",
+  updatedAt: "2026-03-06T10:00:00.000Z",
 };
 
 describe("chat workspace helpers", () => {
@@ -183,6 +194,101 @@ describe("chat workspace helpers", () => {
       showEdit: false,
       disableEdit: true,
     });
+  });
+
+  it("sorts chats with pinned first, then latest activity", () => {
+    const chats: ChatSummary[] = [
+      {
+        ...baseChatSummary,
+        id: "cht_unpinned_new",
+        isPinned: false,
+        updatedAt: "2026-03-06T12:00:00.000Z",
+      },
+      {
+        ...baseChatSummary,
+        id: "cht_pinned_old",
+        isPinned: true,
+        updatedAt: "2026-03-06T09:00:00.000Z",
+      },
+      {
+        ...baseChatSummary,
+        id: "cht_pinned_new",
+        isPinned: true,
+        updatedAt: "2026-03-06T13:00:00.000Z",
+      },
+    ];
+
+    expect(sortChatsForSidebar(chats).map((chat) => chat.id)).toEqual([
+      "cht_pinned_new",
+      "cht_pinned_old",
+      "cht_unpinned_new",
+    ]);
+  });
+
+  it("uses createdAt then id as stable tie-breakers", () => {
+    const chats: ChatSummary[] = [
+      {
+        ...baseChatSummary,
+        id: "cht_b",
+        isPinned: false,
+        createdAt: "2026-03-06T10:00:00.000Z",
+        updatedAt: "2026-03-06T10:00:00.000Z",
+      },
+      {
+        ...baseChatSummary,
+        id: "cht_a",
+        isPinned: false,
+        createdAt: "2026-03-06T10:00:00.000Z",
+        updatedAt: "2026-03-06T10:00:00.000Z",
+      },
+      {
+        ...baseChatSummary,
+        id: "cht_newer_created",
+        isPinned: false,
+        createdAt: "2026-03-06T11:00:00.000Z",
+        updatedAt: "2026-03-06T10:00:00.000Z",
+      },
+    ];
+
+    expect(sortChatsForSidebar(chats).map((chat) => chat.id)).toEqual([
+      "cht_newer_created",
+      "cht_a",
+      "cht_b",
+    ]);
+  });
+
+  it("handles invalid timestamps without crashing and keeps deterministic order", () => {
+    const chats: ChatSummary[] = [
+      {
+        ...baseChatSummary,
+        id: "cht_invalid_a",
+        isPinned: false,
+        createdAt: "not-a-date",
+        updatedAt: "also-invalid",
+      },
+      {
+        ...baseChatSummary,
+        id: "cht_invalid_b",
+        isPinned: false,
+        createdAt: "still-not-a-date",
+        updatedAt: "invalid-too",
+      },
+    ];
+
+    expect(sortChatsForSidebar(chats).map((chat) => chat.id)).toEqual([
+      "cht_invalid_a",
+      "cht_invalid_b",
+    ]);
+  });
+
+  it("groups chat timestamps into today/yesterday/7 days/month/older labels", () => {
+    const now = new Date("2026-03-09T10:00:00.000Z");
+    expect(getChatTimeGroup("2026-03-09T08:00:00.000Z", now)).toBe("today");
+    expect(getChatTimeGroup("2026-03-08T08:00:00.000Z", now)).toBe("yesterday");
+    expect(getChatTimeGroup("2026-03-05T08:00:00.000Z", now)).toBe("last7Days");
+    expect(getChatTimeGroup("2026-02-20T08:00:00.000Z", now)).toBe("last30Days");
+    expect(getChatTimeGroup("2026-01-01T08:00:00.000Z", now)).toBe("older");
+    expect(getChatTimeGroup("not-a-date", now)).toBe("older");
   });
 
   it("derives loading, error, and empty conversation pane states", () => {

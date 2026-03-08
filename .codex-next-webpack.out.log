@@ -1,0 +1,21 @@
+▲ Next.js 16.1.6 (webpack)
+- Local:         http://localhost:3012
+- Network:       http://10.5.0.2:3012
+- Environments: .env.local
+
+✓ Starting...
+✓ Ready in 3.4s
+○ Compiling / ...
+ GET / 200 in 8.8s (compile: 8.2s, render: 582ms)
+ GET / 200 in 57ms (compile: 10ms, render: 46ms)
+ GET / 200 in 58ms (compile: 8ms, render: 50ms)
+○ Compiling /api/auth/session ...
+ GET / 200 in 112ms (compile: 55ms, render: 57ms)
+ GET /api/auth/session 200 in 14.1s (compile: 5.7s, render: 8.4s)
+ GET /api/chats 200 in 7.9s (compile: 1270ms, render: 6.7s)
+ GET / 200 in 772ms (compile: 127ms, render: 644ms)
+ GET / 200 in 148ms (compile: 12ms, render: 136ms)
+ GET /api/auth/session 200 in 2.1s (compile: 30ms, render: 2.1s)
+ GET /api/chats 200 in 229ms (compile: 11ms, render: 219ms)
+ GET /api/auth/session 200 in 617ms (compile: 10ms, render: 607ms)
+ GET /api/chats 200 in 248ms (compile: 6ms, render: 241ms)

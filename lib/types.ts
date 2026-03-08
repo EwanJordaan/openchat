@@ -25,6 +25,7 @@ export interface ChatSummary {
   id: string;
   title: string;
   modelId: string;
+  isPinned: boolean;
   updatedAt: string;
   createdAt: string;
 }

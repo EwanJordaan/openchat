@@ -2,7 +2,7 @@
 
 import { useEffect, type RefObject } from "react";
 
-import type { ChatMessage } from "@/lib/types";
+import type { ChatMessage, ChatSummary } from "@/lib/types";
 
 export type SessionStatus = "booting" | "ready" | "error";
 export type ConversationStatus = "idle" | "loading" | "ready" | "error";
@@ -16,6 +16,62 @@ export function getVisibleMessages(messages: ChatMessage[], editingMessageId: st
   const targetIndex = messages.findIndex((message) => message.id === editingMessageId);
   if (targetIndex === -1) return messages;
   return messages.slice(0, targetIndex + 1);
+}
+
+function toTimestamp(value: string) {
+  const date = new Date(value);
+  const timestamp = date.valueOf();
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+}
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+export function sortChatsForSidebar(chats: ChatSummary[]) {
+  return [...chats].sort((a, b) => {
+    if (a.isPinned !== b.isPinned) {
+      return a.isPinned ? -1 : 1;
+    }
+
+    const updatedDelta = toTimestamp(b.updatedAt) - toTimestamp(a.updatedAt);
+    if (updatedDelta !== 0) {
+      return updatedDelta;
+    }
+
+    const createdDelta = toTimestamp(b.createdAt) - toTimestamp(a.createdAt);
+    if (createdDelta !== 0) {
+      return createdDelta;
+    }
+
+    return a.id.localeCompare(b.id);
+  });
+}
+
+export type ChatTimeGroup = "today" | "yesterday" | "last7Days" | "last30Days" | "older";
+
+export const CHAT_TIME_GROUP_ORDER: ChatTimeGroup[] = ["today", "yesterday", "last7Days", "last30Days", "older"];
+
+export const CHAT_TIME_GROUP_LABEL: Record<ChatTimeGroup, string> = {
+  today: "Today",
+  yesterday: "Yesterday",
+  last7Days: "7 days ago",
+  last30Days: "A month ago",
+  older: "Older",
+};
+
+export function getChatTimeGroup(isoDate: string, now = new Date()): ChatTimeGroup {
+  const parsed = new Date(isoDate);
+  if (Number.isNaN(parsed.valueOf())) {
+    return "older";
+  }
+
+  const dayDelta = Math.floor((startOfDay(now).valueOf() - startOfDay(parsed).valueOf()) / (24 * 60 * 60 * 1000));
+  if (dayDelta <= 0) return "today";
+  if (dayDelta === 1) return "yesterday";
+  if (dayDelta <= 7) return "last7Days";
+  if (dayDelta <= 30) return "last30Days";
+  return "older";
 }
 
 export function measureTextareaHeight(scrollHeight: number, maxHeight: number, minHeight = 44) {

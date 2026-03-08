@@ -1,0 +1,13 @@
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://10.5.0.2:3000
+- Environments: .env.local
+
+✓ Starting...
+✓ Ready in 4.2s
+ GET / 200 in 1907ms (compile: 1282ms, render: 624ms)
+ GET / 200 in 61ms (compile: 7ms, render: 54ms)
+ GET /api/chats 200 in 9.0s (compile: 256ms, render: 8.7s)
+ GET /api/auth/session 200 in 10.4s (compile: 916ms, render: 9.5s)
+ GET /api/chats 200 in 798ms (compile: 9ms, render: 788ms)
+ GET /api/settings/user 200 in 1041ms (compile: 76ms, render: 965ms)

@@ -37,8 +37,12 @@ import {
   buildChatPath,
   getComposerAvailability,
   getConversationPaneState,
+  getChatTimeGroup,
   getMessageActionState,
   getVisibleMessages,
+  CHAT_TIME_GROUP_LABEL,
+  CHAT_TIME_GROUP_ORDER,
+  sortChatsForSidebar,
   isSameChatSelection,
   parseChatIdFromPath,
   shouldResetDraftOnSelectionChange,
@@ -453,17 +457,18 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const composerCanType = composerAvailability.canType;
   const composerCanSend = composerAvailability.canSend;
   const normalizedSidebarQuery = sidebarQuery.trim().toLowerCase();
+  const orderedChats = useMemo(() => sortChatsForSidebar(chats), [chats]);
   const filteredChats = useMemo(() => {
-    if (!normalizedSidebarQuery) return chats;
+    if (!normalizedSidebarQuery) return orderedChats;
     const queryTokens = normalizedSidebarQuery.split(/\s+/).filter(Boolean);
-    if (!queryTokens.length) return chats;
+    if (!queryTokens.length) return orderedChats;
 
     const modelSearchTextById = new Map(
       (session?.models ?? []).map((model) => [model.id, `${model.id} ${model.displayName} ${model.provider}`.toLowerCase()]),
     );
     const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-    return chats.filter((chat) => {
+    return orderedChats.filter((chat) => {
       const createdDate = new Date(chat.createdAt);
       const updatedDate = new Date(chat.updatedAt);
       const createdText = Number.isNaN(createdDate.valueOf()) ? "" : dateFormatter.format(createdDate);
@@ -471,7 +476,24 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       const haystack = `${chat.title} ${chat.modelId} ${modelSearchTextById.get(chat.modelId) || ""} ${createdText} ${updatedText}`.toLowerCase();
       return queryTokens.every((token) => haystack.includes(token));
     });
-  }, [chats, normalizedSidebarQuery, session?.models]);
+  }, [normalizedSidebarQuery, orderedChats, session?.models]);
+  const pinnedChats = useMemo(() => filteredChats.filter((chat) => chat.isPinned), [filteredChats]);
+  const regularChatsByTime = useMemo(() => {
+    const groups: Record<(typeof CHAT_TIME_GROUP_ORDER)[number], ChatSummary[]> = {
+      today: [],
+      yesterday: [],
+      last7Days: [],
+      last30Days: [],
+      older: [],
+    };
+
+    for (const chat of filteredChats) {
+      if (chat.isPinned) continue;
+      groups[getChatTimeGroup(chat.updatedAt)].push(chat);
+    }
+
+    return groups;
+  }, [filteredChats]);
   const showNoResults = normalizedSidebarQuery.length > 0 && filteredChats.length === 0;
 
   const handleNewChat = useCallback(() => {
@@ -1240,6 +1262,24 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     await loadChats();
   }
 
+  async function toggleChatPinned(chatId: string, nextPinned: boolean) {
+    setOpenChatMenuId(null);
+    const response = await fetch(`/api/chats/${chatId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ isPinned: nextPinned }),
+    });
+
+    if (!response.ok) {
+      setError("Could not update pin status");
+      return;
+    }
+
+    await loadChats();
+  }
+
   async function logout() {
     await fetch("/api/auth/sign-out", { method: "POST" });
     clearSessionSnapshot();
@@ -1326,46 +1366,108 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
           ) : !filteredChats.length ? (
             <p className="chat-list-empty">No chats yet.</p>
           ) : (
-            filteredChats.map((chat) => (
-              <div key={chat.id} className={`chat-item ${chat.id === activeChatId ? "active" : ""}`}>
-                <a
-                  href={buildChatPath(chat.id)}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    if (chat.id !== activeChatId) {
-                      setActiveChatId(chat.id);
-                      setError(null);
-                      syncChatPath(chat.id);
-                    }
-                    setOpenChatMenuId(null);
-                  }}
-                >
-                  <span>{chat.title}</span>
-                </a>
-                <div className="chat-item-actions" ref={openChatMenuId === chat.id ? chatMenuRef : undefined}>
-                  <button
-                    type="button"
-                    className="chat-menu-trigger"
-                    aria-haspopup="menu"
-                    aria-expanded={openChatMenuId === chat.id}
-                    title="Chat options"
-                    onClick={() => setOpenChatMenuId((current) => (current === chat.id ? null : chat.id))}
+            <>
+              {pinnedChats.length ? <p className="chat-section-label">Pinned</p> : null}
+              {pinnedChats.map((chat) => (
+                <div key={chat.id} className={`chat-item ${chat.id === activeChatId ? "active" : ""}`}>
+                  <a
+                    href={buildChatPath(chat.id)}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      if (chat.id !== activeChatId) {
+                        setActiveChatId(chat.id);
+                        setError(null);
+                        syncChatPath(chat.id);
+                      }
+                      setOpenChatMenuId(null);
+                    }}
                   >
-                    <Ellipsis size={14} />
-                  </button>
-                  {openChatMenuId === chat.id ? (
-                    <div className="chat-item-menu" role="menu">
-                      <button type="button" onClick={() => void renameChat(chat.id)}>
-                        Rename
-                      </button>
-                      <button type="button" onClick={() => void removeChat(chat.id)}>
-                        <Trash2 size={13} /> Delete
-                      </button>
+                    <div className="chat-item-content">
+                      <span className="chat-item-title">{chat.title}</span>
                     </div>
-                  ) : null}
+                  </a>
+                  <div className="chat-item-actions" ref={openChatMenuId === chat.id ? chatMenuRef : undefined}>
+                    <button
+                      type="button"
+                      className="chat-menu-trigger"
+                      aria-haspopup="menu"
+                      aria-expanded={openChatMenuId === chat.id}
+                      title="Chat options"
+                      onClick={() => setOpenChatMenuId((current) => (current === chat.id ? null : chat.id))}
+                    >
+                      <Ellipsis size={14} />
+                    </button>
+                    {openChatMenuId === chat.id ? (
+                      <div className="chat-item-menu" role="menu">
+                        <button type="button" onClick={() => void toggleChatPinned(chat.id, !chat.isPinned)}>
+                          {chat.isPinned ? "Unpin" : "Pin"}
+                        </button>
+                        <button type="button" onClick={() => void renameChat(chat.id)}>
+                          Rename
+                        </button>
+                        <button type="button" onClick={() => void removeChat(chat.id)}>
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            ))
+              ))}
+              {CHAT_TIME_GROUP_ORDER.map((group) => {
+                const chatsInGroup = regularChatsByTime[group];
+                if (!chatsInGroup.length) return null;
+                return (
+                  <div key={group}>
+                    <p className="chat-section-label">{CHAT_TIME_GROUP_LABEL[group]}</p>
+                    {chatsInGroup.map((chat) => (
+                      <div key={chat.id} className={`chat-item ${chat.id === activeChatId ? "active" : ""}`}>
+                        <a
+                          href={buildChatPath(chat.id)}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            if (chat.id !== activeChatId) {
+                              setActiveChatId(chat.id);
+                              setError(null);
+                              syncChatPath(chat.id);
+                            }
+                            setOpenChatMenuId(null);
+                          }}
+                        >
+                          <div className="chat-item-content">
+                            <span className="chat-item-title">{chat.title}</span>
+                          </div>
+                        </a>
+                        <div className="chat-item-actions" ref={openChatMenuId === chat.id ? chatMenuRef : undefined}>
+                          <button
+                            type="button"
+                            className="chat-menu-trigger"
+                            aria-haspopup="menu"
+                            aria-expanded={openChatMenuId === chat.id}
+                            title="Chat options"
+                            onClick={() => setOpenChatMenuId((current) => (current === chat.id ? null : chat.id))}
+                          >
+                            <Ellipsis size={14} />
+                          </button>
+                          {openChatMenuId === chat.id ? (
+                            <div className="chat-item-menu" role="menu">
+                              <button type="button" onClick={() => void toggleChatPinned(chat.id, true)}>
+                                Pin
+                              </button>
+                              <button type="button" onClick={() => void renameChat(chat.id)}>
+                                Rename
+                              </button>
+                              <button type="button" onClick={() => void removeChat(chat.id)}>
+                                <Trash2 size={13} /> Delete
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
 
