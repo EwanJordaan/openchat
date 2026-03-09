@@ -30,8 +30,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { AssistantMarkdown } from "@/components/chat/assistant-markdown";
 
 import {
   buildChatPath,
@@ -1603,7 +1602,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                     ) : null}
                     <div className={`message-content ${message.role === "assistant" ? "markdown-content" : ""}`}>
                       {message.role === "assistant" ? (
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                        <AssistantMarkdown content={message.content} />
                       ) : (
                         <p>{message.content}</p>
                       )}
