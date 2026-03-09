@@ -12,6 +12,7 @@ import {
   isPersistedMessage,
   measureTextareaHeight,
   parseChatIdFromPath,
+  setChatPinnedState,
   sortChatsForSidebar,
   shouldResetDraftOnSelectionChange,
   shouldSubmitTextareaShortcut,
@@ -223,6 +224,32 @@ describe("chat workspace helpers", () => {
       "cht_pinned_old",
       "cht_unpinned_new",
     ]);
+  });
+
+  it("updates only the target chat pin state", () => {
+    const chats: ChatSummary[] = [
+      { ...baseChatSummary, id: "cht_1", isPinned: false },
+      { ...baseChatSummary, id: "cht_2", isPinned: true },
+    ];
+
+    const updated = setChatPinnedState(chats, "cht_1", true);
+    expect(updated).toEqual([
+      { ...baseChatSummary, id: "cht_1", isPinned: true },
+      { ...baseChatSummary, id: "cht_2", isPinned: true },
+    ]);
+    expect(updated[1]).toBe(chats[1]);
+  });
+
+  it("returns the same array when chat id is missing", () => {
+    const chats: ChatSummary[] = [{ ...baseChatSummary, id: "cht_1", isPinned: false }];
+    const updated = setChatPinnedState(chats, "missing", true);
+    expect(updated).toBe(chats);
+  });
+
+  it("returns the same array when pin state is unchanged", () => {
+    const chats: ChatSummary[] = [{ ...baseChatSummary, id: "cht_1", isPinned: true }];
+    const updated = setChatPinnedState(chats, "cht_1", true);
+    expect(updated).toBe(chats);
   });
 
   it("uses createdAt then id as stable tie-breakers", () => {

@@ -48,6 +48,23 @@ export function sortChatsForSidebar(chats: ChatSummary[]) {
   });
 }
 
+export function setChatPinnedState(chats: ChatSummary[], chatId: string, isPinned: boolean) {
+  let didChange = false;
+  const nextChats = chats.map((chat) => {
+    if (chat.id !== chatId || chat.isPinned === isPinned) {
+      return chat;
+    }
+
+    didChange = true;
+    return {
+      ...chat,
+      isPinned,
+    };
+  });
+
+  return didChange ? nextChats : chats;
+}
+
 export type ChatTimeGroup = "today" | "yesterday" | "last7Days" | "last30Days" | "older";
 
 export const CHAT_TIME_GROUP_ORDER: ChatTimeGroup[] = ["today", "yesterday", "last7Days", "last30Days", "older"];

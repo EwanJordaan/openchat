@@ -42,6 +42,7 @@ import {
   CHAT_TIME_GROUP_LABEL,
   CHAT_TIME_GROUP_ORDER,
   sortChatsForSidebar,
+  setChatPinnedState,
   isSameChatSelection,
   parseChatIdFromPath,
   shouldResetDraftOnSelectionChange,
@@ -329,6 +330,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const chatMenuRef = useRef<HTMLDivElement | null>(null);
   const [isProfileMenuOpen, setProfileMenuOpen] = useState(false);
   const [openChatMenuId, setOpenChatMenuId] = useState<string | null>(null);
+  const [pinPendingById, setPinPendingById] = useState<Record<string, boolean>>({});
   const [sidebarQuery, setSidebarQuery] = useState("");
   const [isMacPlatform, setIsMacPlatform] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -1263,20 +1265,54 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
 
   async function toggleChatPinned(chatId: string, nextPinned: boolean) {
     setOpenChatMenuId(null);
-    const response = await fetch(`/api/chats/${chatId}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ isPinned: nextPinned }),
-    });
-
-    if (!response.ok) {
+    if (!session) {
       setError("Could not update pin status");
       return;
     }
 
-    await loadChats();
+    if (pinPendingById[chatId]) {
+      return;
+    }
+
+    setPinPendingById((current) => ({ ...current, [chatId]: true }));
+    setError(null);
+
+    const previousChats = chats;
+    const optimisticChats = setChatPinnedState(previousChats, chatId, nextPinned);
+    setChats(optimisticChats);
+    writeCachedChats(session.actor, optimisticChats);
+
+    try {
+      const response = await fetch(`/api/chats/${chatId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ isPinned: nextPinned }),
+      });
+
+      if (!response.ok) {
+        setChats(previousChats);
+        writeCachedChats(session.actor, previousChats);
+        setError("Could not update pin status");
+        return;
+      }
+
+      void loadChats();
+    } catch {
+      setChats(previousChats);
+      writeCachedChats(session.actor, previousChats);
+      setError("Could not update pin status");
+    } finally {
+      setPinPendingById((current) => {
+        if (!current[chatId]) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[chatId];
+        return next;
+      });
+    }
   }
 
   async function logout() {
@@ -1398,7 +1434,11 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                     </button>
                     {openChatMenuId === chat.id ? (
                       <div className="chat-item-menu" role="menu">
-                        <button type="button" onClick={() => void toggleChatPinned(chat.id, !chat.isPinned)}>
+                        <button
+                          type="button"
+                          disabled={!!pinPendingById[chat.id]}
+                          onClick={() => void toggleChatPinned(chat.id, !chat.isPinned)}
+                        >
                           {chat.isPinned ? "Unpin" : "Pin"}
                         </button>
                         <button type="button" onClick={() => void renameChat(chat.id)}>
@@ -1449,7 +1489,11 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                           </button>
                           {openChatMenuId === chat.id ? (
                             <div className="chat-item-menu" role="menu">
-                              <button type="button" onClick={() => void toggleChatPinned(chat.id, true)}>
+                              <button
+                                type="button"
+                                disabled={!!pinPendingById[chat.id]}
+                                onClick={() => void toggleChatPinned(chat.id, true)}
+                              >
                                 Pin
                               </button>
                               <button type="button" onClick={() => void renameChat(chat.id)}>
