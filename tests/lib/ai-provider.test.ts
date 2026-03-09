@@ -1,11 +1,9 @@
 import { afterEach, beforeAll, describe, expect, it, mock, spyOn } from "bun:test";
 
 import type { ChatMessage, ModelOption } from "@/lib/types";
-import * as store from "@/lib/db/store";
-
-const getProviderCredential = spyOn(store, "getProviderCredential");
 
 let streamAssistantReply: (typeof import("@/lib/ai/provider"))["streamAssistantReply"];
+let getProviderCredential: ReturnType<typeof mock>;
 
 const model: ModelOption = {
   id: "gpt-4o-mini",
@@ -33,6 +31,12 @@ const messages: ChatMessage[] = [
 const originalFetch = globalThis.fetch;
 
 beforeAll(async () => {
+  process.env.BETTER_AUTH_SECRET ??= "test-secret-1234567890-1234567890";
+  process.env.OPENAI_API_KEY = "";
+  process.env.OPENAI_BASE_URL = "https://api.openai.com/v1";
+
+  const store = await import("@/lib/db/store");
+  getProviderCredential = spyOn(store, "getProviderCredential") as unknown as ReturnType<typeof mock>;
   ({ streamAssistantReply } = await import("@/lib/ai/provider"));
 });
 
