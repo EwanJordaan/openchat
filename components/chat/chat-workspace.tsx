@@ -1593,7 +1593,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                 <AlertTriangle size={13} /> Session issue
               </span>
             ) : null}
-            {sessionError ? (
+            {sessionStatus === "ready" && sessionError ? (
               <span className="status-chip" title={sessionError}>
                 <AlertTriangle size={13} /> Sync issue
               </span>
