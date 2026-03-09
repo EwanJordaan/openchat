@@ -31,8 +31,11 @@ function normalizeDelimitersOutsideInlineCode(input: string) {
       const fence = "`".repeat(tickCount);
       const closing = input.indexOf(fence, cursor + tickCount);
       if (closing === -1) {
-        output += input.slice(cursor);
-        break;
+        // Treat unmatched backticks as plain text and continue scanning so
+        // later math delimiters in the same message can still be normalized.
+        output += input[cursor];
+        cursor += 1;
+        continue;
       }
       output += input.slice(cursor, closing + tickCount);
       cursor = closing + tickCount;
