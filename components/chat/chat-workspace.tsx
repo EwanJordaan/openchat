@@ -540,11 +540,19 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
         setSessionStatus("ready");
         setSessionError("Could not refresh session; showing the last local snapshot.");
       } else {
+        setSession(null);
+        setChats([]);
+        setMessages([]);
+        setActiveChatId(undefined);
+        setChatListStatus("idle");
+        setConversationStatus("idle");
+        setConversationError(null);
+        syncChatPath(undefined, { replace: true });
         setSessionStatus("error");
         setSessionError("Could not load session data");
       }
     }
-  }, [setMode]);
+  }, [setMode, syncChatPath]);
 
   const loadChats = useCallback(async () => {
     if (!session) {
