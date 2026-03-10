@@ -201,6 +201,18 @@ export function shouldResetDraftOnSelectionChange(
   return getChatSelectionKey(previousChatId, draftChatId) !== getChatSelectionKey(nextChatId, draftChatId);
 }
 
+export function isNewChatDraftState(input: {
+  activeChatId: string | undefined;
+  activeTempChatId: string | null;
+  messageCount: number;
+}) {
+  return !input.activeChatId && !input.activeTempChatId && input.messageCount === 0;
+}
+
+export function shouldResetTemporaryModeOnDraftEntry(previousIsNewChatDraft: boolean, nextIsNewChatDraft: boolean) {
+  return !previousIsNewChatDraft && nextIsNewChatDraft;
+}
+
 export function getMessageActionState(
   message: ChatMessage,
   options: {

@@ -6,6 +6,7 @@ import {
   getConversationPaneState,
   getChatTimeGroup,
   getMessageActionState,
+  isNewChatDraftState,
   isConversationStillSelected,
   getChatSelectionKey,
   getVisibleMessages,
@@ -16,6 +17,7 @@ import {
   setChatPinnedState,
   sortChatsForSidebar,
   shouldResetDraftOnSelectionChange,
+  shouldResetTemporaryModeOnDraftEntry,
   shouldSubmitTextareaShortcut,
   syncHistoryPath,
 } from "@/components/chat/chat-workspace-utils";
@@ -159,6 +161,49 @@ describe("chat workspace helpers", () => {
     expect(shouldResetDraftOnSelectionChange(undefined, "cht_a")).toBeTrue();
     expect(shouldResetDraftOnSelectionChange("cht_a", undefined)).toBeTrue();
     expect(shouldResetDraftOnSelectionChange("cht_a", "cht_b")).toBeTrue();
+  });
+
+  it("detects a fresh unsaved draft state", () => {
+    expect(
+      isNewChatDraftState({
+        activeChatId: undefined,
+        activeTempChatId: null,
+        messageCount: 0,
+      }),
+    ).toBeTrue();
+  });
+
+  it("rejects draft state when chat or messages are present", () => {
+    expect(
+      isNewChatDraftState({
+        activeChatId: "cht_a",
+        activeTempChatId: null,
+        messageCount: 0,
+      }),
+    ).toBeFalse();
+
+    expect(
+      isNewChatDraftState({
+        activeChatId: undefined,
+        activeTempChatId: "tch_1",
+        messageCount: 0,
+      }),
+    ).toBeFalse();
+
+    expect(
+      isNewChatDraftState({
+        activeChatId: undefined,
+        activeTempChatId: null,
+        messageCount: 1,
+      }),
+    ).toBeFalse();
+  });
+
+  it("resets temporary mode only when entering a new draft", () => {
+    expect(shouldResetTemporaryModeOnDraftEntry(false, true)).toBeTrue();
+    expect(shouldResetTemporaryModeOnDraftEntry(true, true)).toBeFalse();
+    expect(shouldResetTemporaryModeOnDraftEntry(true, false)).toBeFalse();
+    expect(shouldResetTemporaryModeOnDraftEntry(false, false)).toBeFalse();
   });
 
   it("maps back and forward paths to the selected chat id", () => {

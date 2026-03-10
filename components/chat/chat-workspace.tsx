@@ -41,6 +41,7 @@ import {
   isConversationStillSelected,
   getConversationPaneState,
   getChatTimeGroup,
+  isNewChatDraftState,
   getMessageActionState,
   getVisibleMessages,
   CHAT_TIME_GROUP_LABEL,
@@ -49,6 +50,7 @@ import {
   setChatPinnedState,
   parseChatIdFromPath,
   shouldResetDraftOnSelectionChange,
+  shouldResetTemporaryModeOnDraftEntry,
   type ConversationStatus,
   type SessionStatus,
   syncHistoryPath,
@@ -461,6 +463,12 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const hasActiveChat = Boolean(activeChatId);
   const editingMessageId = editSession?.messageId ?? null;
   const visibleMessages = useMemo(() => getVisibleMessages(messages, editingMessageId), [messages, editingMessageId]);
+  const isNewChatDraft = isNewChatDraftState({
+    activeChatId,
+    activeTempChatId,
+    messageCount: visibleMessages.length,
+  });
+  const previousIsNewChatDraftRef = useRef(isNewChatDraft);
   const paneState = getConversationPaneState({
     hasActiveChat,
     conversationStatus,
@@ -517,6 +525,14 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     return groups;
   }, [filteredChats]);
   const showNoResults = normalizedSidebarQuery.length > 0 && filteredChats.length === 0;
+
+  useEffect(() => {
+    const previousIsNewChatDraft = previousIsNewChatDraftRef.current;
+    if (shouldResetTemporaryModeOnDraftEntry(previousIsNewChatDraft, isNewChatDraft)) {
+      setTempModeOn(false);
+    }
+    previousIsNewChatDraftRef.current = isNewChatDraft;
+  }, [isNewChatDraft]);
 
   const handleNewChat = useCallback(() => {
     if (session) {
@@ -1426,7 +1442,6 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const nextPath = encodeURIComponent(buildChatPath(activeChatId));
   const activeChatTitle =
     activeChat?.title || (isTempConversationActive ? "Temporary chat" : activeChatId ? "Conversation" : "New chat");
-  const isNewChatDraft = !activeChatId && !activeTempChatId && messages.length === 0;
   const modelOptions: ModelOption[] =
     session?.models.length
       ? session.models
