@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+
 import { sql } from "drizzle-orm";
 
 import { ensureDatabase } from "@/lib/db/bootstrap";
@@ -34,6 +36,13 @@ interface SessionJoinRow {
   is_active: number | boolean;
 }
 
+interface TemporaryChatRow {
+  id: string;
+  model_id: string;
+  messages_json: string;
+  file_ids_json: string;
+}
+
 const defaultUserSettings: UserSettings = {
   theme: "system",
   compactMode: false,
@@ -43,6 +52,33 @@ const defaultUserSettings: UserSettings = {
   language: "en",
   autoTitleChats: true,
 };
+
+const TEMP_CHAT_RETENTION_DAYS = 7;
+const TEMP_CHAT_RETENTION_MS = TEMP_CHAT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+function temporaryChatOwnerFilter(actor: Actor) {
+  if (actor.type === "user") {
+    return sql`owner_user_id = ${actor.userId}`;
+  }
+  return sql`owner_user_id is null and guest_id = ${actor.guestId}`;
+}
+
+function temporaryChatExpiresAt(now: string) {
+  return new Date(new Date(now).valueOf() + TEMP_CHAT_RETENTION_MS).toISOString();
+}
+
+async function getTemporaryChatRow(actor: Actor, tempChatId: string, now: string) {
+  const { query } = getDb();
+  const rows = await query<TemporaryChatRow>(sql`
+    select id, model_id, messages_json, file_ids_json
+    from temporary_chats
+    where id = ${tempChatId}
+      and ${temporaryChatOwnerFilter(actor)}
+      and expires_at > ${now}
+    limit 1
+  `);
+  return rows[0] ?? null;
+}
 
 export async function findUserByEmail(email: string) {
   await ensureDatabase();
@@ -643,6 +679,188 @@ export async function appendMessage(input: {
 
   await query(sql`update chats set updated_at = ${now} where id = ${input.chatId}`);
   return messageId;
+}
+
+export async function appendTemporaryChatUserMessage(
+  actor: Actor,
+  input: {
+    tempChatId?: string;
+    role: "user";
+    content: string;
+    modelId: string;
+    attachments?: UploadedFile[];
+  },
+) {
+  await ensureDatabase();
+  const { query } = getDb();
+  const now = nowIso();
+  const expiresAt = temporaryChatExpiresAt(now);
+  const attachments = input.attachments ?? [];
+
+  if (!input.tempChatId) {
+    const tempChatId = createId("tch");
+    const message: ChatMessage = {
+      id: createId("msg"),
+      chatId: tempChatId,
+      role: input.role,
+      content: input.content,
+      modelId: input.modelId,
+      createdAt: now,
+      attachments,
+    };
+
+    await query(sql`
+      insert into temporary_chats (id, owner_user_id, guest_id, model_id, messages_json, file_ids_json, created_at, updated_at, expires_at)
+      values (
+        ${tempChatId},
+        ${actor.type === "user" ? actor.userId : null},
+        ${actor.guestId},
+        ${input.modelId},
+        ${JSON.stringify([message])},
+        ${JSON.stringify(attachments.map((file) => file.id))},
+        ${now},
+        ${now},
+        ${expiresAt}
+      )
+    `);
+
+    return {
+      ok: true as const,
+      tempChatId,
+      messages: [message],
+    };
+  }
+
+  const row = await getTemporaryChatRow(actor, input.tempChatId, now);
+  if (!row) {
+    return {
+      ok: false as const,
+      reason: "temp-chat-not-found" as const,
+    };
+  }
+
+  const priorMessages = parseJson<ChatMessage[]>(row.messages_json, []);
+  const nextMessage: ChatMessage = {
+    id: createId("msg"),
+    chatId: row.id,
+    role: input.role,
+    content: input.content,
+    modelId: input.modelId,
+    createdAt: now,
+    attachments,
+  };
+  const messages = [...priorMessages, nextMessage];
+  const existingFileIds = parseJson<string[]>(row.file_ids_json, []);
+  const fileIds = Array.from(new Set([...existingFileIds, ...attachments.map((file) => file.id)]));
+
+  await query(sql`
+    update temporary_chats
+    set
+      model_id = ${input.modelId},
+      messages_json = ${JSON.stringify(messages)},
+      file_ids_json = ${JSON.stringify(fileIds)},
+      updated_at = ${now},
+      expires_at = ${expiresAt}
+    where id = ${row.id}
+  `);
+
+  return {
+    ok: true as const,
+    tempChatId: row.id,
+    messages,
+  };
+}
+
+export async function appendTemporaryChatAssistantMessage(
+  actor: Actor,
+  input: {
+    tempChatId: string;
+    role: "assistant" | "system";
+    content: string;
+    modelId: string;
+  },
+) {
+  await ensureDatabase();
+  const { query } = getDb();
+  const now = nowIso();
+  const row = await getTemporaryChatRow(actor, input.tempChatId, now);
+  if (!row) {
+    return false;
+  }
+
+  const priorMessages = parseJson<ChatMessage[]>(row.messages_json, []);
+  const messages = [
+    ...priorMessages,
+    {
+      id: createId("msg"),
+      chatId: row.id,
+      role: input.role,
+      content: input.content,
+      modelId: input.modelId,
+      createdAt: now,
+      attachments: [],
+    } satisfies ChatMessage,
+  ];
+
+  await query(sql`
+    update temporary_chats
+    set
+      model_id = ${input.modelId},
+      messages_json = ${JSON.stringify(messages)},
+      updated_at = ${now},
+      expires_at = ${temporaryChatExpiresAt(now)}
+    where id = ${row.id}
+  `);
+
+  return true;
+}
+
+export async function pruneExpiredTemporaryChats() {
+  await ensureDatabase();
+  const { query } = getDb();
+  const now = nowIso();
+
+  const expiredRows = await query<Record<string, unknown>>(
+    sql`select id, file_ids_json from temporary_chats where expires_at <= ${now}`,
+  );
+  if (!expiredRows.length) return;
+
+  const tempChatIds = expiredRows.map((row) => String(row.id));
+  const fileIdSet = new Set<string>();
+  for (const row of expiredRows) {
+    for (const fileId of parseJson<string[]>(row.file_ids_json, [])) {
+      fileIdSet.add(fileId);
+    }
+  }
+
+  const fileIds = Array.from(fileIdSet);
+  let filePaths: string[] = [];
+  if (fileIds.length) {
+    const fileRows = await query<Record<string, unknown>>(sql`
+      select id, storage_path
+      from files
+      where chat_id is null
+        and id in (${sql.join(fileIds.map((fileId) => sql`${fileId}`), sql`, `)})
+    `);
+    if (fileRows.length) {
+      filePaths = fileRows.map((row) => String(row.storage_path));
+      const fileRowIds = fileRows.map((row) => String(row.id));
+      await query(sql`
+        delete from files
+        where chat_id is null
+          and id in (${sql.join(fileRowIds.map((fileId) => sql`${fileId}`), sql`, `)})
+      `);
+    }
+  }
+
+  await query(sql`
+    delete from temporary_chats
+    where id in (${sql.join(tempChatIds.map((chatId) => sql`${chatId}`), sql`, `)})
+  `);
+
+  for (const filePath of filePaths) {
+    await fs.unlink(filePath).catch(() => undefined);
+  }
 }
 
 export async function touchFilesWithChat(fileIds: string[], chatId: string) {

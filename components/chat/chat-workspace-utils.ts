@@ -174,6 +174,25 @@ export function isSameChatSelection(currentChatId: string | undefined, originCha
   return getChatSelectionKey(currentChatId, draftChatId) === getChatSelectionKey(originChatId, draftChatId);
 }
 
+export function isConversationStillSelected(input: {
+  currentChatId: string | undefined;
+  originChatId: string | undefined;
+  currentTempChatId: string | null;
+  allowedTempChatIds?: readonly string[] | null;
+  draftChatId?: string;
+}) {
+  const allowedTempChatIds = input.allowedTempChatIds ?? null;
+  if (allowedTempChatIds && allowedTempChatIds.length > 0) {
+    return (
+      input.currentChatId === input.originChatId &&
+      input.currentTempChatId !== null &&
+      allowedTempChatIds.includes(input.currentTempChatId)
+    );
+  }
+
+  return isSameChatSelection(input.currentChatId, input.originChatId, input.draftChatId);
+}
+
 export function shouldResetDraftOnSelectionChange(
   previousChatId: string | undefined,
   nextChatId: string | undefined,

@@ -6,6 +6,7 @@ import {
   getConversationPaneState,
   getChatTimeGroup,
   getMessageActionState,
+  isConversationStillSelected,
   getChatSelectionKey,
   getVisibleMessages,
   isSameChatSelection,
@@ -87,6 +88,57 @@ describe("chat workspace helpers", () => {
   it("applies only the currently selected chat after rapid switch A to B", () => {
     expect(isSameChatSelection("cht_b", "cht_a")).toBeFalse();
     expect(isSameChatSelection("cht_b", "cht_b")).toBeTrue();
+  });
+
+  it("treats provisional and resolved temp ids as the same active conversation", () => {
+    const allowedTempChatIds = ["tmp-local-1", "tch_1"];
+
+    expect(
+      isConversationStillSelected({
+        currentChatId: undefined,
+        originChatId: undefined,
+        currentTempChatId: "tmp-local-1",
+        allowedTempChatIds,
+      }),
+    ).toBeTrue();
+
+    expect(
+      isConversationStillSelected({
+        currentChatId: undefined,
+        originChatId: undefined,
+        currentTempChatId: "tch_1",
+        allowedTempChatIds,
+      }),
+    ).toBeTrue();
+  });
+
+  it("rejects unrelated temp ids while temp tracking is active", () => {
+    expect(
+      isConversationStillSelected({
+        currentChatId: undefined,
+        originChatId: undefined,
+        currentTempChatId: "tch_other",
+        allowedTempChatIds: ["tmp-local-1", "tch_1"],
+      }),
+    ).toBeFalse();
+  });
+
+  it("falls back to chat/draft selection checks when temp tracking is absent", () => {
+    expect(
+      isConversationStillSelected({
+        currentChatId: undefined,
+        originChatId: undefined,
+        currentTempChatId: null,
+      }),
+    ).toBeTrue();
+
+    expect(
+      isConversationStillSelected({
+        currentChatId: "cht_b",
+        originChatId: "cht_a",
+        currentTempChatId: null,
+      }),
+    ).toBeFalse();
   });
 
   it("keeps send completion scoped to the origin chat selection", () => {

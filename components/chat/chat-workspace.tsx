@@ -23,10 +23,13 @@ import {
   Paperclip,
   Search,
   SendHorizontal,
+  Share2,
   Settings,
   Shield,
   Square,
   SquarePen,
+  Timer,
+  TimerOff,
   Trash2,
   X,
 } from "lucide-react";
@@ -35,6 +38,7 @@ import { AssistantMarkdown } from "@/components/chat/assistant-markdown";
 import {
   buildChatPath,
   getComposerAvailability,
+  isConversationStillSelected,
   getConversationPaneState,
   getChatTimeGroup,
   getMessageActionState,
@@ -43,7 +47,6 @@ import {
   CHAT_TIME_GROUP_ORDER,
   sortChatsForSidebar,
   setChatPinnedState,
-  isSameChatSelection,
   parseChatIdFromPath,
   shouldResetDraftOnSelectionChange,
   type ConversationStatus,
@@ -308,6 +311,9 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const [isAttachMenuOpen, setAttachMenuOpen] = useState(false);
   const [editSession, setEditSession] = useState<EditSession | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [isTempModeOn, setTempModeOn] = useState(false);
+  const [activeTempChatId, setActiveTempChatId] = useState<string | null>(null);
+  const [isTempConversationActive, setIsTempConversationActive] = useState(false);
 
   const messageAnchor = useAutoScroll(messages.length);
   const activeChat = useMemo(() => chats.find((chat) => chat.id === activeChatId) || null, [chats, activeChatId]);
@@ -323,6 +329,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const loadChatAbortControllerRef = useRef<AbortController | null>(null);
   const loadChatRequestIdRef = useRef(0);
   const activeChatIdRef = useRef<string | undefined>(initialChatId);
+  const activeTempChatIdRef = useRef<string | null>(null);
   const lastDraftResetChatIdRef = useRef<string | undefined>(initialChatId);
   const copiedMessageTimeoutRef = useRef<number | null>(null);
   const shouldStickToBottomRef = useRef(true);
@@ -341,7 +348,15 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     syncHistoryPath(buildChatPath(chatId), { replace: options?.replace });
   }, []);
   const isChatStillSelected = useCallback(
-    (originChatId?: string) => isSameChatSelection(activeChatIdRef.current, originChatId, DRAFT_CHAT_ID),
+    (originChatId?: string, allowedTempChatIds?: readonly string[] | null) => {
+      return isConversationStillSelected({
+        currentChatId: activeChatIdRef.current,
+        originChatId,
+        currentTempChatId: activeTempChatIdRef.current,
+        allowedTempChatIds,
+        draftChatId: DRAFT_CHAT_ID,
+      });
+    },
     [],
   );
 
@@ -372,12 +387,18 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   }, [activeChatId]);
 
   useEffect(() => {
+    activeTempChatIdRef.current = activeTempChatId;
+  }, [activeTempChatId]);
+
+  useEffect(() => {
     const onPopState = () => {
       const nextChatId = parseChatIdFromPath(window.location.pathname);
       setOpenChatMenuId(null);
       setEditSession(null);
       setDraft("");
       setPendingFiles([]);
+      setActiveTempChatId(null);
+      setIsTempConversationActive(false);
       setActiveChatId(nextChatId);
       setError(null);
     };
@@ -503,6 +524,8 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     }
     setOpenChatMenuId(null);
     setEditSession(null);
+    setActiveTempChatId(null);
+    setIsTempConversationActive(false);
     syncChatPath();
     setMessages([]);
     setError(null);
@@ -712,21 +735,29 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       return;
     }
 
+    if (isTempConversationActive) {
+      loadChatAbortControllerRef.current?.abort();
+      setConversationStatus("ready");
+      setConversationError(null);
+      return;
+    }
+
     loadChatAbortControllerRef.current?.abort();
     const cachedDraftMessages = readCachedChatMessages(session.actor, DRAFT_CHAT_ID);
     setMessages(cachedDraftMessages);
     setConversationStatus("idle");
     setError(null);
-  }, [activeChatId, loadChat, session]);
+  }, [activeChatId, isTempConversationActive, loadChat, session]);
 
   useEffect(() => {
     if (!session) return;
+    if (isTempConversationActive) return;
     if (activeChatId) {
       writeCachedChatMessages(session.actor, activeChatId, messages);
       return;
     }
     writeCachedChatMessages(session.actor, DRAFT_CHAT_ID, messages);
-  }, [activeChatId, messages, session]);
+  }, [activeChatId, isTempConversationActive, messages, session]);
 
   useDismissibleMenu({
     enabled: isAttachMenuOpen,
@@ -916,10 +947,25 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       return;
     }
     setError(null);
+    const shouldUseTemporaryMode = (!activeChatId && isTempModeOn) || Boolean(activeTempChatId);
+    const requestTempChatId =
+      shouldUseTemporaryMode && activeTempChatId && !activeTempChatId.startsWith("tmp-local-")
+        ? activeTempChatId
+        : undefined;
+    const provisionalTempChatId = shouldUseTemporaryMode && !requestTempChatId ? `tmp-local-${Date.now()}` : null;
+    const hadTempConversationBeforeSend = isTempConversationActive;
+    if (shouldUseTemporaryMode) {
+      setIsTempConversationActive(true);
+      if (provisionalTempChatId) {
+        setActiveTempChatId(provisionalTempChatId);
+        activeTempChatIdRef.current = provisionalTempChatId;
+      }
+    }
+    const optimisticChatId = activeChatId || requestTempChatId || provisionalTempChatId || "pending";
 
     const optimisticMessage: ChatMessage = {
       id: `optimistic-${Date.now()}`,
-      chatId: activeChatId || "pending",
+      chatId: optimisticChatId,
       role: "user",
       content: sanitizedDraft,
       modelId,
@@ -937,7 +983,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     const optimisticAssistantId = `assistant-stream-${Date.now()}`;
     const optimisticAssistant: ChatMessage = {
       id: optimisticAssistantId,
-      chatId: activeChatId || "pending",
+      chatId: optimisticChatId,
       role: "assistant",
       content: "",
       modelId,
@@ -948,6 +994,9 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     setMessages([...optimisticMessages, optimisticAssistant]);
     const currentDraft = sanitizedDraft;
     const originChatId = activeChatId;
+    const originTempChatId = shouldUseTemporaryMode ? requestTempChatId || provisionalTempChatId : null;
+    const allowedTempChatIds = originTempChatId ? [originTempChatId] : null;
+    const isOriginConversationStillSelected = () => isChatStillSelected(originChatId, allowedTempChatIds);
     setDraft("");
     setSending(true);
 
@@ -958,7 +1007,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       if (session?.degraded) {
         const degradedReply: ChatMessage = {
           id: `degraded-${Date.now()}`,
-          chatId: activeChatId || "degraded",
+          chatId: activeChatId || requestTempChatId || provisionalTempChatId || "degraded",
           role: "assistant",
           content:
             "Database connection is unavailable right now. Your message is saved locally on this device. It will sync to server storage once database connectivity returns.",
@@ -968,13 +1017,13 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
         };
 
         const offlineMessages = [...optimisticMessages, degradedReply];
-        if (isChatStillSelected(originChatId)) {
+        if (isOriginConversationStillSelected()) {
           setMessages(offlineMessages);
         }
-        if (session) {
+        if (session && !shouldUseTemporaryMode) {
           writeCachedChatMessages(session.actor, originChatId || DRAFT_CHAT_ID, offlineMessages);
         }
-        if (isChatStillSelected(originChatId)) {
+        if (isOriginConversationStillSelected()) {
           setPendingFiles([]);
         }
         return;
@@ -991,6 +1040,12 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
           modelId,
           message: currentDraft,
           attachmentIds: uploadedFiles.map((file) => file.id),
+          temporary: shouldUseTemporaryMode
+            ? {
+                enabled: true,
+                tempChatId: requestTempChatId,
+              }
+            : undefined,
         }),
         signal: abortController.signal,
       });
@@ -1000,50 +1055,76 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
       }
 
       const responseChatId = response.headers.get("x-chat-id") || activeChatId;
-      if (!responseChatId) {
-        throw new Error("The server did not return a chat id");
+      const responseTempChatId = response.headers.get("x-temp-chat-id") || requestTempChatId;
+      const resolvedChatId = shouldUseTemporaryMode ? responseTempChatId : responseChatId;
+      if (!resolvedChatId) {
+        throw new Error(
+          shouldUseTemporaryMode
+            ? "The server did not return a temporary chat id"
+            : "The server did not return a chat id",
+        );
+      }
+      if (shouldUseTemporaryMode && allowedTempChatIds && !allowedTempChatIds.includes(resolvedChatId)) {
+        allowedTempChatIds.push(resolvedChatId);
       }
 
-      const persistedMessages = [...optimisticMessages, optimisticAssistant].map((msg) =>
-        msg.chatId === "pending" ? { ...msg, chatId: responseChatId } : msg,
-      );
+      const persistedMessages = [...optimisticMessages, optimisticAssistant].map((msg) => {
+        if (msg.chatId === "pending" || (provisionalTempChatId && msg.chatId === provisionalTempChatId)) {
+          return { ...msg, chatId: resolvedChatId };
+        }
+        return msg;
+      });
 
-      if (session) {
-        writeCachedChatMessages(session.actor, responseChatId, persistedMessages);
+      if (session && !shouldUseTemporaryMode) {
+        writeCachedChatMessages(session.actor, resolvedChatId, persistedMessages);
         removeCachedChatMessages(session.actor, DRAFT_CHAT_ID);
       }
 
-      const shouldApplyToVisibleChat = isChatStillSelected(originChatId);
+      const shouldApplyToVisibleChat = isOriginConversationStillSelected();
       if (shouldApplyToVisibleChat) {
-        setActiveChatId(responseChatId);
+        if (shouldUseTemporaryMode) {
+          setActiveChatId(undefined);
+          setActiveTempChatId(resolvedChatId);
+          activeChatIdRef.current = undefined;
+          activeTempChatIdRef.current = resolvedChatId;
+          setIsTempConversationActive(true);
+        } else {
+          setActiveChatId(resolvedChatId);
+          setActiveTempChatId(null);
+          activeChatIdRef.current = resolvedChatId;
+          activeTempChatIdRef.current = null;
+          setIsTempConversationActive(false);
+          syncChatPath(resolvedChatId);
+        }
         setMessages(persistedMessages);
         setPendingFiles([]);
-        syncChatPath(responseChatId);
       }
 
-      const accumulated = await readAssistantStream(response, optimisticAssistantId, () => isChatStillSelected(originChatId));
+      const accumulated = await readAssistantStream(response, optimisticAssistantId, isOriginConversationStillSelected);
 
       const finalizedMessages = persistedMessages.map((msg) =>
-        msg.id === optimisticAssistantId ? { ...msg, content: accumulated, chatId: responseChatId } : msg,
+        msg.id === optimisticAssistantId ? { ...msg, content: accumulated, chatId: resolvedChatId } : msg,
       );
-      if (isChatStillSelected(originChatId)) {
+      if (isOriginConversationStillSelected()) {
         setMessages(finalizedMessages);
       }
 
-      if (session) {
-        writeCachedChatMessages(session.actor, responseChatId, finalizedMessages);
+      if (session && !shouldUseTemporaryMode) {
+        writeCachedChatMessages(session.actor, resolvedChatId, finalizedMessages);
       }
 
-      await loadChats();
-      if (isChatStillSelected(responseChatId)) {
-        await loadChat(responseChatId);
+      if (!shouldUseTemporaryMode) {
+        await loadChats();
+        if (isChatStillSelected(resolvedChatId, null)) {
+          await loadChat(resolvedChatId);
+        }
       }
     } catch (sendError) {
       const aborted = sendError instanceof Error && sendError.name === "AbortError";
-      if (!aborted && isChatStillSelected(originChatId)) {
+      if (!aborted && isOriginConversationStillSelected()) {
         setError(sendError instanceof Error ? sendError.message : "Failed to send message");
       }
-      if (isChatStillSelected(originChatId)) {
+      if (isOriginConversationStillSelected()) {
         setMessages((prev) => {
           if (aborted) {
             return prev.filter((msg) => !(msg.id === optimisticAssistantId && !msg.content.trim()));
@@ -1051,8 +1132,13 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
           return prev.filter((msg) => msg.id !== optimisticMessage.id && msg.id !== optimisticAssistantId);
         });
       }
-      if (!aborted && isChatStillSelected(originChatId)) {
+      if (!aborted && isOriginConversationStillSelected()) {
         setDraft(currentDraft);
+      }
+      if (!hadTempConversationBeforeSend && shouldUseTemporaryMode) {
+        setActiveTempChatId(null);
+        activeTempChatIdRef.current = null;
+        setIsTempConversationActive(false);
       }
     } finally {
       sendAbortControllerRef.current = null;
@@ -1331,11 +1417,16 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
     await loadChats();
     setMessages([]);
     setActiveChatId(undefined);
+    setActiveTempChatId(null);
+    setIsTempConversationActive(false);
+    setTempModeOn(false);
     setProfileMenuOpen(false);
   }
 
   const nextPath = encodeURIComponent(buildChatPath(activeChatId));
-  const activeChatTitle = activeChat?.title || (activeChatId ? "Conversation" : "New chat");
+  const activeChatTitle =
+    activeChat?.title || (isTempConversationActive ? "Temporary chat" : activeChatId ? "Conversation" : "New chat");
+  const isNewChatDraft = !activeChatId && !activeTempChatId && messages.length === 0;
   const modelOptions: ModelOption[] =
     session?.models.length
       ? session.models
@@ -1417,6 +1508,8 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                     href={buildChatPath(chat.id)}
                     onClick={(event) => {
                       event.preventDefault();
+                      setActiveTempChatId(null);
+                      setIsTempConversationActive(false);
                       if (chat.id !== activeChatId) {
                         setActiveChatId(chat.id);
                         setError(null);
@@ -1472,6 +1565,8 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                           href={buildChatPath(chat.id)}
                           onClick={(event) => {
                             event.preventDefault();
+                            setActiveTempChatId(null);
+                            setIsTempConversationActive(false);
                             if (chat.id !== activeChatId) {
                               setActiveChatId(chat.id);
                               setError(null);
@@ -1591,6 +1686,22 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
             <h2 className="header-title">{activeChatTitle}</h2>
           </div>
           <div className="header-actions">
+            {isNewChatDraft ? (
+              <button
+                type="button"
+                className={`temporary-mode-toggle ${isTempModeOn ? "on" : ""}`}
+                aria-pressed={isTempModeOn}
+                title={isTempModeOn ? "Temporary mode on (7-day hidden retention)" : "Temporary mode off"}
+                onClick={() => setTempModeOn((value) => !value)}
+                disabled={sessionStatus !== "ready" || sending || uploading}
+              >
+                {isTempModeOn ? <Timer size={13} /> : <TimerOff size={13} />}
+              </button>
+            ) : (
+              <button type="button" className="temporary-mode-toggle" title="Share chat (coming soon)" onClick={() => undefined}>
+                <Share2 size={13} />
+              </button>
+            )}
             {sessionStatus === "booting" ? (
               <span className="status-chip">
                 <LoaderCircle className="spin" size={13} /> Connecting

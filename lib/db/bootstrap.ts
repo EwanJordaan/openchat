@@ -388,6 +388,19 @@ const postgresBootstrapStatements = [
   )
   `,
   `
+  create table if not exists temporary_chats (
+    id text primary key,
+    owner_user_id text references users(id) on delete cascade,
+    guest_id text not null,
+    model_id text not null,
+    messages_json text not null,
+    file_ids_json text not null,
+    created_at text not null,
+    updated_at text not null,
+    expires_at text not null
+  )
+  `,
+  `
   create table if not exists messages (
     id text primary key,
     chat_id text not null references chats(id) on delete cascade,
@@ -490,6 +503,9 @@ const postgresBootstrapStatements = [
   `alter table chats add column if not exists is_pinned integer not null default 0`,
   `create index if not exists idx_chats_user on chats(user_id, updated_at)`,
   `create index if not exists idx_chats_guest on chats(guest_id, updated_at)`,
+  `create index if not exists idx_temporary_chats_user on temporary_chats(owner_user_id, updated_at)`,
+  `create index if not exists idx_temporary_chats_guest on temporary_chats(guest_id, updated_at)`,
+  `create index if not exists idx_temporary_chats_expires on temporary_chats(expires_at)`,
   `create index if not exists idx_messages_chat on messages(chat_id, created_at)`,
   `create index if not exists idx_sessions_user on sessions(user_id, expires_at)`,
   `create index if not exists idx_auth_sessions_user on auth_sessions(user_id, expires_at)`,
@@ -585,6 +601,20 @@ const mysqlBootstrapStatements = [
     created_at varchar(40) not null,
     updated_at varchar(40) not null,
     constraint fk_chats_user foreign key (user_id) references users(id) on delete cascade
+  )
+  `,
+  `
+  create table if not exists temporary_chats (
+    id varchar(191) primary key,
+    owner_user_id varchar(191),
+    guest_id varchar(191) not null,
+    model_id varchar(191) not null,
+    messages_json longtext not null,
+    file_ids_json longtext not null,
+    created_at varchar(40) not null,
+    updated_at varchar(40) not null,
+    expires_at varchar(40) not null,
+    constraint fk_temporary_chats_user foreign key (owner_user_id) references users(id) on delete cascade
   )
   `,
   `
@@ -696,6 +726,9 @@ const mysqlBootstrapStatements = [
   `alter table chats add column if not exists is_pinned tinyint not null default 0`,
   `create index idx_chats_user on chats(user_id, updated_at)`,
   `create index idx_chats_guest on chats(guest_id, updated_at)`,
+  `create index idx_temporary_chats_user on temporary_chats(owner_user_id, updated_at)`,
+  `create index idx_temporary_chats_guest on temporary_chats(guest_id, updated_at)`,
+  `create index idx_temporary_chats_expires on temporary_chats(expires_at)`,
   `create index idx_messages_chat on messages(chat_id, created_at)`,
   `create index idx_sessions_user on sessions(user_id, expires_at)`,
   `create index idx_auth_sessions_user on auth_sessions(user_id, expires_at)`,

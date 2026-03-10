@@ -6,6 +6,8 @@ import { resolveActor } from "@/lib/auth/session";
 import { invalidateChatListCache } from "@/lib/cache/chat-cache";
 import {
   appendMessage,
+  appendTemporaryChatAssistantMessage,
+  appendTemporaryChatUserMessage,
   checkAndConsumeMessageQuota,
   createChat,
   getChat,
@@ -14,10 +16,12 @@ import {
   getRoleLimit,
   listModelsForActor,
   logAudit,
+  pruneExpiredTemporaryChats,
   rewriteUserMessageAndTrimFollowing,
   touchFilesWithChat,
 } from "@/lib/db/store";
 import { attachActorCookies, jsonError } from "@/lib/http";
+import type { ChatMessage } from "@/lib/types";
 
 const sendSchema = z.object({
   chatId: z.string().min(4).max(60).optional(),
@@ -25,6 +29,12 @@ const sendSchema = z.object({
   message: z.string().min(1).max(12000),
   modelId: z.string().min(2).max(120),
   attachmentIds: z.array(z.string().min(4).max(60)).default([]),
+  temporary: z
+    .object({
+      enabled: z.boolean(),
+      tempChatId: z.string().min(4).max(60).optional(),
+    })
+    .optional(),
 });
 
 function actorCacheKey(actor: Awaited<ReturnType<typeof resolveActor>>["actor"]) {
@@ -49,6 +59,16 @@ export async function POST(request: Request) {
   const message = parsed.data.message.trimEnd();
   if (!message.trim()) {
     return jsonError("Message must include non-whitespace text", 400);
+  }
+
+  await pruneExpiredTemporaryChats().catch(() => undefined);
+
+  const temporaryEnabled = parsed.data.temporary?.enabled === true;
+  if (temporaryEnabled && parsed.data.chatId) {
+    return jsonError("Temporary mode only supports new chats", 400);
+  }
+  if (temporaryEnabled && parsed.data.editMessageId) {
+    return jsonError("Editing is unavailable in temporary mode", 400);
   }
 
   const settings = await getPublicAppSettings();
@@ -81,56 +101,78 @@ export async function POST(request: Request) {
     return jsonError(`Total attachments exceed ${roleLimit.maxAttachmentMb}MB for your role.`, 400);
   }
 
-  let chatId = parsed.data.chatId;
-  if (parsed.data.editMessageId && !chatId) {
-    return jsonError("Editing a message requires a chat id", 400);
-  }
+  let chatId: string | undefined;
+  let tempChatId: string | undefined;
+  let hydratedMessages: ChatMessage[] = [];
 
-  if (parsed.data.editMessageId && parsed.data.attachmentIds.length) {
-    return jsonError("Editing a message does not support attachment changes", 400);
-  }
-
-  if (!chatId) {
-    const inferredTitle = message.trim().slice(0, 72) || "New chat";
-    chatId = await createChat(resolved.actor, inferredTitle, model.id);
-  } else {
-    const existingChat = await getChat(resolved.actor, chatId);
-    if (!existingChat) {
-      return jsonError("Chat not found", 404);
-    }
-  }
-
-  if (parsed.data.editMessageId) {
-    const rewriteResult = await rewriteUserMessageAndTrimFollowing(resolved.actor, {
-      chatId,
-      messageId: parsed.data.editMessageId,
-      content: message,
-    });
-
-    if (!rewriteResult.ok) {
-      if (rewriteResult.reason === "chat-not-found") {
-        return jsonError("Chat not found", 404);
-      }
-      if (rewriteResult.reason === "not-user-message") {
-        return jsonError("Only user messages can be edited", 400);
-      }
-      return jsonError("Message not found", 404);
-    }
-  } else {
-    await touchFilesWithChat(files.map((file) => file.id), chatId);
-
-    await appendMessage({
-      chatId,
+  if (temporaryEnabled) {
+    const temporaryResult = await appendTemporaryChatUserMessage(resolved.actor, {
+      tempChatId: parsed.data.temporary?.tempChatId,
       role: "user",
       content: message,
       modelId: model.id,
       attachments: files,
     });
-  }
 
-  const hydratedChat = await getChat(resolved.actor, chatId);
-  if (!hydratedChat) {
-    return jsonError("Chat could not be loaded after save", 500);
+    if (!temporaryResult.ok) {
+      return jsonError("Temporary chat not found or expired", 404);
+    }
+
+    tempChatId = temporaryResult.tempChatId;
+    hydratedMessages = temporaryResult.messages;
+  } else {
+    chatId = parsed.data.chatId;
+    if (parsed.data.editMessageId && !chatId) {
+      return jsonError("Editing a message requires a chat id", 400);
+    }
+
+    if (parsed.data.editMessageId && parsed.data.attachmentIds.length) {
+      return jsonError("Editing a message does not support attachment changes", 400);
+    }
+
+    if (!chatId) {
+      const inferredTitle = message.trim().slice(0, 72) || "New chat";
+      chatId = await createChat(resolved.actor, inferredTitle, model.id);
+    } else {
+      const existingChat = await getChat(resolved.actor, chatId);
+      if (!existingChat) {
+        return jsonError("Chat not found", 404);
+      }
+    }
+
+    if (parsed.data.editMessageId) {
+      const rewriteResult = await rewriteUserMessageAndTrimFollowing(resolved.actor, {
+        chatId,
+        messageId: parsed.data.editMessageId,
+        content: message,
+      });
+
+      if (!rewriteResult.ok) {
+        if (rewriteResult.reason === "chat-not-found") {
+          return jsonError("Chat not found", 404);
+        }
+        if (rewriteResult.reason === "not-user-message") {
+          return jsonError("Only user messages can be edited", 400);
+        }
+        return jsonError("Message not found", 404);
+      }
+    } else {
+      await touchFilesWithChat(files.map((file) => file.id), chatId);
+
+      await appendMessage({
+        chatId,
+        role: "user",
+        content: message,
+        modelId: model.id,
+        attachments: files,
+      });
+    }
+
+    const hydratedChat = await getChat(resolved.actor, chatId);
+    if (!hydratedChat) {
+      return jsonError("Chat could not be loaded after save", 500);
+    }
+    hydratedMessages = hydratedChat.messages;
   }
 
   const encoder = new TextEncoder();
@@ -145,7 +187,7 @@ export async function POST(request: Request) {
         try {
           const streamed = await streamAssistantReply({
             model,
-            messages: hydratedChat.messages,
+            messages: hydratedMessages,
             signal: request.signal,
             onToken: (token) => {
               assistantContent += token;
@@ -160,20 +202,29 @@ export async function POST(request: Request) {
           }
 
           if (assistantContent.trim()) {
-            await appendMessage({
-              chatId,
-              role: "assistant",
-              content: assistantContent,
-              modelId: model.id,
-            });
-            assistantPersisted = true;
+            if (tempChatId) {
+              assistantPersisted = await appendTemporaryChatAssistantMessage(resolved.actor, {
+                tempChatId,
+                role: "assistant",
+                content: assistantContent,
+                modelId: model.id,
+              });
+            } else if (chatId) {
+              await appendMessage({
+                chatId,
+                role: "assistant",
+                content: assistantContent,
+                modelId: model.id,
+              });
+              assistantPersisted = true;
+            }
           }
 
           await logAudit({
             actorUserId: resolved.actor.type === "user" ? resolved.actor.userId : null,
             action: "chat.send",
-            targetType: "chat",
-            targetId: chatId,
+            targetType: tempChatId ? "temporary_chat" : "chat",
+            targetId: tempChatId || chatId,
             payload: {
               modelId: model.id,
               editedMessageId: parsed.data.editMessageId ?? null,
@@ -184,16 +235,27 @@ export async function POST(request: Request) {
           });
         } catch {
           if (!assistantPersisted && assistantContent.trim()) {
-            await appendMessage({
-              chatId,
-              role: "assistant",
-              content: assistantContent,
-              modelId: model.id,
-            });
+            if (tempChatId) {
+              await appendTemporaryChatAssistantMessage(resolved.actor, {
+                tempChatId,
+                role: "assistant",
+                content: assistantContent,
+                modelId: model.id,
+              });
+            } else if (chatId) {
+              await appendMessage({
+                chatId,
+                role: "assistant",
+                content: assistantContent,
+                modelId: model.id,
+              });
+            }
           }
         } finally {
-          const key = actorCacheKey(resolved.actor);
-          invalidateChatListCache(key.type, key.id);
+          if (!tempChatId) {
+            const key = actorCacheKey(resolved.actor);
+            invalidateChatListCache(key.type, key.id);
+          }
           try {
             controller.close();
           } catch {
@@ -204,13 +266,20 @@ export async function POST(request: Request) {
     },
   });
 
+  const responseHeaders: Record<string, string> = {
+    "Content-Type": "text/plain; charset=utf-8",
+    "Cache-Control": "no-store",
+  };
+  if (chatId) {
+    responseHeaders["X-Chat-Id"] = chatId;
+  }
+  if (tempChatId) {
+    responseHeaders["X-Temp-Chat-Id"] = tempChatId;
+  }
+
   const response = new NextResponse(stream, {
     status: 200,
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-store",
-      "X-Chat-Id": chatId,
-    },
+    headers: responseHeaders,
   });
   return attachActorCookies(response, resolved);
 }

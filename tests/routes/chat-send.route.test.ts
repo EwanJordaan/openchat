@@ -21,6 +21,17 @@ type RewriteResult =
       reason: "chat-not-found" | "message-not-found" | "not-user-message";
     };
 
+type TemporaryAppendResult =
+  | {
+      ok: true;
+      tempChatId: string;
+      messages: ChatMessage[];
+    }
+  | {
+      ok: false;
+      reason: "temp-chat-not-found";
+    };
+
 const actor: Actor = {
   type: "user",
   guestId: "gst_1",
@@ -90,6 +101,33 @@ const attachActorCookies = mock((response: Response) => response);
 const jsonError = (message: string, status = 400) => Response.json({ error: message }, { status });
 
 const appendMessage = mock(async () => "msg_appended");
+const appendTemporaryChatAssistantMessage = mock(async () => true);
+const appendTemporaryChatUserMessage = mock(
+  async (
+    _actor: Actor,
+    input: {
+      tempChatId?: string;
+      role: "user";
+      content: string;
+      modelId: string;
+      attachments?: UploadedFile[];
+    },
+  ): Promise<TemporaryAppendResult> => ({
+    ok: true as const,
+    tempChatId: input.tempChatId || "tch_1",
+    messages: [
+      {
+        id: "msg_temp_user",
+        chatId: input.tempChatId || "tch_1",
+        role: "user" as const,
+        content: input.content,
+        modelId: input.modelId,
+        createdAt: "2026-03-06T10:00:00.000Z",
+        attachments: input.attachments ?? [],
+      },
+    ],
+  }),
+);
 const checkAndConsumeMessageQuota = mock(async () => ({ allowed: true, remaining: 799 }));
 const createChat = mock(async () => "cht_new");
 const getChat = mock(async (): Promise<ChatRecord | null> => null);
@@ -100,6 +138,7 @@ const getPublicAppSettings = mock(async () => settings);
 const getRoleLimit = mock(async () => roleLimit);
 const listModelsForActor = mock(async () => [model]);
 const logAudit = mock(async () => undefined);
+const pruneExpiredTemporaryChats = mock(async () => undefined);
 const rewriteUserMessageAndTrimFollowing = mock(async (): Promise<RewriteResult> => ({
   ok: true,
   removedMessageIds: ["msg_2"],
@@ -121,6 +160,8 @@ mock.module("@/lib/http", () => ({
 
 mock.module("@/lib/db/store", () => ({
   appendMessage,
+  appendTemporaryChatAssistantMessage,
+  appendTemporaryChatUserMessage,
   checkAndConsumeMessageQuota,
   createChat,
   getChat,
@@ -129,6 +170,7 @@ mock.module("@/lib/db/store", () => ({
   getRoleLimit,
   listModelsForActor,
   logAudit,
+  pruneExpiredTemporaryChats,
   rewriteUserMessageAndTrimFollowing,
   touchFilesWithChat,
 }));
@@ -148,6 +190,8 @@ beforeEach(() => {
   streamAssistantReply.mockClear();
   attachActorCookies.mockClear();
   appendMessage.mockClear();
+  appendTemporaryChatAssistantMessage.mockClear();
+  appendTemporaryChatUserMessage.mockClear();
   checkAndConsumeMessageQuota.mockClear();
   createChat.mockClear();
   getChat.mockClear();
@@ -156,6 +200,7 @@ beforeEach(() => {
   getRoleLimit.mockClear();
   listModelsForActor.mockClear();
   logAudit.mockClear();
+  pruneExpiredTemporaryChats.mockClear();
   rewriteUserMessageAndTrimFollowing.mockClear();
   touchFilesWithChat.mockClear();
 
@@ -164,6 +209,33 @@ beforeEach(() => {
   checkAndConsumeMessageQuota.mockResolvedValue({ allowed: true, remaining: 799 });
   getRoleLimit.mockResolvedValue(roleLimit);
   getOwnedFiles.mockImplementation(async (_currentActor: Actor, fileIds: string[]) => (fileIds.length ? [attachedFile] : []));
+  appendTemporaryChatUserMessage.mockImplementation(
+    async (
+      _actor: Actor,
+      input: {
+        tempChatId?: string;
+        role: "user";
+      content: string;
+      modelId: string;
+      attachments?: UploadedFile[];
+    },
+    ): Promise<TemporaryAppendResult> => ({
+      ok: true as const,
+      tempChatId: input.tempChatId || "tch_1",
+      messages: [
+        {
+          id: "msg_temp_user",
+          chatId: input.tempChatId || "tch_1",
+          role: "user" as const,
+          content: input.content,
+          modelId: input.modelId,
+          createdAt: "2026-03-06T10:00:00.000Z",
+          attachments: input.attachments ?? [],
+        },
+      ],
+    }),
+  );
+  appendTemporaryChatAssistantMessage.mockResolvedValue(true);
   rewriteUserMessageAndTrimFollowing.mockResolvedValue({ ok: true, removedMessageIds: ["msg_2"] });
 });
 
@@ -218,8 +290,11 @@ describe("app/api/chat/send POST", () => {
 
     expect(response.status).toBe(200);
     await expect(response.text()).resolves.toBe("Assistant reply");
+    expect(pruneExpiredTemporaryChats).toHaveBeenCalledTimes(1);
 
     expect(rewriteUserMessageAndTrimFollowing).not.toHaveBeenCalled();
+    expect(appendTemporaryChatUserMessage).not.toHaveBeenCalled();
+    expect(appendTemporaryChatAssistantMessage).not.toHaveBeenCalled();
     expect(touchFilesWithChat).toHaveBeenCalledWith([attachedFile.id], "cht_1");
     expect(appendMessage).toHaveBeenNthCalledWith(1, {
       chatId: "cht_1",
@@ -237,6 +312,95 @@ describe("app/api/chat/send POST", () => {
         modelId: model.id,
       }),
     );
+  });
+
+  it("creates a temporary chat when temporary mode is enabled", async () => {
+    const response = await POST(
+      createRequest({
+        modelId: model.id,
+        message: "Temp hello",
+        attachmentIds: [],
+        temporary: {
+          enabled: true,
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-temp-chat-id")).toBe("tch_1");
+    expect(response.headers.get("x-chat-id")).toBeNull();
+    await expect(response.text()).resolves.toBe("Assistant reply");
+
+    expect(pruneExpiredTemporaryChats).toHaveBeenCalledTimes(1);
+    expect(appendTemporaryChatUserMessage).toHaveBeenCalledWith(
+      actor,
+      expect.objectContaining({
+        tempChatId: undefined,
+        role: "user",
+        content: "Temp hello",
+        modelId: model.id,
+      }),
+    );
+    expect(appendTemporaryChatAssistantMessage).toHaveBeenCalledWith(
+      actor,
+      expect.objectContaining({
+        tempChatId: "tch_1",
+        role: "assistant",
+      }),
+    );
+    expect(createChat).not.toHaveBeenCalled();
+    expect(touchFilesWithChat).not.toHaveBeenCalled();
+  });
+
+  it("continues an existing temporary chat when tempChatId is provided", async () => {
+    const response = await POST(
+      createRequest({
+        modelId: model.id,
+        message: "Continue temp",
+        attachmentIds: [],
+        temporary: {
+          enabled: true,
+          tempChatId: "tch_existing",
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-temp-chat-id")).toBe("tch_existing");
+    await expect(response.text()).resolves.toBe("Assistant reply");
+
+    expect(appendTemporaryChatUserMessage).toHaveBeenCalledWith(
+      actor,
+      expect.objectContaining({
+        tempChatId: "tch_existing",
+      }),
+    );
+  });
+
+  it("returns 404 when temporary chat id is missing or expired", async () => {
+    appendTemporaryChatUserMessage.mockResolvedValueOnce({
+      ok: false as const,
+      reason: "temp-chat-not-found" as const,
+    });
+
+    const response = await POST(
+      createRequest({
+        modelId: model.id,
+        message: "Continue temp",
+        attachmentIds: [],
+        temporary: {
+          enabled: true,
+          tempChatId: "tch_missing",
+        },
+      }),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Temporary chat not found or expired",
+    });
+    expect(appendTemporaryChatAssistantMessage).not.toHaveBeenCalled();
+    expect(createChat).not.toHaveBeenCalled();
   });
 
   it("rewrites a user message and streams a regenerated reply", async () => {
