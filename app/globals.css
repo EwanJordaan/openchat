@@ -876,6 +876,42 @@ select {
   min-width: 0;
 }
 
+.assistant-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  min-height: 1.45em;
+}
+
+.assistant-loading-label {
+  color: var(--text-secondary);
+}
+
+.assistant-loading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.26rem;
+}
+
+.assistant-loading-dot {
+  width: 0.32rem;
+  height: 0.32rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--text-muted) 86%, var(--surface));
+  animation: assistant-loading-dot 1s ease-in-out infinite;
+}
+
+.assistant-loading-dot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.assistant-loading-dot:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
 .markdown-content {
   font-size: 1.04rem;
   line-height: 1.75;
@@ -1690,6 +1726,27 @@ select {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes assistant-loading-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.32;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-loading-dot {
+    animation: none;
+    opacity: 0.75;
+    transform: none;
   }
 }
 

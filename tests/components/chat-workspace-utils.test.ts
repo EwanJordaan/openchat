@@ -10,8 +10,10 @@ import {
   isConversationStillSelected,
   getChatSelectionKey,
   getVisibleMessages,
+  isAssistantLoadingMessage,
   isSameChatSelection,
   isPersistedMessage,
+  isStreamingAssistantMessage,
   measureTextareaHeight,
   parseChatIdFromPath,
   setChatPinnedState,
@@ -217,6 +219,62 @@ describe("chat workspace helpers", () => {
     expect(isPersistedMessage("msg_1")).toBeTrue();
     expect(isPersistedMessage("optimistic-1")).toBeFalse();
     expect(isPersistedMessage("assistant-stream-1")).toBeFalse();
+  });
+
+  it("detects streaming assistant messages by id prefix", () => {
+    expect(
+      isStreamingAssistantMessage({
+        ...baseMessage,
+        id: "assistant-stream-1",
+        role: "assistant",
+      }),
+    ).toBeTrue();
+
+    expect(
+      isStreamingAssistantMessage({
+        ...baseMessage,
+        id: "msg_2",
+        role: "assistant",
+      }),
+    ).toBeFalse();
+  });
+
+  it("marks only empty assistant stream rows as loading", () => {
+    expect(
+      isAssistantLoadingMessage({
+        ...baseMessage,
+        id: "assistant-stream-1",
+        role: "assistant",
+        content: "",
+      }),
+    ).toBeTrue();
+
+    expect(
+      isAssistantLoadingMessage({
+        ...baseMessage,
+        id: "assistant-stream-1",
+        role: "assistant",
+        content: "Partial response",
+      }),
+    ).toBeFalse();
+
+    expect(
+      isAssistantLoadingMessage({
+        ...baseMessage,
+        id: "assistant-stream-1",
+        role: "user",
+        content: "",
+      }),
+    ).toBeFalse();
+
+    expect(
+      isAssistantLoadingMessage({
+        ...baseMessage,
+        id: "msg_2",
+        role: "assistant",
+        content: "",
+      }),
+    ).toBeFalse();
   });
 
   it("hides later messages while an earlier message is being edited", () => {

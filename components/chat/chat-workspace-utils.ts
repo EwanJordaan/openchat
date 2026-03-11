@@ -7,6 +7,14 @@ import type { ChatMessage, ChatSummary } from "@/lib/types";
 export type SessionStatus = "booting" | "ready" | "error";
 export type ConversationStatus = "idle" | "loading" | "ready" | "error";
 
+export function isStreamingAssistantMessage(message: ChatMessage) {
+  return message.id.startsWith("assistant-stream-");
+}
+
+export function isAssistantLoadingMessage(message: ChatMessage) {
+  return isStreamingAssistantMessage(message) && message.role === "assistant" && message.content.trim().length === 0;
+}
+
 export function isPersistedMessage(messageId: string) {
   return !messageId.startsWith("optimistic-") && !messageId.startsWith("assistant-stream-") && !messageId.startsWith("degraded-");
 }
@@ -221,7 +229,7 @@ export function getMessageActionState(
     degraded: boolean;
   },
 ) {
-  const showCopy = !message.id.startsWith("assistant-stream-");
+  const showCopy = !isStreamingAssistantMessage(message);
   const showEdit = message.role === "user" && isPersistedMessage(message.id) && !options.editingMessageId;
   const disableEdit = options.sending || options.degraded;
 

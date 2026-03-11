@@ -41,6 +41,7 @@ import {
   isConversationStillSelected,
   getConversationPaneState,
   getChatTimeGroup,
+  isAssistantLoadingMessage,
   isNewChatDraftState,
   getMessageActionState,
   getVisibleMessages,
@@ -72,6 +73,7 @@ const CHAT_CACHE_KEY = "openchat:chat-list";
 const CHAT_MESSAGES_CACHE_KEY = "openchat:chat-messages";
 const SESSION_CACHE_KEY = "openchat:session";
 const DRAFT_CHAT_ID = "draft";
+const HEADER_ACTION_ICON_SIZE = 16;
 
 let sessionMemoryCache: SessionPayload | null = null;
 
@@ -1706,15 +1708,15 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                 type="button"
                 className={`temporary-mode-toggle ${isTempModeOn ? "on" : ""}`}
                 aria-pressed={isTempModeOn}
-                title={isTempModeOn ? "Temporary mode on (7-day hidden retention)" : "Temporary mode off"}
+                title={isTempModeOn ? "Turn off temporary chat." : "Turn on temporary chat."}
                 onClick={() => setTempModeOn((value) => !value)}
                 disabled={sessionStatus !== "ready" || sending || uploading}
               >
-                {isTempModeOn ? <Timer size={13} /> : <TimerOff size={13} />}
+                {isTempModeOn ? <Timer size={HEADER_ACTION_ICON_SIZE} /> : <TimerOff size={HEADER_ACTION_ICON_SIZE} />}
               </button>
             ) : (
               <button type="button" className="temporary-mode-toggle" title="Share chat (coming soon)" onClick={() => undefined}>
-                <Share2 size={13} />
+                <Share2 size={HEADER_ACTION_ICON_SIZE} />
               </button>
             )}
             {sessionStatus === "booting" ? (
@@ -1760,11 +1762,19 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
             </div>
           ) : paneState === "empty" ? (
             <div className="empty-state">
-              <h3>{activeChatId ? "No messages in this conversation yet" : "Start a new conversation"}</h3>
+              <h3>
+                {activeChatId
+                  ? "No messages in this conversation yet"
+                  : isTempModeOn
+                    ? "Temporary Chat"
+                    : "Start a new conversation"}
+              </h3>
               <p>
                 {activeChatId
                   ? "Send a message to begin."
-                  : "Ask anything, add files, and switch models from the top-left selector."}
+                  : isTempModeOn
+                    ? "This chat won’t appear in your chat history."
+                    : "Ask anything, add files, and switch models from the top-left selector."}
               </p>
             </div>
           ) : (
@@ -1780,7 +1790,18 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
                     ) : null}
                     <div className={`message-content ${message.role === "assistant" ? "markdown-content" : ""}`}>
                       {message.role === "assistant" ? (
-                        <AssistantMarkdown content={message.content} />
+                        isAssistantLoadingMessage(message) ? (
+                          <div className="assistant-loading" aria-live="polite" aria-label="Assistant is thinking">
+                            <span className="assistant-loading-label">Thinking</span>
+                            <span className="assistant-loading-dots" aria-hidden="true">
+                              <span className="assistant-loading-dot" />
+                              <span className="assistant-loading-dot" />
+                              <span className="assistant-loading-dot" />
+                            </span>
+                          </div>
+                        ) : (
+                          <AssistantMarkdown content={message.content} />
+                        )
                       ) : (
                         <p>{message.content}</p>
                       )}
