@@ -355,11 +355,30 @@ select {
   padding: 4px;
   border-radius: 6px;
   cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .chat-menu-trigger:hover {
   background: var(--surface-muted);
   color: var(--text-primary);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chat-item:hover .chat-menu-trigger {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .chat-menu-trigger {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
 }
 
 .chat-item-menu {
