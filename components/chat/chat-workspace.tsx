@@ -328,7 +328,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const attachMenuRef = useRef<HTMLDivElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const messageStreamRef = useRef<HTMLElement | null>(null);
+  const messageStreamRef = useRef<HTMLDivElement | null>(null);
   const sendAbortControllerRef = useRef<AbortController | null>(null);
   const loadChatAbortControllerRef = useRef<AbortController | null>(null);
   const loadChatRequestIdRef = useRef(0);
@@ -1696,7 +1696,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
         </div>
       </aside>
 
-      <main ref={messageStreamRef} className="chat-main" onScroll={handleMessageStreamScroll}>
+      <main className="chat-main">
         <header ref={chatHeaderRef} className="chat-main-header">
           <div className="header-left">
             <ModelSelector models={modelOptions} modelId={modelId} onSelect={setModelId} />
@@ -1743,6 +1743,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
           </div>
         </header>
 
+        <div ref={messageStreamRef} className="chat-card" onScroll={handleMessageStreamScroll}>
         <section className="message-stream">
           {paneState === "loading" ? (
             <div className="conversation-state loading">
@@ -1956,6 +1957,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
             {error ? <p className="composer-error">{error}</p> : null}
           </form>
         </footer>
+        </div>
       </main>
     </div>
   );
