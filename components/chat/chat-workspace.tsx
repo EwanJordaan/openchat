@@ -1743,8 +1743,9 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
           </div>
         </header>
 
-        <div className="chat-card">
-        <section ref={messageStreamRef} className="message-stream" onScroll={handleMessageStreamScroll}>
+        <div className="chat-stage">
+          <div className="chat-card">
+            <section ref={messageStreamRef} className="message-stream" onScroll={handleMessageStreamScroll}>
           {paneState === "loading" ? (
             <div className="conversation-state loading">
               <LoaderCircle className="spin" size={24} />
@@ -1865,10 +1866,10 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
               </div>
             ))
           )}
-          <div ref={messageAnchor} className={visibleMessages.length ? "message-anchor has-messages" : "message-anchor"} />
-        </section>
+              <div ref={messageAnchor} className={visibleMessages.length ? "message-anchor has-messages" : "message-anchor"} />
+            </section>
 
-        <footer ref={composerWrapRef} className="composer-wrap">
+            <footer ref={composerWrapRef} className="composer-wrap">
             <form
               ref={composerFormRef}
               onSubmit={sendMessage}
@@ -1956,7 +1957,8 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
 
             {error ? <p className="composer-error">{error}</p> : null}
           </form>
-        </footer>
+            </footer>
+          </div>
         </div>
       </main>
     </div>

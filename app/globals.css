@@ -563,48 +563,12 @@ select {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  scroll-padding-top: calc(var(--chat-header-height) + 20px);
-  scroll-padding-bottom: calc(var(--chat-composer-height) + 32px);
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   background: var(--main-bg);
-  border-radius: 0;
-  position: relative;
-  z-index: 1;
-}
-
-.chat-main::after {
-  content: none;
-}
-
-.chat-main::-webkit-scrollbar {
-  width: var(--scrollbar-size);
-}
-
-.chat-main::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
-}
-
-.chat-main::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border: 3px solid var(--scrollbar-track);
-  border-radius: 999px;
-}
-
-.chat-main::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
 }
 
 .chat-main-header {
-  position: sticky;
-  left: auto;
-  right: auto;
-  top: 0;
-  z-index: 24;
+  flex: 0 0 auto;
   background: var(--main-bg);
-  box-shadow: none;
-  backdrop-filter: none;
   padding: 6px 16px;
   display: flex;
   align-items: center;
@@ -770,29 +734,26 @@ select {
   padding: 0.28rem 0.5rem;
 }
 
+.chat-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding-top: 8px;
+}
+
 .chat-card {
   flex: 1 1 auto;
   min-height: 0;
-  width: calc(100% + 56px);
-  margin-right: -56px;
+  width: calc(100% + 64px);
+  height: calc(100% + 28px);
+  margin-right: -64px;
   margin-bottom: -28px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  isolation: isolate;
-  position: relative;
-  z-index: 1;
-  border-radius: 14px;
-}
-
-.chat-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
   background: var(--chat-card-bg);
-  border-radius: 14px;
+  border-radius: 16px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
 }
 
 .message-stream {
@@ -806,12 +767,10 @@ select {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   width: 100%;
-  padding: 20px 0 0 24px;
-  position: relative;
+  padding: 24px 24px 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  z-index: 1;
 }
 
 .message-stream::-webkit-scrollbar {
@@ -1300,17 +1259,8 @@ select {
 .composer-wrap {
   position: relative;
   flex: 0 0 auto;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100%;
-  z-index: 24;
-  isolation: isolate;
-  border-top: 0;
   background: transparent;
-  box-shadow: none;
-  padding: 12px 72px 46px 16px;
-  z-index: 1;
+  padding: 12px 24px 46px;
 }
 
 .composer-wrap::before {
@@ -1855,13 +1805,16 @@ select {
     z-index: 10;
   }
 
-  .composer-wrap {
-    box-shadow: none;
+  .chat-stage {
+    padding-top: 0;
   }
 
-  .chat-main::after {
-    left: 0;
-    right: 0;
+  .chat-card {
+    width: 100%;
+    height: 100%;
+    margin-right: 0;
+    margin-bottom: 0;
+    border-radius: 16px 16px 0 0;
   }
 }
 
@@ -1893,7 +1846,6 @@ select {
 
   .message-stream {
     padding-top: 14px;
-    padding-right: 0;
   }
 
   .markdown-content {
