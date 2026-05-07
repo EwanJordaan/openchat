@@ -328,7 +328,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
   const attachMenuRef = useRef<HTMLDivElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const messageStreamRef = useRef<HTMLDivElement | null>(null);
+  const messageStreamRef = useRef<HTMLElement | null>(null);
   const sendAbortControllerRef = useRef<AbortController | null>(null);
   const loadChatAbortControllerRef = useRef<AbortController | null>(null);
   const loadChatRequestIdRef = useRef(0);
@@ -1743,8 +1743,8 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
           </div>
         </header>
 
-        <div ref={messageStreamRef} className="chat-card" onScroll={handleMessageStreamScroll}>
-        <section className="message-stream">
+        <div className="chat-card">
+        <section ref={messageStreamRef} className="message-stream" onScroll={handleMessageStreamScroll}>
           {paneState === "loading" ? (
             <div className="conversation-state loading">
               <LoaderCircle className="spin" size={24} />

@@ -605,34 +605,34 @@ select {
   background: var(--main-bg);
   box-shadow: none;
   backdrop-filter: none;
-  padding: 10px 16px;
+  padding: 6px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .header-left {
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .header-title {
-  font-size: 0.94rem;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 
 .header-actions {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .temporary-mode-toggle {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -665,11 +665,11 @@ select {
   color: var(--text-primary);
   min-width: 120px;
   max-width: 260px;
-  padding: 0.35rem 0.5rem;
+  padding: 0.25rem 0.45rem;
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
   text-align: left;
   outline: none;
@@ -682,7 +682,7 @@ select {
 
 .model-trigger-label {
   min-width: 0;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;
@@ -778,6 +778,26 @@ select {
   margin-bottom: -28px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  isolation: isolate;
+  position: relative;
+  z-index: 1;
+  border-radius: 14px;
+}
+
+.chat-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--chat-card-bg);
+  border-radius: 14px;
+}
+
+.message-stream {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   scroll-padding-top: 20px;
@@ -785,34 +805,6 @@ select {
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
-  position: relative;
-  z-index: 1;
-  background: var(--chat-card-bg);
-  border-radius: 28px;
-}
-
-.chat-card::-webkit-scrollbar {
-  width: var(--scrollbar-size);
-}
-
-.chat-card::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
-}
-
-.chat-card::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border: 3px solid var(--scrollbar-track);
-  border-radius: 999px;
-}
-
-.chat-card::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
-}
-
-.message-stream {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: visible;
   width: 100%;
   padding: 20px 0 0 24px;
   position: relative;
@@ -820,6 +812,24 @@ select {
   flex-direction: column;
   gap: 16px;
   z-index: 1;
+}
+
+.message-stream::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+}
+
+.message-stream::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+.message-stream::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border: 3px solid var(--scrollbar-track);
+  border-radius: 999px;
+}
+
+.message-stream::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
 .message-stream::after {
@@ -1288,7 +1298,8 @@ select {
 }
 
 .composer-wrap {
-  position: sticky;
+  position: relative;
+  flex: 0 0 auto;
   left: 0;
   right: 0;
   bottom: 0;
@@ -1299,6 +1310,7 @@ select {
   background: transparent;
   box-shadow: none;
   padding: 12px 72px 46px 16px;
+  z-index: 1;
 }
 
 .composer-wrap::before {
