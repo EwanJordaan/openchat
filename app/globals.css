@@ -22,6 +22,7 @@
   --sidebar-width: 300px;
   --chat-header-height: 58px;
   --chat-composer-height: 176px;
+  --chat-card-radius: 16px;
   --scrollbar-size: 18px;
   --scrollbar-track: color-mix(in oklab, var(--surface-muted) 70%, var(--surface));
   --scrollbar-thumb: color-mix(in oklab, var(--text-muted) 38%, var(--surface));
@@ -751,8 +752,11 @@ select {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--chat-card-bg);
-  border-radius: 16px;
+  background:
+    radial-gradient(circle at top left, var(--main-bg) 0 calc(var(--chat-card-radius) - 1px), transparent var(--chat-card-radius)) top left / var(--chat-card-radius) var(--chat-card-radius) no-repeat,
+    radial-gradient(circle at top right, var(--main-bg) 0 calc(var(--chat-card-radius) - 1px), transparent var(--chat-card-radius)) top right / var(--chat-card-radius) var(--chat-card-radius) no-repeat,
+    linear-gradient(var(--chat-card-bg), var(--chat-card-bg));
+  border-radius: var(--chat-card-radius);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
 }
 
@@ -767,7 +771,7 @@ select {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   width: 100%;
-  padding: 24px 24px 0;
+  padding: 24px 24px calc(var(--chat-composer-height) + 32px);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -797,11 +801,7 @@ select {
 
 .message-anchor {
   flex: 0 0 auto;
-  height: 0;
-}
-
-.message-anchor.has-messages {
-  height: calc(var(--chat-composer-height) + 32px);
+  height: 1px;
 }
 
 .message-row {
@@ -1306,9 +1306,11 @@ select {
   padding: 11px 12px 10px;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
-  min-height: 104px;
-  align-items: end;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 124px;
+  height: 124px;
+  max-height: 124px;
+  align-items: stretch;
   column-gap: 12px;
   row-gap: 10px;
 }
@@ -1316,8 +1318,10 @@ select {
 .composer.expanded .composer-input {
   grid-column: 1 / -1;
   grid-row: 1;
-  min-height: 44px;
-  align-self: start;
+  min-height: 0;
+  max-height: none;
+  height: 100%;
+  align-self: stretch;
 }
 
 .composer.expanded .attach-menu-wrap {
@@ -1814,7 +1818,7 @@ select {
     height: 100%;
     margin-right: 0;
     margin-bottom: 0;
-    border-radius: 16px 16px 0 0;
+    border-radius: var(--chat-card-radius) var(--chat-card-radius) 0 0;
   }
 }
 

@@ -1866,7 +1866,7 @@ export function ChatWorkspace({ initialChatId }: { initialChatId?: string }) {
               </div>
             ))
           )}
-              <div ref={messageAnchor} className={visibleMessages.length ? "message-anchor has-messages" : "message-anchor"} />
+              <div ref={messageAnchor} className="message-anchor" />
             </section>
 
             <footer ref={composerWrapRef} className="composer-wrap">
