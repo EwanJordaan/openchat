@@ -1,0 +1,11 @@
+const env = process.env as Record<string, string | undefined>;
+
+env.NODE_ENV ??= "test";
+env.BETTER_AUTH_SECRET ??= "test-secret-1234567890-1234567890";
+env.DATABASE_PROVIDER ??= "postgres";
+env.DATABASE_URL ??= "postgres://postgres:postgres@localhost:55432/openchat_test";
+env.SESSION_COOKIE_NAME ??= "openchat_session";
+env.GUEST_COOKIE_NAME ??= "openchat_guest";
+env.OPENAI_BASE_URL ??= "https://api.openai.com/v1";
+env.MAX_UPLOAD_MB ??= "12";
+env.SETTINGS_ENCRYPTION_KEY ??= "test-encryption-key";

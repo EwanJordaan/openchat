@@ -3,6 +3,7 @@
 :root {
   --bg: #e5e5e5;
   --main-bg: #f2f2f2;
+  --chat-card-bg: #fafafa;
   --surface: #fafafa;
   --surface-elevated: #ffffff;
   --surface-muted: #e0e0e0;
@@ -30,6 +31,7 @@
 :root[data-theme="dark"] {
   --bg: #121212;
   --main-bg: #1b1b1b;
+  --chat-card-bg: #262626;
   --surface: #262626;
   --surface-elevated: #303030;
   --surface-muted: #202020;
@@ -554,6 +556,7 @@ select {
 
 .chat-main {
   min-width: 0;
+  width: calc(100% + 28px);
   height: 100%;
   min-height: 0;
   display: flex;
@@ -565,7 +568,9 @@ select {
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
-  background: var(--main-bg);
+  background: var(--chat-card-bg);
+  border-radius: 28px;
+  position: relative;
 }
 
 .chat-main::after {
@@ -591,12 +596,12 @@ select {
 }
 
 .chat-main-header {
-  position: fixed;
-  left: var(--sidebar-width);
-  right: var(--scrollbar-size);
+  position: sticky;
+  left: auto;
+  right: auto;
   top: 0;
   z-index: 24;
-  background: color-mix(in oklab, var(--main-bg) 80%, var(--surface));
+  background: color-mix(in oklab, var(--chat-card-bg) 88%, var(--surface));
   box-shadow: 0 10px 24px rgba(15, 11, 8, 0.06);
   backdrop-filter: blur(7px);
   padding: 10px 16px;
@@ -768,7 +773,7 @@ select {
   flex: 1 1 auto;
   min-height: 0;
   overflow: visible;
-  padding: calc(var(--chat-header-height) + 20px) 0 0 24px;
+  padding: 20px 0 0 24px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -1241,9 +1246,9 @@ select {
 }
 
 .composer-wrap {
-  position: fixed;
-  left: var(--sidebar-width);
-  right: var(--scrollbar-size);
+  position: sticky;
+  left: auto;
+  right: auto;
   bottom: 0;
   width: auto;
   z-index: 24;
@@ -1266,9 +1271,9 @@ select {
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    color-mix(in oklab, var(--main-bg) 32%, transparent) 42%,
-    color-mix(in oklab, var(--main-bg) 82%, var(--surface)) 80%,
-    var(--main-bg) 100%
+    color-mix(in oklab, var(--chat-card-bg) 32%, transparent) 42%,
+    color-mix(in oklab, var(--chat-card-bg) 82%, var(--surface)) 80%,
+    var(--chat-card-bg) 100%
   );
 }
 
@@ -1793,18 +1798,10 @@ select {
   }
 
   .chat-main-header {
-    position: sticky;
-    left: auto;
-    right: auto;
-    width: calc(100% - var(--scrollbar-size));
-    margin-right: var(--scrollbar-size);
     z-index: 10;
   }
 
   .composer-wrap {
-    left: 0;
-    right: 0;
-    width: 100vw;
     box-shadow: none;
   }
 

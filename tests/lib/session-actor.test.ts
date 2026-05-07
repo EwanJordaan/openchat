@@ -35,6 +35,7 @@ mock.module("@/lib/auth/better-auth", () => ({
 mock.module("@/lib/db/store", () => ({
   findUserById,
   getUserRoles,
+  setUserRoles: async () => undefined,
 }));
 
 mock.module("@/lib/env", () => ({

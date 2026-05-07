@@ -50,6 +50,7 @@ mock.module("@/lib/auth/session", () => ({
 mock.module("@/lib/db/store", () => ({
   getPublicAppSettings,
   listModelsForActor,
+  setUserRoles: async () => undefined,
 }));
 mock.module("@/lib/http", () => ({
   attachActorCookies,

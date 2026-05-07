@@ -25,7 +25,7 @@ OpenChat is a ChatGPT-style AI chat application built with Next.js App Router. I
 1. Install dependencies:
 
 ```bash
-npm install
+bun install
 ```
 
 2. Copy env file:
@@ -39,7 +39,7 @@ cp .env.example .env.local
 4. Start dev server:
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 5. Open `http://localhost:3000`
@@ -62,6 +62,19 @@ Register with an email listed in `ADMIN_EMAILS` to automatically receive admin r
 
 - Database tables are auto-created and seeded on startup.
 - Uploaded files are stored locally in `.uploads/` (good for local/dev; use object storage for production).
+
+## Testing
+
+- Fast tests: `bun run test:unit`
+- Integration tests (PostgreSQL required): `bun run test:integration`
+- Full CI suite: `bun run test:ci`
+- Coverage + thresholds: `bun run test:coverage`
+
+For local integration tests, start the test database first:
+
+```bash
+docker compose -f docker-compose.test.yml up -d postgres-test
+```
 
 ## Supabase Connection Troubleshooting
 

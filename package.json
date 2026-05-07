@@ -9,7 +9,11 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "test:watch": "bun test --watch"
+    "test:watch": "bun test --watch",
+    "test:unit": "bun test tests/components && bun test tests/lib/ai-provider.test.ts tests/lib/chat-cache.test.ts tests/lib/encryption.matrix.test.ts tests/lib/env-validation.test.ts tests/lib/http.test.ts tests/lib/password.matrix.test.ts tests/lib/rate-limit.matrix.test.ts tests/lib/session-actor.test.ts tests/lib/utils.test.ts && bun test tests/routes/auth-catchall.route.test.ts && bun test tests/routes/auth-session.route.test.ts && bun test tests/routes/chat-send.route.test.ts && bun test tests/routes/chats-id.route.test.ts",
+    "test:integration": "bun test tests/integration",
+    "test:ci": "bun run test:unit && bun run test:integration",
+    "test:coverage": "bun test --coverage --coverage-reporter json && node scripts/check-coverage.mjs"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.5.3",

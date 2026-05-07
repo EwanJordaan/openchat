@@ -41,6 +41,7 @@ mock.module("@/lib/db/store", () => ({
   getChat,
   renameChat,
   setChatPinned,
+  setUserRoles: async () => undefined,
 }));
 
 mock.module("@/lib/http", () => ({

@@ -1,9 +1,23 @@
-import { afterEach, beforeAll, describe, expect, it, mock, spyOn } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, it, mock } from "bun:test";
 
 import type { ChatMessage, ModelOption } from "@/lib/types";
+import { ssePayload, streamFromChunks } from "@/tests/helpers/sse";
+
+const getProviderCredential = mock(async () => null as {
+  provider: string;
+  apiKey: string;
+  baseUrl: string;
+  isEnabled: boolean;
+} | null);
+
+mock.module("@/lib/db/store", () => ({
+  getProviderCredential,
+  getUserRoles: async () => ["user"],
+  findUserById: async () => null,
+  setUserRoles: async () => undefined,
+}));
 
 let streamAssistantReply: (typeof import("@/lib/ai/provider"))["streamAssistantReply"];
-let getProviderCredential: ReturnType<typeof mock>;
 
 const model: ModelOption = {
   id: "gpt-4o-mini",
@@ -31,18 +45,18 @@ const messages: ChatMessage[] = [
 const originalFetch = globalThis.fetch;
 
 beforeAll(async () => {
-  process.env.BETTER_AUTH_SECRET ??= "test-secret-1234567890-1234567890";
   process.env.OPENAI_API_KEY = "";
   process.env.OPENAI_BASE_URL = "https://api.openai.com/v1";
-
-  const store = await import("@/lib/db/store");
-  getProviderCredential = spyOn(store, "getProviderCredential") as unknown as ReturnType<typeof mock>;
   ({ streamAssistantReply } = await import("@/lib/ai/provider"));
 });
 
 afterEach(() => {
-  getProviderCredential.mockClear();
+  getProviderCredential.mockReset();
   globalThis.fetch = originalFetch;
+});
+
+afterAll(() => {
+  mock.restore();
 });
 
 describe("lib/ai/provider", () => {
@@ -71,19 +85,13 @@ describe("lib/ai/provider", () => {
       isEnabled: true,
     });
 
-    const encoder = new TextEncoder();
-    const streamBody = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(
-          encoder.encode(
-            'data: {"choices":[{"delta":{"content":"Hi"}}]}\n' +
-              'data: {"choices":[{"delta":{"content":" there"}}],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}\n' +
-              "data: [DONE]\n\n",
-          ),
-        );
-        controller.close();
-      },
-    });
+    const streamBody = streamFromChunks([
+      ssePayload([
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}',
+        'data: {"choices":[{"delta":{"content":" there"}}],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}',
+        "data: [DONE]",
+      ]),
+    ]);
 
     globalThis.fetch = mock(async () => {
       return new Response(streamBody, { status: 200 });

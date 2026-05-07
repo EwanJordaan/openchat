@@ -173,6 +173,7 @@ mock.module("@/lib/db/store", () => ({
   pruneExpiredTemporaryChats,
   rewriteUserMessageAndTrimFollowing,
   touchFilesWithChat,
+  setUserRoles: async () => undefined,
 }));
 
 let POST: (typeof import("@/app/api/chat/send/route"))["POST"];
