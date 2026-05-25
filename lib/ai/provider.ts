@@ -12,6 +12,11 @@ interface StreamResponseInput extends GenerateResponseInput {
   onToken: (token: string) => void | Promise<void>;
 }
 
+interface StreamRateLimiter {
+  push(token: string): Promise<void>;
+  flush(): Promise<void>;
+}
+
 interface AssistantUsage {
   promptTokens: number;
   completionTokens: number;
@@ -50,6 +55,35 @@ function extractDeltaContent(delta: unknown) {
   return "";
 }
 
+function createStreamRateLimiter(onToken: StreamResponseInput["onToken"]): StreamRateLimiter {
+  const BATCH_INTERVAL_MS = 16;
+  const MAX_BUFFER_CHARS = 200;
+
+  let pending = "";
+  let lastFlushAt = 0;
+
+  async function flushNow() {
+    if (!pending) return;
+    const chunk = pending;
+    pending = "";
+    lastFlushAt = Date.now();
+    await onToken(chunk);
+  }
+
+  return {
+    async push(token: string) {
+      pending += token;
+      const now = Date.now();
+      if (pending.length >= MAX_BUFFER_CHARS || now - lastFlushAt >= BATCH_INTERVAL_MS) {
+        await flushNow();
+      }
+    },
+    async flush() {
+      await flushNow();
+    },
+  };
+}
+
 export async function streamAssistantReply({ model, messages, signal, onToken }: StreamResponseInput) {
   const userPrompt = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
 
@@ -57,6 +91,7 @@ export async function streamAssistantReply({ model, messages, signal, onToken }:
   const apiKey = provider?.apiKey || env.OPENAI_API_KEY || "";
   const baseUrl = (provider?.baseUrl || env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
   const providerEnabled = provider ? provider.isEnabled : true;
+  const isOpenRouter = model.provider.toLowerCase() === "openrouter" || /openrouter\.ai/i.test(baseUrl);
 
   if (!providerEnabled || !apiKey) {
     const content = buildFallbackReply(userPrompt, model.displayName);
@@ -71,6 +106,7 @@ export async function streamAssistantReply({ model, messages, signal, onToken }:
 
   let accumulated = "";
   const usage: AssistantUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+  const limiter = createStreamRateLimiter(onToken);
 
   try {
     const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -78,6 +114,12 @@ export async function streamAssistantReply({ model, messages, signal, onToken }:
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
+        ...(isOpenRouter
+          ? {
+              "HTTP-Referer": env.APP_URL,
+              "X-Title": "OpenChat",
+            }
+          : {}),
       },
       body: JSON.stringify({
         model: model.id,
@@ -151,17 +193,20 @@ export async function streamAssistantReply({ model, messages, signal, onToken }:
           const deltaText = extractDeltaContent(parsed.choices?.[0]?.delta);
           if (!deltaText) continue;
           accumulated += deltaText;
-          await onToken(deltaText);
+          await limiter.push(deltaText);
         } catch {
           continue;
         }
       }
     }
 
+    await limiter.flush();
+
     if (!accumulated.trim()) {
       const fallback = "I could not produce a response for that prompt.";
       accumulated = fallback;
-      await onToken(fallback);
+      await limiter.push(fallback);
+      await limiter.flush();
     }
 
     return {
