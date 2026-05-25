@@ -125,4 +125,38 @@ describe("lib/ai/provider", () => {
     expect(result.providerStatus).toBe("Provider returned 502");
     expect(result.content).toContain("failed (502)");
   });
+
+  it("adds openrouter headers when the selected model provider is openrouter", async () => {
+    getProviderCredential.mockResolvedValue({
+      provider: "openrouter",
+      apiKey: "test-key",
+      baseUrl: "https://openrouter.ai/api/v1",
+      isEnabled: true,
+    });
+
+    const openrouterModel = {
+      ...model,
+      provider: "openrouter",
+    };
+
+    const fetchMock = mock(async () => {
+      return new Response('data: {"choices":[{"delta":{"content":"ok"}}]}\ndata: [DONE]\n\n', {
+        status: 200,
+      });
+    });
+
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await streamAssistantReply({
+      model: openrouterModel,
+      messages,
+      onToken: () => undefined,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://openrouter.ai/api/v1/chat/completions");
+    expect((init.headers as Record<string, string>)["HTTP-Referer"]).toBe("http://localhost:3000");
+    expect((init.headers as Record<string, string>)["X-Title"]).toBe("OpenChat");
+  });
 });
