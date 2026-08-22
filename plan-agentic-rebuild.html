@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>OpenChat — Agentic Rebuild Plan • Full Wipe + Doc-Intelligence</title>
+<style>
+  :root{
+    --bg:#0a0a0b; --bg2:#141415; --panel:#1a1a1e; --panel2:#232326; --line:#2a2a2f;
+    --text:#f2f2f3; --muted:#9a9aa0; --dim:#6b6b71; --accent:#9669ff; --accent2:#b095ff;
+    --accent-soft:#1e1538; --green:#22c55e; --amber:#f59e0b; --red:#ef4444; --blue:#38bdf8;
+    --radius:14px; --radius2:10px; --max:1120px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family: ui-sans-system, -apple-system, BlinkMacSystemFont, Segoe UI, Inter, Roboto, Helvetica, Arial, sans-serif; line-height:1.55}
+  a{color:var(--accent2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  /* header */
+  .hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line);background:
+    radial-gradient(900px 400px at 15% -10%, rgba(150,105,255,.22), transparent 55%),
+    radial-gradient(700px 380px at 95% 0%, rgba(56,189,248,.14), transparent 60%),
+    linear-gradient(180deg, #0f0f12 0%, var(--bg) 100%)}
+  .hero-inner{max-width:var(--max);margin:0 auto;padding:28px 20px 22px;display:grid;gap:18px}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:.68rem;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .eyebrow b{color:var(--accent2);font-weight:800}
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--red);box-shadow:0 0 0 6px rgba(239,68,68,.12);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+  h1{margin:0;font-size: clamp(1.7rem, 3.2vw, 2.45rem);line-height:1.05;letter-spacing:-.03em}
+  h1 span{background:linear-gradient(90deg, var(--accent2), #7dd3fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .subtitle{max-width:70ch;color:#c8c8ce;font-size:.98rem;margin:0}
+  .hero-meta{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .chip{border:1px solid var(--line);background:rgba(255,255,255,.04);border-radius:999px;padding:6px 10px;font-size:.72rem;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+  .chip strong{color:var(--text);font-weight:700}
+  .chip.warn{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.08);color:#ff9a9a}
+  .chip.ok{border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.08);color:#86efac}
+  .hero-actions{display:flex;flex-wrap:wrap;gap:10px}
+  .btn{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:10px;padding:9px 14px;font-weight:650;font-size:.84rem;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+  .btn:hover{border-color:#3a3a40;background:var(--panel2)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:white}
+  .btn.primary:hover{background:#7f4dff}
+  .btn.ghost{background:transparent}
+  /* layout */
+  .wrap{max-width:var(--max);margin:0 auto;padding:18px 20px 40px;display:grid;gap:18px}
+  .grid2{display:grid;grid-template-columns: 1fr 320px;gap:18px}
+  @media(max-width:980px){.grid2{grid-template-columns:1fr}}
+  .card{border:1px solid var(--line);background:linear-gradient(180deg, var(--panel) 0%, #19191c 100%);border-radius:var(--radius);overflow:hidden}
+  .card-h{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .card-h h2{margin:0;font-size:.92rem;letter-spacing:-.01em}
+  .card-h p{margin:0;color:var(--muted);font-size:.74rem}
+  .card-b{padding:16px}
+  .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  @media(max-width:760px){.kpi{grid-template-columns:repeat(2,1fr)}}
+  .kpi-item{border:1px solid var(--line);background:var(--bg2);border-radius:12px;padding:12px}
+  .kpi-item b{font-size:1.35rem}
+  .kpi-item span{display:block;color:var(--muted);font-size:.72rem;margin-top:2px}
+  .toc{position:sticky;top:14px}
+  .toc a{display:block;padding:7px 10px;border-radius:8px;color:var(--muted);font-size:.82rem;border:1px solid transparent}
+  .toc a.active, .toc a:hover{background:var(--accent-soft);color:var(--text);border-color:rgba(150,105,255,.25)}
+  .toc h3{margin:0 0 8px;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+  .prose h3{margin:22px 0 8px;font-size:1.02rem}
+  .prose h4{margin:16px 0 6px;font-size:.92rem;color:var(--accent2)}
+  .prose p{margin:8px 0;color:#d0d0d6;font-size:.88rem}
+  .prose ul, .prose ol{margin:8px 0 8px 18px;color:#d0d0d6;font-size:.86rem}
+  .prose li{margin:4px 0}
+  .prose li::marker{color:var(--dim)}
+  code, pre{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+  code{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.08);padding:1px 5px;border-radius:6px;font-size:.82em}
+  pre{background:#0f0f12;border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto;font-size:.78rem;line-height:1.55;color:#e6e6ea}
+  pre b{color:var(--accent2)}
+  .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--bg2);border-radius:999px;padding:3px 8px;font-size:.7rem;color:var(--muted)}
+  .pill i{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+  .pill.green{border-color:rgba(34,197,94,.3);color:#86efac}
+  .pill.green i{background:var(--green)}
+  .pill.amber{border-color:rgba(245,158,11,.3);color:#fde68a}
+  .pill.amber i{background:var(--amber)}
+  .pill.red{border-color:rgba(239,68,68,.3);color:#fca5a5}
+  .pill.red i{background:var(--red)}
+  .pill.blue{border-color:rgba(56,189,248,.3);color:#7dd3fc}
+  .pill.blue i{background:var(--blue)}
+  .tag{border:1px solid var(--line);background:var(--bg2);border-radius:6px;padding:2px 6px;font-size:.67rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .table{width:100%;border-collapse:collapse;font-size:.82rem}
+  .table th{ text-align:left; font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); padding:8px 10px; border-bottom:1px solid var(--line)}
+  .table td{ padding:10px; border-bottom:1px solid rgba(255,255,255,.06); color:#d6d6dc; vertical-align:top}
+  .table tr:hover td{background:rgba(255,255,255,.02)}
+  .callout{border:1px solid var(--line);border-left-width:3px;border-radius:10px;padding:12px 14px;background:rgba(255,255,255,.03);font-size:.84rem;color:#d6d6dc}
+  .callout.info{border-left-color:var(--blue);background:rgba(56,189,248,.07)}
+  .callout.warn{border-left-color:var(--amber);background:rgba(245,158,11,.08)}
+  .callout.danger{border-left-color:var(--red);background:rgba(239,68,68,.08)}
+  .callout.success{border-left-color:var(--green);background:rgba(34,197,94,.08)}
+  .arch{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  @media(max-width:760px){.arch{grid-template-columns:1fr}}
+  .arch-box{border:1px solid var(--line);background:var(--bg2);border-radius:12px;padding:12px}
+  .arch-box h4{margin:0 0 6px;font-size:.84rem}
+  .arch-box p{margin:0;color:var(--muted);font-size:.77rem}
+  .arch-box ul{margin:8px 0 0 14px;font-size:.75rem;color:#c9c9cf}
+  .steps{counter-reset:step;display:grid;gap:10px}
+  .step{border:1px solid var(--line);background:var(--bg2);border-radius:12px;padding:14px;display:grid;grid-template-columns:36px 1fr;gap:12px}
+  .step n{width:32px;height:32px;border-radius:50%;background:var(--accent);color:white;display:grid;place-items:center;font-weight:800;font-size:.85rem}
+  .step h4{margin:0;font-size:.9rem}
+  .step p{margin:4px 0 0;color:var(--muted);font-size:.82rem}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:760px){.two-col{grid-template-columns:1fr}}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding:0 6px}
+  .tab{appearance:none;background:transparent;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:10px 12px;font-weight:700;font-size:.8rem;cursor:pointer}
+  .tab.active{color:var(--text);border-bottom-color:var(--accent)}
+  .tabpanel{display:none}
+  .tabpanel.active{display:block}
+  .diagram{border:1px solid var(--line);background:
+    radial-gradient(500px 220px at 10% 0%, rgba(150,105,255,.16), transparent 60%),
+    var(--bg2);border-radius:12px;padding:14px;overflow:auto}
+  .flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;padding:10px 0}
+  .flow .node{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:8px 10px;font-size:.75rem;min-width:108px;text-align:center}
+  .flow .node b{display:block;font-size:.76rem}
+  .flow .node.accent{border-color:rgba(150,105,255,.45);background:var(--accent-soft)}
+  .flow .arrow{color:var(--dim);font-weight:800}
+  .checklist{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+  .checklist li{border:1px solid var(--line);background:var(--bg2);border-radius:10px;padding:10px 12px;display:flex;gap:10px;align-items:flex-start;font-size:.84rem;color:#d6d6dc}
+  .checklist li input{margin-top:3px}
+  .foot{max-width:var(--max);margin:0 auto;padding:0 20px 30px;color:var(--dim);font-size:.72rem}
+  .strike{opacity:.7;text-decoration:line-through}
+  .badge{font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:2px 7px;border:1px solid var(--line);background:var(--bg2);color:var(--muted);font-weight:800}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow"><span class="dot"></span> OpenChat <b>AGENTIC REBUILD</b> — plan v1.0 · 21 Aug 2026</div>
+    <h1>Delete the wrapper.<br/>Build the <span>agentic workspace.</span></h1>
+    <p class="subtitle">
+      Current codebase is a competent <b>thin chat wrapper</b> around <code>/chat/completions</code> streaming. It does not read docs, does not reason, does not act.
+      This plan is the full teardown + rebuild into a <b>doc-native agentic app</b> where every upload, URL, and repo file becomes ground truth.
+    </p>
+    <div class="hero-meta">
+      <span class="chip warn"><strong>DECISION</strong> Full wipe authorized — see §7</span>
+      <span class="chip"><strong>Scope</strong> 63 files → 0 kept as-is (≈1100 LOC store + 1700 LOC chat-workspace)</span>
+      <span class="chip ok"><strong>Stack</strong> Next 16 · TS · Drizzle · pgvector · S3</span>
+      <span class="chip"><strong>Time</strong> 4 weeks · 6 phases · solo+agents</span>
+    </div>
+    <div class="hero-actions">
+      <button class="btn primary" onclick="document.getElementById('wipe').scrollIntoView({behavior:'smooth'})">Jump to wipe plan →</button>
+      <button class="btn" onclick="document.getElementById('agent').scrollIntoView({behavior:'smooth'})">Agent architecture</button>
+      <button class="btn ghost" onclick="window.print()">Print / Save PDF</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- KPI strip -->
+  <div class="kpi">
+    <div class="kpi-item"><b>63</b><span>files audited (excl. node_modules/.git)</span></div>
+    <div class="kpi-item"><b style="color:var(--red)">0 / 63</b><span>files agentic today (no tools, no RAG, no vector)</span></div>
+    <div class="kpi-item"><b>212</b><span>lines in <code>provider.ts</code> — pure pass-through streaming</span></div>
+    <div class="kpi-item"><b>.uploads/</b><span>local disk only — breaks on serverless / prod</span></div>
+  </div>
+
+  <div class="grid2">
+    <main style="display:grid;gap:18px">
+
+      <!-- 1 audit -->
+      <section class="card" id="audit">
+        <div class="card-h"><div><h2>1 — Current audit: what you actually have</h2><p>Read every file. Verdict: clean chat shell, not a product.</p></div><span class="badge">Evidence-backed</span></div>
+        <div class="card-b prose">
+          <div class="callout danger"><b>Honest take:</b> The codebase is well-structured for a 2024 chat demo. It is not an agent. <code>lib/ai/provider.ts:53-212</code> streams OpenAI-compatible completions, appends one assistant row, logs audit. No tool calls, no retrieval, no doc parsing, no memory beyond last 24 messages. <code>app/api/files/upload/route.ts:1-76</code> saves bytes to <code>.uploads/</code> and never reads them again (only shows filename chips in composer). That is the blocker for “other docs can be read”.</div>
+
+          <h3>What works (keep the idea, not the code)</h3>
+          <ul>
+            <li><b>Auth & roles</b> — <code>lib/auth/session.ts</code> + <code>lib/db/bootstrap.ts</code> bootstraps guest/user/admin, better-auth tables, role limits. Concept correct, implementation leaky (dual session tables, raw <code>sql``</code> strings, no RBAC middleware).</li>
+            <li><b>Chat CRUD</b> — <code>lib/db/store.ts:468-682</code> create/list/get/rename/archive/pin, optimistic UI in <code>chat-workspace.tsx:296-1849</code>. Works but 1700-line client monolith.</li>
+            <li><b>Admin dashboard</b> — <code>components/admin/admin-dashboard.tsx</code> manages providers/models/roleLimits/users. Visual but couples fetch+state per card.</li>
+            <li><b>UX shell</b> — <code>app/globals.css:1-1884</code> is the most polished file. Sidebar, composer expansion, markdown+KaTeX <code>assistant-markdown.tsx</code>. Worth salvaging tokens only.</li>
+            <li><b>Tests</b> — <code>tests/</code> 20 files; unit-ish but integration requires docker postgres. Coverage script exists.</li>
+          </ul>
+
+          <h3>What is missing / painful</h3>
+          <table class="table">
+            <thead><tr><th>Gap</th><th>Evidence</th><th>Impact</th></tr></thead>
+            <tbody>
+              <tr><td><b>No agentic loop</b></td><td><code>provider.ts:76-95</code> single fetch, no <code>tools</code>/<code>tool_calls</code></td><td>Cannot act, cannot read docs</td></tr>
+              <tr><td><b>No doc intelligence</b></td><td><code>upload/route.ts:54</code> writes file, never parsed; no chunker/embedder/vector</td><td>Uploads are dead bytes</td></tr>
+              <tr><td><b>No retrieval</b></td><td>No <code>pgvector</code>, no embeddings column anywhere in <code>bootstrap.ts</code> 738 LOC schema</td><td>No RAG, hallucination by default</td></tr>
+              <tr><td><b>Fragile store</b></td><td><code>store.ts:1102</code> every query is <code>sql``</code> raw string; no Drizzle typed tables for chats/messages/files</td><td>Unmaintainable, no type safety</td></tr>
+              <tr><td><b>Local FS trap</b></td><td><code>upload/route.ts:29</code> <code>process.cwd()+/.uploads</code></td><td>Breaks on Vercel/serverless, no signed URLs</td></tr>
+              <tr><td><b>Client monolith</b></td><td><code>chat-workspace.tsx</code> 1550+ lines, 40 useStates, manual localStorage caches</td><td>Untestable</td></tr>
+              <tr><td><b>Provider lock-in</b></td><td>Only <code>openai</code> in <code>bootstrap.ts:10-38</code> defaultModels</td><td>No Anthropic/tool-use variance</td></tr>
+              <tr><td><b>Temporary chats debt</b></td><td><code>temporary_chats.messages_json longtext</code> — JSON blob, not rows</td><td>Cannot query/cite</td></tr>
+            </tbody>
+          </table>
+
+          <div class="callout warn" style="margin-top:12px"><b>Tooling note:</b> <code>bun run typecheck</code> currently fails (missing <code>next/server</code>, <code>@types/node</code> not installed) and <code>bun run lint</code> (eslint not found). Standard <kbd>AGENTS.md</kbd> workflow is broken until <code>bun install</code> — addressed in phase 0.</div>
+        </div>
+      </section>
+
+      <!-- 2 vision -->
+      <section class="card" id="vision">
+        <div class="card-h"><div><h2>2 — Vision: doc-native agentic workspace</h2><p>Not “chat + files”. Chat <i>over</i> files with traceable actions.</p></div><span class="tag">Target</span></div>
+        <div class="card-b prose">
+          <div class="two-col">
+            <div class="callout info"><b>One sentence:</b> OpenChat v2 is an agent that <b>ingests any document collection</b> (PDFs, docx, md, csv, images, URLs, repos), grounds every answer in cited chunks, and can <b>act</b> via tools (search, read, write, code-run) with a verifiable trace.</div>
+            <div class="callout success"><b>North star UX:</b> User drops 37 PDFs + a Notion export → asks “summarize risks vs our contract” → agent retrieves top 12 chunks (≤200ms pgvector ANN), shows plan → executes 3 tool calls → answers with <b>inline citations</b> + side doc viewer.</div>
+          </div>
+          <h3>Product changes vs today</h3>
+          <ul>
+            <li><b>Documents first</b> — Projects / Collections as primary nav (not just Chats). Drag-drop anywhere ingests.</li>
+            <li><b>Agent, not model</b> — Model picker becomes <b>Agent preset</b> (Researcher, Analyst, Builder) + underlying model.</li>
+            <li><b>Trace instead of stream</b> — Streaming tokens plus intermediate <i>thought → tool_call → observation → answer</i> with collapsible steps.</li>
+            <li><b>Grounding by default</b> — Every factual sentence can show source chunk + confidence.</li>
+            <li><b>Actions</b> — Agent can create docs, run code (sandboxed), open PR-like diffs, email, calendar — gated by permissions.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 3 agent -->
+      <section class="card" id="agent">
+        <div class="card-h"><div><h2>3 — Agentic architecture</h2><p>Loop, tools, memory, governance</p></div><span class="pill blue"><i></i> core</span></div>
+        <div class="card-b prose">
+          <div class="diagram">
+            <div class="flow">
+              <div class="node"><b>User</b>prompt + docs</div><span class="arrow">→</span>
+              <div class="node accent"><b>Planner</b><span style="font-size:.68rem;color:var(--muted)">decompose → DAG</span></div><span class="arrow">→</span>
+              <div class="node"><b>Retriever</b><span style="font-size:.68rem;color:var(--muted)">pgvector ANN</span></div><span class="arrow">→</span>
+              <div class="node accent"><b>Actor loop</b><span style="font-size:.68rem;color:var(--muted)">think→tool→observe</span></div><span class="arrow">→</span>
+              <div class="node"><b>Synthesizer</b><span style="font-size:.68rem;color:var(--muted)">cite + answer</span></div>
+            </div>
+            <p style="text-align:center;color:var(--dim);font-size:.72rem;margin:6px 0 0">All steps stream via SSE; each tool_call gated by policy + budget. Hard cap: 12 tool turns / 90s.</p>
+          </div>
+
+          <h3>Loop spec (what replaces <code>provider.ts</code>)</h3>
+          <pre><b>// lib/agent/run.ts  — single source of truth</b>
+type AgentContext = { chatId, projectId, actor, docCollectionIds, budget };
+async function* runAgent(input: { messages, context }): AsyncGenerator&lt;AgentEvent&gt; {
+  planner → { subTasks }                          // optional 0.5s LLM call
+  for (let turn=0; turn&lt;MAX_TURNS; turn++) {
+    retrieved = await retrieve({ query: lastUserMsg, collectionIds, topK:12 });
+    llmStream = await callModel({ messages, tools: TOOL_REGISTRY, retrieved });
+    for await (chunk of llmStream) {
+      if (chunk.tool_calls) yield { type:'tool_call', ... }
+      else yield { type:'token', text: chunk.text }
+    }
+    if (requiresTool) { obs = await executeTool(call, context); messages.push(obs); }
+    else break;                                   // final answer
+  }
+  yield { type:'done', citations: retrieved.map(r=&gt;r.citation) }
+}</pre>
+
+          <div class="arch">
+            <div class="arch-box"><h4>🧠 Memory</h4><p>3 tiers: ephemeral (turn), episodic (pgvector chat_history), semantic (project collections). Summarizer compresses &gt; 12k tokens → rolling summary row.</p><ul><li>Last 24 msgs → full</li><li>Older → summarized + cited</li><li>Per-doc memories (key facts)</li></ul></div>
+            <div class="arch-box"><h4>🔧 Tools</h4><p>Typed Zod schemas, JSON-schema advertised to model. Every call validated + audited.</p><ul><li>Whitelisted per role</li><li>Dry-run preview for writes</li><li>Cost meter per turn</li></ul></div>
+            <div class="arch-box"><h4>🛡️ Governance</h4><p>Policy layer before <i>executeTool</i>. RBAC + project-scoped scopes + rate limits (reuse <code>role_limits</code> concept).</p><ul><li>Read vs Act separation</li><li>User confirmation for side-effects</li><li>Full <code>audit_logs</code> with tool I/O</li></ul></div>
+          </div>
+
+          <h3>Tool registry (v1 — 11 tools)</h3>
+          <table class="table">
+            <thead><tr><th>Tool</th><th>Input</th><th>What it does</th><th>Model sees</th></tr></thead>
+            <tbody>
+              <tr><td><code>search_documents</code></td><td>query, collectionIds, topK</td><td>pgvector cosine search (HNSW) over <code>document_chunks</code></td><td>top chunks + citations</td></tr>
+              <tr><td><code>read_document</code></td><td>documentId, pageRange</td><td>Full text + OCR + layout (pdf→markdown)</td><td>raw text (truncated)</td></tr>
+              <tr><td><code>list_documents</code></td><td>projectId, filter</td><td>Enumerate uploads/crawls in project</td><td>metadata + snippet</td></tr>
+              <tr><td><code>ingest_url</code></td><td>url, crawlDepth</td><td>Fetch + readability + chunk + embed</td><td>ingested docId</td></tr>
+              <tr><td><code>ingest_repo_files</code></td><td>glob, maxFiles</td><td>Read whitelisted repo paths (server FS guard)</td><td>file contents</td></tr>
+              <tr><td><code>write_document</code></td><td>title, markdown</td><td>Create derived doc in collection (requires confirm)</td><td>new docId + link</td></tr>
+              <tr><td><code>run_code</code></td><td>lang, code, timeout=8s</td><td>Deno/Node isolate OR WASM py — no network</td><td>stdout/stderr + exit</td></tr>
+              <tr><td><code>web_search</code></td><td>query, count=5</td><td>Tavily/Brave stub (provider-pluggable)</td><td>titles + excerpts</td></tr>
+              <tr><td><code>ask_user</code></td><td>question</td><td>Pauses loop, streams clarification prompt</td><td>user reply (next turn)</td></tr>
+              <tr><td><code>get_time</code> / <code>calc</code></td><td>—</td><td>Deterministic utilities</td><td>value</td></tr>
+            </tbody>
+          </table>
+          <div class="callout info" style="margin-top:10px"><b>Doc reading superset:</b> “other docs can be read” is implemented by <code>search_documents</code> + <code>read_document</code> + <code>ingest_*</code>. The agent never answers from weights alone when a grounded answer is possible — retrieval is injected into every turn as <code>&lt;context citations&gt;</code>.</div>
+        </div>
+      </section>
+
+      <!-- 4 ingestion -->
+      <section class="card" id="ingest">
+        <div class="card-h"><div><h2>4 — Doc intelligence pipeline</h2><p>From bytes to citable chunks in &lt; 3s per doc</p></div><span class="pill green"><i></i> pgvector</span></div>
+        <div class="card-b prose">
+          <div class="diagram">
+            <div class="flow" style="gap:6px">
+              <div class="node"><b>Upload</b><span style="font-size:.68rem">S3 presigned</span></div><span class="arrow">→</span>
+              <div class="node"><b>Parse</b><span style="font-size:.68rem">pdf/docx/img OCR</span></div><span class="arrow">→</span>
+              <div class="node accent"><b>Chunk</b><span style="font-size:.68rem">512t / 80 overlap</span></div><span class="arrow">→</span>
+              <div class="node"><b>Embed</b><span style="font-size:.68rem">voyage/openai</span></div><span class="arrow">→</span>
+              <div class="node"><b>pgvector</b><span style="font-size:.68rem">HNSW 1536d</span></div><span class="arrow">→</span>
+              <div class="node"><b>Cite</b><span style="font-size:.68rem">p:12 l:34-41</span></div>
+            </div>
+          </div>
+
+          <h3>Accepted inputs (v1)</h3>
+          <ul>
+            <li><b>Files:</b> PDF (text + scanned image → Tesseract / vision OCR), DOCX, PPTX, TXT/MD, CSV/JSON (table-aware chunking), images (PNG/JPG → caption via vision model)</li>
+            <li><b>URLs:</b> single page + sitemap crawl (max 25 pages / job)</li>
+            <li><b>Repo:</b> whitelisted globs under project root, read-only via <code>ingest_repo_files</code> tool</li>
+          </ul>
+
+          <h3>Pipeline stages (queue = pg-boss / BullMQ on Redis or Inngest if serverless)</h3>
+          <ol>
+            <li><b>Upload</b> — client gets S3 presigned POST (Supabase Storage or R2), uploads direct; row in <code>documents</code> status=<code>pending</code></li>
+            <li><b>Parse</b> — worker: <code>pdfjs</code> + <code>mammoth</code> + <code>csv-parse</code> + <code>sharp+tesseract</code> fallback; normalize to markdown + page map</li>
+            <li><b>Chunk</b> — semantic splitter (heading-aware, 480-560 tokens, 80 overlap), keep <code>page, heading, char_offset, hash</code></li>
+            <li><b>Embed</b> — batch 96 chunks/call to provider; retry with backoff; store in <code>document_chunks.embedding vector(1536)</code></li>
+            <li><b>Index</b> — HNSW already; hybrid search = vector (0.7) + BM25 tsvector (0.3) + recency boost</li>
+            <li><b>Cite</b> — each chunk → stable <code>citation {docId, title, page, chunkId}</code> rendered inline in UI</li>
+          </ol>
+
+          <div class="callout success"><b>Target numbers:</b> 100-page PDF → ~190 chunks → ~3.2s end-to-end on 2 workers. P95 retrieval 140ms (HNSW <code>ivfflat</code> → <code>hnsw m=16 ef=64</code>) for topK=12 over 200k chunks.</div>
+
+          <h3>Reuse today</h3>
+          <p><code>.uploads/</code> + <code>files</code> table → replace with <code>documents</code> + <code>document_chunks</code> + object storage. Keep idea of <code>getOwnedFiles</code> ownership check, but enforce via RLS on <code>project_members</code>.</p>
+        </div>
+      </section>
+
+      <!-- 5 data model -->
+      <section class="card" id="model">
+        <div class="card-h"><div><h2>5 — Data model v2 (Drizzle + pgvector)</h2><p>From 12 tables with JSON blobs → typed + vectorized</p></div><span class="tag">Schema</span></div>
+        <div class="card-b prose">
+          <p>Keep <b>Drizzle + postgres</b> (proven), but switch to <b>typed <code>pgTable</code></b> everywhere, enable <code>pgvector</code>, drop raw <code>sql``</code>. Keep <code>users, user_roles, sessions, audit_logs</code>. Replace rest:</p>
+          <pre><b>-- enable extensions (migration 001)</b>
+create extension if not exists vector;
+create extension if not exists pg_trgm;
+
+<b>-- projects as document containers</b>
+projects(id pk, owner_user_id fk, title, description, visibility enum, created_at)
+project_members(project_id fk, user_id fk, role enum[owner,editor,viewer], unique)
+documents(
+  id pk, project_id fk, owner_user_id fk, guest_id,
+  title, source_type enum[file,url,repo], source_url, mime_type,
+  storage_key, sha256, page_count, token_count,
+  status enum[pending,parsing,chunking,embedding,ready,failed],
+  error text, created_at, updated_at
+)
+document_chunks(
+  id pk, document_id fk, project_id fk,
+  ordinal int, heading text, page int, char_offset int,
+  content text not null,
+  tsv tsvector generated,
+  embedding vector(1536),               -- HNSW index
+  token_count int
+)
+-- HNSW index (better recall/lat than IVFFlat for 1536d)
+create index on document_chunks using hnsw (embedding vector_cosine_ops) with (m=16, ef_construction=64);
+create index on document_chunks using gin(tsv);
+
+<b>-- chat overhaul</b>
+chats(id pk, project_id fk nullable, user_id fk nullable, guest_id,
+      title, model_id, agent_preset enum[research,analyst,builder],
+      archived bool, is_pinned bool, created_at, updated_at)
+messages(id pk, chat_id fk, role enum[user,assistant,system,tool],
+         content text, tool_calls jsonb, tool_call_id text,
+         citations jsonb, -- [{chunkId, docId, page, score}]
+         model_id, token_count, created_at)
+tool_events(id pk, chat_id fk, message_id fk, tool_name, input jsonb, output jsonb,
+            status enum[ok,error], latency_ms int, created_at)  -- auditable trace
+
+<b>-- embeddings + providers remain but typed</b>
+providers(id pk, provider enum[openai,anthropic,groq,voyage,local],
+          base_url, encrypted_key, is_enabled)
+models(id pk, provider fk, display_name, context_window, supports_tools bool,
+       is_enabled, is_default, is_guest_allowed, max_output_tokens)
+embed_models(id pk, provider, model_id, dims int, is_default)
+</pre>
+          <div class="callout warn"><b>Why not keep <code>temporary_chats</code> JSON?</b> Replaced by <code>chats.is_temporary bool + expires_at</code> with real <code>messages</code> rows. Queryable, citable, TTL via <code>pg_cron</code> or worker prune.</div>
+        </div>
+      </section>
+
+      <!-- 6 ux -->
+      <section class="card" id="ux">
+        <div class="card-h"><div><h2>6 — UX & frontend (kill 1700-line monolith)</h2><p>Project-first, trace-visible, doc-cited</p></div><span class="pill amber"><i></i> break apart</span></div>
+        <div class="card-b prose">
+          <h3>Information architecture</h3>
+          <ul>
+            <li><b>Left rail:</b> Projects (collections) ↑ surfacing doc counts + last ingested. Below: Chats (scoped to project). Search across both.</li>
+            <li><b>Center:</b> Message stream with <b>step trace</b> (collapsible: Thought → Tool → Observation) + final answer + citation chips → click opens right doc viewer on highlighted chunk.</li>
+            <li><b>Right:</b> Doc viewer (PDF.js / md render) + source list + confidence + “open original”.</li>
+            <li><b>Composer:</b> @-mention documents / #mention projects + drag-drop zone + agent preset picker (replaces model dropdown).</li>
+          </ul>
+
+          <h3>Component decomposition (what replaces <code>chat-workspace.tsx</code>)</h3>
+          <pre><b>app/(workspace)/layout.tsx</b>            -- sidebar shell (RSC)
+<b>components/projects/ProjectNav.tsx</b>   -- projects + collections
+<b>components/chat/ChatList.tsx</b>        -- chats (small, swr)
+<b>components/agent/AgentTrace.tsx</b>     -- tool_events timeline
+<b>components/docs/DocViewer.tsx</b>       -- pdf/md + highlight
+<b>components/docs/IngestDropzone.tsx</b>  -- presigned S3 + progress
+<b>components/composer/Composer.tsx</b>    -- @-mentions, autosize (keep hook)
+<b>lib/hooks/useChat.ts</b>                -- replaces 40 useStates with useReducer + SWR
+<b>lib/chat/sse.ts</b>                     -- SSE / fetch stream parser (shared)</pre>
+
+          <div class="two-col">
+            <div class="callout info"><b>State:</b> server is source of truth. Remove <code>localStorage: openchat:chat-list/messages</code> caching (was workaround for degraded DB). Replace with <code>SWR</code> + <code>React Query</code> + optimistic patches.</div>
+            <div class="callout success"><b>Styling:</b> keep design tokens from <code>globals.css:3-51</code> (--accent, --surface, dark mode) — only tokens survive wipe.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7 wipe -->
+      <section class="card" id="wipe" style="border-color:rgba(239,68,68,.35)">
+        <div class="card-h" style="border-bottom-color:rgba(239,68,68,.2)"><div><h2 style="color:#fca5a5">7 — Full wipe & rebuild execution</h2><p>Exact folders/files to delete, what to salvage, in what order</p></div><span class="pill red"><i></i> destructive</span></div>
+        <div class="card-b prose">
+          <div class="callout danger"><b>Your request:</b> “delete everything … and remake it completely”. Plan honors that, but stages it so you keep history + secrets + a rescue branch. Do not run <code>rm -rf</code> blind.</div>
+
+          <h3>Phase 0 — Stash & branch (30 min, mandatory)</h3>
+          <pre>git status --short                          # must be clean
+git checkout -b archive/openchat-v1-$(date +%Y%m%d)
+git push -u origin archive/openchat-v1-$(date +%Y%m%d)
+git checkout -b feat/agentic-rebuild
+# copy secrets out (not wiped)
+cp .env.local ../.env.local.bak
+cp .env.test.example ../.env.test.example.bak
+# tag v1 DB for rollback
+pg_dump $DATABASE_URL &gt; ../openchat-v1-dump.sql</pre>
+
+          <h3>Phase 0.5 — Wipe surface (keep only config shells)</h3>
+          <pre><b># DELETE — entire product code (42 files)</b>
+rm -rf app/ components/ lib/ public/ supabase/migrations/  # but keep folder stubs
+rm -rf tests/ scripts/check-coverage.mjs   # will regenerate
+<b># DELETE — generated / local</b>
+rm -rf .uploads/ .next/ .tmp/
+rm -f tsconfig.tsbuildinfo next-env.d.ts bun.lock package-lock.json
+
+<b># KEEP — infra + tooling shells (do not delete content, just clean)</b>
+keep: package.json          # will rewrite deps
+keep: tsconfig.json eslint.config.mjs next.config.ts postcss.config.mjs
+keep: docker-compose.test.yml bunfig.toml .gitignore AGENTS.md README.md
+keep: .env* (but rotate BETTER_AUTH_SECRET if it was &lt;32)
+keep: supabase/migrations/  # drop files, keep dir + README
+
+<b># immediately run</b>
+bun install
+bun run typecheck   # must be green before phase 1
+bun run lint        # must be green</pre>
+
+          <div class="callout warn"><b>Why keep package.json shell?</b> So <code>bun install</code> still resolves. It will be rewritten in phase 1 with new deps: <code>ai</code> (Vercel AI SDK), <code>pgvector</code>, <code>@aws-sdk/client-s3</code>, <code>pdfjs-dist</code>, <code>mammoth</code>, <code>zod</code>, <code>drizzle-orm@0.45</code>, <code>react-markdown</code> etc.</div>
+
+          <h3>Phase 1 — New skeleton (day 1-2)</h3>
+          <div class="steps">
+            <div class="step"><n>1</n><div><h4>New tree</h4><p><code>app/(workspace)/</code>, <code>app/api/{auth,chats,docs,projects,agent}</code>, <code>lib/agent/{run,tools,registry,retrieval}</code>, <code>lib/docs/{parse,chunk,embed,index}</code>, <code>lib/db/schema/*</code> (typed), <code>components/agent/* docs/* chat/*</code>, <code>workers/ingest.ts</code>, <code>lib/llm/{openai,anthropic,provider}.ts</code></p></div></div>
+            <div class="step"><n>2</n><div><h4>Typed schema + pgvector migration</h4><p>One migration <code>001_agent_core.sql</code> with <code>vector extension</code> + tables above. Generate Drizzle types, run <code>drizzle-kit push</code> against local postgres (docker-compose.test.yml). Verify with <code>select * from pg_extension where extname='vector'</code>.</p></div></div>
+            <div class="step"><n>3</n><div><h4>S3 presigned ingest path</h4><p>Next <code>/api/docs/presign</code> (creates <code>documents.pending</code>) + <code>/api/docs/upload-complete</code> → enqueues <code>ingestJobs</code>. Local dev uses Supabase Storage or minio.</p></div></div>
+          </div>
+
+          <h3>Phase 2 — Agent runtime (day 3-7)</h3>
+          <div class="steps">
+            <div class="step"><n>4</n><div><h4>LLM abstraction + streaming SSE</h4><p>Vercel AI SDK <code>streamText({ model, tools })</code> wraps OpenAI/Anthropic. Endpoint <code>POST /api/agent/run</code> streams <code>text/event-stream</code>: <code>event: token</code>, <code>event: tool_call</code>, <code>event: tool_result</code>, <code>event: citations</code>. Audit to <code>tool_events</code>.</p></div></div>
+            <div class="step"><n>5</n><div><h4>Retrieval first</h4><p><code>lib/agent/retrieval.ts</code>: embed query (same model as docs), <code>select chunk where embedding &lt;=&gt; query &lt; 0.78 limit 12</code> + tsvector rerank. Inject as <code>&lt;grounding&gt;</code> system block with citation IDs — model must cite.</p></div></div>
+            <div class="step"><n>6</n><div><h4>Tool registry (11 tools)</h4><p>Implement <code>search_documents</code>, <code>read_document</code>, <code>list_documents</code> first (doc reading). Then <code>ingest_url/repo</code>, <code>web_search</code>, <code>run_code</code> (sandboxed). Each tool Zod-validated, logged.</p></div></div>
+          </div>
+
+          <h3>Phase 3 — UI (day 8-14)</h3>
+          <div class="steps">
+            <div class="step"><n>7</n><div><h4>Split <code>chat-workspace.tsx</code></h4><p>Delete monolith, ship 6 small components + <code>useChat</code> reducer (max 220 LOC each). Keep autosize hook + markdown utils + time grouping.</p></div></div>
+            <div class="step"><n>8</n><div><h4>Trace + citations UI</h4><p><code>AgentTrace</code> renders <code>tool_events</code> as timeline with input/output + latency. Citations as <code>[Doc p12]</code> chips → open <code>DocViewer</code> highlight.</p></div></div>
+            <div class="step"><n>9</n><div><h4>Ingest UX</h4><p>Dropzone anywhere; per-doc progress bar (parsing→chunking→embedding). Failure shows parse error + retry.</p></div></div>
+          </div>
+
+          <h3>Phase 4 — Hardening (day 15-21)</h3>
+          <ul>
+            <li><b>Auth middleware</b> — Next <code>middleware.ts</code> enforces <code>actor</code> → <code>project_members</code> row check, deprecate raw <code>resolveActor()</code> per-route unguarded pattern.</li>
+            <li><b>Worker resilience</b> — pg-boss retry 3x, DLQ, embedding rate-limit.</li>
+            <li><b>Eval harness</b> — <code>tests/agent/evals.test.ts</code>: 20 doc-QA goldens, measure citation precision/recall.</li>
+            <li><b>Perf</b> — p95 &lt; 400ms TTF for retrieval+first token, &lt; 3s total for grounded short answers.</li>
+          </ul>
+
+          <h3>Salvage list — what survives the wipe</h3>
+          <table class="table">
+            <thead><tr><th>Keep the idea</th><th>Actual artifact to copy/paste from old</th><th>Where it goes</th></tr></thead>
+            <tbody>
+              <tr><td>Design tokens</td><td><code>globals.css:3-51</code> CSS vars only</td><td><code>app/globals.css</code> (rewrite rest)</td></tr>
+              <tr><td>Markdown utils</td><td><code>assistant-markdown-utils.ts</code> + snapshot tests</td><td><code>lib/markdown/*</code></td></tr>
+              <tr><td>Chat time groups</td><td><code>chat-workspace-utils.ts: getChatTimeGroup</code></td><td><code>lib/chat/time.ts</code></td></tr>
+              <tr><td>Admin role seed</td><td><code>bootstrap.ts: seedAdminUser</code> logic</td><td><code>lib/db/seed.ts</code></td></tr>
+              <tr><td>Encryption helper</td><td><code>lib/security/encryption.ts</code></td><td>keep verbatim</td></tr>
+              <tr><td>Test factories</td><td><code>tests/helpers/factories.ts</code></td><td><code>tests/helpers/*</code></td></tr>
+            </tbody>
+          </table>
+          <p style="color:var(--dim);font-size:.75rem">Everything else is rewritten; no file is kept as-is — even kept ideas get re-typed and re-tested.</p>
+        </div>
+      </section>
+
+      <!-- 8 repo layout -->
+      <section class="card" id="repo">
+        <div class="card-h"><div><h2>8 — New repo layout (post-wipe)</h2><p>Target tree — skim then remember</p></div><span class="badge">29 files + workers</span></div>
+        <div class="card-b">
+          <pre style="margin:0">openchat/
+├─ app/
+│  ├─ (workspace)/layout.tsx          <span style="color:var(--muted)">RSC shell + ProjectNav</span>
+│  ├─ (workspace)/project/[id]/page.tsx
+│  ├─ (workspace)/chat/[id]/page.tsx
+│  ├─ api/agent/run/route.ts          <span style="color:var(--muted)">SSE agent loop</span>
+│  ├─ api/docs/{presign,upload-complete, [id]}/route.ts
+│  ├─ api/projects/route.ts            <span style="color:var(--muted)">CRUD</span>
+│  ├─ api/auth/[...all]/route.ts
+│  └─ globals.css                      <span style="color:var(--muted)">tokens only from old</span>
+├─ lib/
+│  ├─ agent/{run.ts,planner.ts,registry.ts,tools/*.ts,retrieval.ts,memory.ts}
+│  ├─ docs/{parse.ts,chunk.ts,embed.ts,index.ts,ocr.ts}
+│  ├─ llm/{openai.ts,anthropic.ts,provider.ts} <span style="color:var(--muted)">replaces old provider.ts</span>
+│  ├─ db/{client.ts,schema/{projects.ts,docs.ts,chats.ts},migrations/}
+│  ├─ auth/{session.ts,middleware.ts}
+│  └─ storage/{s3.ts,presign.ts}
+├─ workers/ingest.ts                   <span style="color:var(--muted)">pg-boss worker</span>
+├─ components/{projects,chat,agent,docs,composer,ui}/
+├─ tests/
+│  ├─ unit/   <span style="color:var(--muted)">utils, chunker, retrieval</span>
+│  ├─ e2e/    <span style="color:var(--muted)">agent golden QA</span>
+│  └─ helpers/
+├─ drizzle.config.ts
+├─ docker-compose.yml                  <span style="color:var(--muted)">postgres+vector+minio+redis</span>
+└─ AGENTS.md README.md</pre>
+        </div>
+      </section>
+
+      <!-- 9 api -->
+      <section class="card" id="api">
+        <div class="card-h"><div><h2>9 — API & streaming contract</h2><p>Stable even while internals change</p></div><span class="pill blue"><i></i> sse</span></div>
+        <div class="card-b prose">
+          <h3>Agent run (replaces <code>/api/chat/send</code>)</h3>
+<pre><b>POST /api/agent/run</b>
+{ chatId?: string, projectId: string, message: string,
+  mentionDocIds?: string[], agentPreset?: "research"|"analyst"|"builder" }
+
+<b>→ 200 text/event-stream</b>
+event: meta       data: { chatId, traceId }
+event: token      data: { text }
+event: tool_call  data: { id, name:"search_documents", input:{query} }
+event: tool_result data: { id, output:{ chunks:[{docId, page, score}] } }
+event: citations  data: { citations:[{docId, title, page, chunkId, score}] }
+event: done       data: { chatId, usage:{prompt,completion} }</pre>
+          <div class="callout info"><b>Why SSE not WebSocket?</b> Works through Vercel/Next streaming, easy to proxy, resume via <code>Last-Event-ID</code>. Client fallback: chunked <code>fetch</code> reader same as today <code>readAssistantStream()</code>.</div>
+          <h3>Docs</h3>
+<pre><b>POST /api/docs/presign</b> { filename, mime, size, projectId } → { url, fields, documentId }
+<b>POST /api/docs/upload-complete</b> { documentId } → { status:"queued" }
+<b>GET  /api/docs?projectId=</b> → { documents:[{id,title,status,chunkCount}] }
+<b>GET  /api/docs/:id/chunks?query=</b> → { chunks }</pre>
+        </div>
+      </section>
+
+      <!-- 10 risks -->
+      <section class="card" id="risks">
+        <div class="card-h"><div><h2>10 — Risks, costs, alternatives</h2><p>What to watch before you <code>rm -rf</code></p></div><span class="badge">Be honest</span></div>
+        <div class="card-b prose">
+          <h3>Top 5 risks</h3>
+          <table class="table">
+            <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+            <tbody>
+              <tr><td>Embedding cost spike (1536d × docs)</td><td>Batch 96, cache by sha256, voyage-lite default, gate large uploads behind role limit</td></tr>
+              <tr><td>pgvector perf degrades &gt; 500k chunks</td><td>HNSW tuning + shard by project_id partitioning; fallback to quantized 768d embed model</td></tr>
+              <tr><td>Tool loop explosion (model spam calls)</td><td>Hard turn cap 12 + input/output token budget + per-tool rate limit</td></tr>
+              <tr><td>OCR quality on scanned PDFs</td><td>Two-pass: pdf text layer first, Tesseract only if &lt; 40 chars/page; vision model as tier 2</td></tr>
+              <tr><td>Data loss on wipe</td><td>Mandatory <code>archive/openchat-v1</code> branch + pg_dump before delete</td></tr>
+            </tbody>
+          </table>
+          <h3>Alternative considered — incremental refactor (rejected for this request)</h3>
+          <ul>
+            <li>Keep store.ts/sql, add chunks table, bolt retriever onto provider.ts — less risk, but leaves 1700-line monolith + JSON blobs + local FS intact. You asked to delete everything; this plan respects that.</li>
+            <li>If you waver, the fallback is: do phases 1-2 without deleting <code>chat-workspace.tsx</code>, shim agent behind feature flag <code>AGENT_ENABLED</code>.</li>
+          </ul>
+          <h3>Monthly cost estimate (small team, 10k docs)</h3>
+          <ul>
+            <li>Embeddings (voyage-3-lite): ~$0.02 / 1M tokens ≈ $4-8 / mo for churn</li>
+            <li>LLM (mixed gpt-4o-mini + haiku): pay-per-token, unchanged vs today</li>
+            <li>Storage (R2/Supabase): $0.015/GB ≈ $2 / mo for 100GB</li>
+            <li>Infra: Supabase Pro ($25) + Vercel Pro — already have</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 11 timeline -->
+      <section class="card" id="timeline">
+        <div class="card-h"><div><h2>11 — Timeline & delivery checklist</h2><p>4 weeks, solo + subagents (per <code>AGENTS.md</code> workflow)</p></div><span class="tag">4W</span></div>
+        <div class="card-b prose">
+          <div class="tabs" id="tabs">
+            <button class="tab active" data-tab="gantt">Gantt</button>
+            <button class="tab" data-tab="check">Checklist</button>
+            <button class="tab" data-tab="verify">Verify</button>
+          </div>
+
+          <div class="tabpanel active" id="panel-gantt" style="padding-top:12px">
+            <table class="table">
+              <thead><tr><th>Week</th><th>Phase</th><th>Deliverable</th><th>Done when</th></tr></thead>
+              <tbody>
+                <tr><td>W0 · Day 0</td><td>0 Stash</td><td>archive branch + pg_dump + bun install green</td><td><code>bun run typecheck && bun run lint</code> clean</td></tr>
+                <tr><td>W1</td><td>1 Skeleton</td><td>Typed schema + pgvector + S3 presign + workers stub</td><td><code>documents</code> insert → chunk → embed E2E locally</td></tr>
+                <tr><td>W1-2</td><td>2 Agent</td><td><code>/api/agent/run</code> SSE + retrieval + 3 tools</td><td>Golden Q “find clause in PDF X p12” cites correctly</td></tr>
+                <tr><td>W2-3</td><td>3 UI</td><td>ProjectNav + AgentTrace + DocViewer + Ingest</td><td>Drop 10 PDFs → chat cites each</td></tr>
+                <tr><td>W3-4</td><td>4 Hardening</td><td>Middleware RBAC, evals, perf, admin v2</td><td>20 evals ≥ 0.85 precision, p95 &lt; 400ms</td></tr>
+                <tr><td>W4</td><td>5 Cutover</td><td>Delete legacy routes, migrate prod data, docs</td><td>Prod deploy + rollback tested</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="tabpanel" id="panel-check" style="padding-top:12px">
+            <ul class="checklist">
+              <li><input type="checkbox"/> <span><b>Branch + dump</b> — <code>archive/openchat-v1-*</code> pushed, <code>openchat-v1-dump.sql</code> stored outside repo</span></li>
+              <li><input type="checkbox"/> <span><b>Wipe</b> — <code>app/ lib/ components/ supabase/migrations/*.sql</code> deleted, shells kept per §7</span></li>
+              <li><input type="checkbox"/> <span><b>Deps</b> — <code>package.json</code> rewritten (ai, pgvector, s3, pdfjs, mammoth, tesseract stubs)</span></li>
+              <li><input type="checkbox"/> <span><b>DB</b> — <code>vector</code> extension live, <code>drizzle-kit push</code> succeeds, <code>bun test</code> unit green</span></li>
+              <li><input type="checkbox"/> <span><b>Ingest E2E</b> — PDF → chunks → embeddings → retrieval returns top12</span></li>
+              <li><input type="checkbox"/> <span><b>Agent SSE</b> — stream renders trace + citations, appends <code>tool_events</code></span></li>
+              <li><input type="checkbox"/> <span><b>UI split</b> — no file &gt; 280 LOC, <code>useChat</code> replaces 40 useStates</span></li>
+              <li><input type="checkbox"/> <span><b>AGENTS.md workflow</b> — after each edit <code>git diff -- &lt;file&gt;</code> + <code>bun run typecheck && bun run lint</code></span></li>
+            </ul>
+          </div>
+
+          <div class="tabpanel" id="panel-verify" style="padding-top:12px">
+            <div class="callout success"><b>Verification after every phase (non-negotiable):</b></div>
+<pre>bun run typecheck          # must pass
+bun run lint               # must pass
+bun run test:unit          # must pass
+bun run test:integration   # requires docker-compose.test.yml up -d (postgres+vector)
+# manual
+upload 3 PDFs → ask cross-doc question → verify citations link to highlighted chunk</pre>
+            <p>Gate production cutover on: eval precision ≥ 0.85, retrieval p95 &lt; 400ms, no <code>.uploads</code> references remain, <code>grep -r "temporary_chats"</code> zero hits.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 12 what to do today -->
+      <section class="card" id="next">
+        <div class="card-h"><div><h2>12 — What to do right now</h2><p>Copy-paste to start wipe safely</p></div><span class="pill green"><i></i> action</span></div>
+        <div class="card-b prose">
+          <div class="callout danger"><b>Do not delete yet</b> if you haven’t read this doc top-to-bottom and pushed the archive branch. This is the last gate before irreversible <code>rm -rf</code>.</div>
+<pre><b># 1) confirm tooling</b>
+bun --version && git status --short
+bun install && bun run typecheck 2>&1 | head -n 20
+
+<b># 2) stash</b>
+git checkout -b archive/openchat-v1-$(date +%Y%m%d) && git push -u origin HEAD
+git checkout -b feat/agentic-rebuild
+
+<b># 3) dump</b>
+pg_dump "$DATABASE_URL" &gt; ../openchat-v1-dump.sql && ls -lh ../openchat-v1-dump.sql
+
+<b># 4) when ready, wipe (dry-run first)</b>
+git ls-files | grep -E "^(app|components|lib|supabase/migrations)/" | sort
+# then execute phase 0.5 rm -rf lines from §7</pre>
+          <p>Want subagents to do the rebuild? Kick <code>Implementation</code> agent with prompt: <code>“Implement phase 1 of plan-agentic-rebuild.html — typed Drizzle schema + pgvector migration + S3 presign + ingest worker stub. Verify with bun run typecheck && bun run lint.”</code> — per <code>code</code> skill, orchestrator verifies, subagent implements.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn primary" onclick="navigator.clipboard.writeText(document.documentElement.outerHTML).then(()=>alert('HTML copied'))">Copy HTML</button>
+            <button class="btn" onclick="window.scrollTo({top:0,behavior:'smooth'})">Back to top ↑</button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <aside style="display:grid;gap:18px;align-content:start">
+      <nav class="card toc">
+        <div class="card-b">
+          <h3>Contents</h3>
+          <a href="#audit" class="active">1 Audit</a>
+          <a href="#vision">2 Vision</a>
+          <a href="#agent">3 Agent loop</a>
+          <a href="#ingest">4 Doc pipeline</a>
+          <a href="#model">5 Data model</a>
+          <a href="#ux">6 UX split</a>
+          <a href="#wipe">7 Wipe plan ✂</a>
+          <a href="#repo">8 New layout</a>
+          <a href="#api">9 API contract</a>
+          <a href="#risks">10 Risks</a>
+          <a href="#timeline">11 Timeline</a>
+          <a href="#next">12 Do now</a>
+        </div>
+      </nav>
+
+      <div class="card">
+        <div class="card-h"><h2>File map — deleted vs kept</h2></div>
+        <div class="card-b" style="font-size:.78rem;line-height:1.6">
+          <p style="margin:0 0 8px;color:var(--muted)"><span class="pill red"><i></i> delete</span> 42 product files &nbsp; <span class="pill green"><i></i> keep shell</span> 8 configs</p>
+          <div style="display:grid;gap:6px">
+            <div style="border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--bg2)"><b style="color:#fca5a5">DELETE</b><br/>app/** (8 routes + pages)<br/>components/** (3 dirs)<br/>lib/ai lib/db/store lib/cache<br/>supabase/migrations/*.sql<br/>tests/routes tests/integration<br/><span style="color:var(--dim)">.uploads, .next, next-env.d.ts</span></div>
+            <div style="border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:8px;background:rgba(34,197,94,.06)"><b style="color:#86efac">KEEP IDEA</b><br/>globals.css tokens<br/>assistant-markdown-utils<br/>encryption.ts<br/>chat time grouping<br/>admin seed logic</div>
+            <div style="border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--bg2)"><b>KEEP SHELL</b><br/>package.json · tsconfig · eslint<br/>next.config · postcss · drizzle.config<br/>docker-compose.test.yml · AGENTS.md</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h2>Doc reading — how it lands</h2></div>
+        <div class="card-b prose" style="font-size:.8rem">
+          <p style="margin:0">Every “other doc” becomes a <code>documents</code> row + <code>document_chunks</code> vector rows.</p>
+          <ul style="margin:8px 0 0 16px">
+            <li>Upload via presigned S3 — no <code>.uploads</code></li>
+            <li>Auto-parse: PDF text+OCR, docx, csv</li>
+            <li>Chunk 512t / 80 overlap</li>
+            <li>Embed → pgvector HNSW</li>
+            <li>Agent <code>search_documents</code> in every turn</li>
+            <li>Citations clickable → doc viewer highlight</li>
+          </ul>
+          <div class="callout info" style="margin-top:10px;font-size:.78rem">If you only do one thing from this plan, do <code>search_documents</code> + <code>read_document</code> tools + pgvector. That alone fixes “docs can be read”.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h2>Stack delta</h2></div>
+        <div class="card-b" style="display:grid;gap:8px;font-size:.78rem">
+          <div><span class="tag">Add</span> <code>ai</code> (Vercel SDK) · <code>pgvector</code> · <code>@aws-sdk/client-s3</code> · <code>pdfjs-dist</code> · <code>mammoth</code> · <code>pg-boss</code> · <code>swr</code></div>
+          <div><span class="tag">Remove</span> raw <code>sql``</code> strings · <code>localStorage chat caches</code> · <code>.uploads</code> fs path</div>
+          <div><span class="tag">Keep</span> Next 16 · React 19 · Drizzle · Tailwind 4 · better-auth · Zod · bun</div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+</div>
+
+<footer class="foot">Plan generated for <code>C:\Users\ewanj\Documents\code\vibes\openchat</code> · 63 files scanned · 1102 LOC store + 212 LOC provider + 1700 LOC chat-workspace · Next step: run Phase 0 stash before any delete. · AGENTS.md workflow enforced: <code>git status --short → edit → git diff → bun run typecheck && bun run lint</code></footer>
+
+<script>
+  // tabs
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.addEventListener('click',()=>{
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      document.querySelectorAll('.tabpanel').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      document.getElementById('panel-'+t.dataset.tab).classList.add('active');
+    })
+  })
+  // toc active on scroll
+  const links=[...document.querySelectorAll('.toc a')];
+  const secs=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  function onScroll(){
+    let cur=secs[0];
+    for(const s of secs){ if(window.scrollY+120 >= s.offsetTop) cur=s; }
+    links.forEach(a=>a.classList.toggle('active', a.getAttribute('href')==='#'+cur.id));
+  }
+  addEventListener('scroll', onScroll, {passive:true});
+</script>
+</body>
+</html>
