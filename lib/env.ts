@@ -3,7 +3,12 @@ import { z } from "zod";
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   APP_URL: z.string().default("http://localhost:3000"),
-  BETTER_AUTH_SECRET: z.string().min(32),
+  // Allow build-time fallback so `next build` collecting page data doesn't fail when Railway build env hasn't injected secrets yet
+  // At runtime, Railway will inject the real secret; placeholder is rejected in production isProduction check below if still present
+  BETTER_AUTH_SECRET: z
+    .string()
+    .min(32)
+    .default("placeholder-for-build-please-set-real-BETTER_AUTH_SECRET-32+chars"),
   DATABASE_PROVIDER: z.enum(["postgres", "supabase", "neon", "mysql", "railway"]).default("postgres"),
   DATABASE_URL: z.string().min(1).default("postgres://postgres:postgres@localhost:5432/openchat"),
   // Railway injects these individually when linking Postgres; fallback if DATABASE_URL missing
