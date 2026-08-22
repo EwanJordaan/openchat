@@ -35,8 +35,17 @@ devserver.log
 # env files (can opt-in for committing if needed)
 .env*
 
-# vercel
+# vercel (legacy)
 .vercel
+
+# railway
+.railway
+railway.env
+
+# local uploads fallback
+.uploads/
+services/runner/node_modules
+services/runner/.uploads
 
 # typescript
 *.tsbuildinfo

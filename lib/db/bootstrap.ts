@@ -98,10 +98,18 @@ async function runBootstrap() {
         message.includes("duplicate column") ||
         message.includes("duplicate column name") ||
         message.includes("duplicate index") ||
-        message.includes("errno 1061");
+        message.includes("errno 1061") ||
+        // Railway's default postgres-ssl:18 doesn't ship pgvector; allow bootstrap to continue with pg_trgm fallback
+        message.includes("could not open extension control file") ||
+        message.includes('extension "vector" is not available') ||
+        message.includes("type \"vector\" does not exist");
 
       if (!safeToIgnore) {
         throw error;
+      }
+      // If vector extension missing, log once and continue (retrieval falls back to keyword/ILIKE)
+      if (message.includes("vector") && (message.includes("extension") || message.includes("type \"vector\""))) {
+        console.warn("[bootstrap] pgvector not available on this Postgres (Railway postgres-ssl uses fallback). Continuing with pg_trgm fallback. To enable vector, switch service image to pgvector/pgvector:pg16.");
       }
     }
   }
@@ -228,7 +236,7 @@ async function runBootstrap() {
 }
 
 async function seedAdminUser(
-  provider: "postgres" | "supabase" | "neon" | "mysql",
+  provider: "postgres" | "supabase" | "neon" | "mysql" | "railway",
   query: ReturnType<typeof getDb>["query"],
 ) {
   if (!adminSeedPassword) return;
@@ -277,7 +285,7 @@ async function seedAdminUser(
 }
 
 async function backfillBetterAuthCredentials(
-  provider: "postgres" | "supabase" | "neon" | "mysql",
+  provider: "postgres" | "supabase" | "neon" | "mysql" | "railway",
   query: ReturnType<typeof getDb>["query"],
 ) {
   const users = await query<{ id: string; password_hash: string }>(
@@ -467,6 +475,22 @@ const postgresBootstrapStatements = [
     content text not null,
     tsv tsvector,
     embedding vector(1536),
+    token_count integer
+  )
+  `,
+  // Fallback when pgvector not available (Railway postgres-ssl:18) — ignored if vector table already exists
+  `
+  create table if not exists document_chunks (
+    id text primary key,
+    document_id text not null references documents(id) on delete cascade,
+    project_id text references projects(id) on delete set null,
+    ordinal integer not null,
+    heading text,
+    page integer,
+    char_offset integer,
+    content text not null,
+    tsv tsvector,
+    embedding text,
     token_count integer
   )
   `,

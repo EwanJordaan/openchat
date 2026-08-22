@@ -2,7 +2,7 @@
 
 Doc-native, tool-using chat workspace. Upload or ingest documents, organize them into **Projects**, and chat with an agent that grounds answers in your own sources via hybrid vector + keyword retrieval.
 
-Built on Next.js 16 + React 19, Drizzle ORM, pgvector, S3/MinIO, and the Vercel AI SDK. This branch (`feat/agentic-rebuild`) is a full rebuild from the earlier chat-wrapper prototype.
+Built on Next.js 16 + React 19, Drizzle ORM, pgvector, S3/MinIO, and the AI SDK. Deploys to **Railway** with linked Postgres + sandboxed runners.
 
 ---
 
@@ -14,7 +14,7 @@ ChatGPT UX, but grounded. The model is not the source of truth — **your docume
 - **Cite or it didn't happen**: every grounded answer streams with per-chunk citations (doc title, page, heading, score).
 - **Agentic, not autocomplete**: the assistant plans, searches, reads, writes, runs code, and asks for help — looping until done.
 - **Guest-friendly, admin-controllable**: guests get ephemeral projects/chats via `openchat_guest` cookie; admins manage models, providers, and limits.
-- **Runs anywhere Postgres + S3 run**: local `pgvector/pgvector:pg16` + MinIO for dev, AWS/R2/Supabase for prod.
+- **Runs anywhere Postgres + S3 run**: local `pgvector/pgvector:pg16` + MinIO for dev, **Railway Postgres** + Volumes/S3 for prod.
 
 ---
 
@@ -30,13 +30,15 @@ The agent sees these tools via `getToolsForLlm()` and executes them through `lib
 | `ingest_url` | Fetch a URL, parse, chunk, and index as a document. | `url`, `projectId?` |
 | `ingest_repo_files` | Ingest text files from a repo path (local allowlist). | `paths[]`, `projectId?` |
 | `write_document` | Create a new document from markdown/text in a project. | `title`, `content`, `projectId?` |
-| `run_code` | Execute a JS snippet in a sandbox (quick calc / transform). | `code` |
+| `run_code` | Execute code in **sandboxed runner** (JS via vm, Python via runner). Falls back to in-process vm if `RUNNER_URL` unset. | `lang`, `code`, `timeoutMs?` |
 | `web_search` | Web search via Tavily (stub in dev, live when `TAVILY_API_KEY` set). | `query`, `count?` |
 | `ask_user` | Pause and ask the user a clarifying question. | `question` |
 | `get_time` | Current server time (ISO + unix). No input. | — |
 | `calc` | Safe math eval (`+ - * / ( ) .`). | `expression` |
 
 All tools are zod-validated; invalid input returns `{ ok:false, error }` without calling the LLM. Tool calls stream as `tool_call` / `tool_result` SSE events and are persisted to `tool_events`.
+
+`run_code` on Railway calls the **Runner service** (`RUNNER_URL`) — see `services/runner/README.md`. Without `RUNNER_URL`, JS runs locally via `node:vm`; Python returns an error.
 
 ---
 
@@ -148,26 +150,27 @@ Presets: `research` (thorough, compare), `analyst` (numbers/tables/risks), `buil
         │                  │                       │
         ▼                  ▼                       ▼
    ┌────────────────────────────────────────────────────────┐
-   │  Postgres 16 + pgvector + pg_trgm (docker)             │
+   │  Railway Postgres 16 + pgvector + pg_trgm               │
    │  documents / document_chunks (vector(1536)+tsv+GIN+HNSW)│
    │  projects / chats / messages / tool_events / users etc │
    └────────────────────────────────────────────────────────┘
-        │
-        ▼
-   ┌─────────┐   ┌──────────┐   ┌────────┐
-   │   S3    │   │ LLM APIs │   │ Tavily │
-   │ MinIO   │   │ OpenAI   │   │ Voyage │
-   │ local   │   │ Anthropic│   │  etc   │
-   └─────────┘   └──────────┘   └────────┘
+        │                         ▲
+        ▼                         │ private network
+   ┌─────────┐   ┌──────────┐   ┌──────────────────┐
+   │   S3    │   │ LLM APIs │   │ Runner (sandbox) │
+   │ MinIO/  │   │ OpenAI   │   │ services/runner  │
+   │ R2      │   │ Anthropic│   │ vm + python      │
+   └─────────┘   └──────────┘   └──────────────────┘
 ```
 
 Key dirs:
 
-- `app/(workspace)` — shell pages, `app/api/{agent,docs,projects,chats,files}` — routes
+- `app/(workspace)` — shell pages, `app/api/{agent,docs,projects,chats,files,health}` — routes
 - `components/{workspace,chat,composer,docs,projects,agent}` — UI
 - `lib/{agent,docs,llm,storage,db,hooks,cache,auth,security}` — domain
 - `workers/ingest.ts` — poll worker
-- `supabase/migrations/001_agentic_core.sql` — baseline schema (vector, projects, docs, chunks, chats/messages/tools)
+- `services/runner` — sandboxed code execution microservice (Railway second service)
+- `supabase/migrations/001_agentic_core.sql` — baseline schema (vector, projects, docs, chunks, chats/messages/tools) — same DDL used on Railway
 
 ---
 
@@ -175,7 +178,7 @@ Key dirs:
 
 ### Prereqs
 
-- Node 20+ · Bun 1.2+ · Postgres 16 with `vector` + `pg_trgm` (use docker below) · Optional: MinIO/Redis (included in compose)
+- Node 20+ · Bun 1.2+ · Postgres 16 with `vector` + `pg_trgm` (Railway Postgres or docker below) · Optional: MinIO/Redis (included in compose)
 
 ### 1. Install
 
@@ -185,7 +188,7 @@ cp .env.example .env.local
 # edit BETTER_AUTH_SECRET (32+ chars), DATABASE_URL, S3_*, ANTHROPIC_API_KEY etc.
 ```
 
-### 2. Start infra (pgvector + redis + minio)
+### 2. Local infra (docker) — optional if using Railway DB
 
 `docker-compose.yml` (dev) and `docker-compose.test.yml` (integration tests) both include the full stack:
 
@@ -206,7 +209,7 @@ docker compose ps
 No manual migration needed for local dev — `ensureDatabase()` in `lib/db/bootstrap.ts` creates extensions/tables/indexes on first request. For explicit control:
 
 ```bash
-# push via drizzle-kit (reads drizzle.config.ts)
+# push via drizzle-kit (reads drizzle.config.ts — supports Railway DATABASE_URL / PGHOST)
 bunx drizzle-kit push
 
 # or apply the checked-in SQL
@@ -222,13 +225,95 @@ bun run build      # production check (Next 16)
 
 Guest mode works out of the box — a `openchat_guest` httpOnly cookie is minted by `middleware.ts` on the first `/api/*` request (and via `resolveActor()` for pages). No login required. Register or set `ADMIN_EMAILS` to get admin.
 
-### Supabase pooler note
+---
 
-If `DATABASE_URL` is a direct `db.<ref>.supabase.co` host and you see `ENOTFOUND`, switch to the pooler URL:
+## Railway Deploy
 
+### A. Postgres
+
+1. **Railway dashboard → New Project** (or link existing GitHub repo)
+2. **Add Postgres**: `New → Database → PostgreSQL` (Railway adds `pgvector` on Postgres 16; if `vector` extension missing, set service to custom image `pgvector/pgvector:pg16` in `Settings → Deploy → Custom Image` or run `CREATE EXTENSION vector` manually)
+3. **Link to app service**: In your app service `Variables → Add Reference → DATABASE_URL` (and optionally `DATABASE_PROVIDER=railway`). Railway injects:
+   - `DATABASE_URL` (private: `postgres.railway.internal`) for in-cluster
+   - `DATABASE_PUBLIC_URL` (public: `proxy.rlwy.net`) for local dev
+   - Individual `PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE` as fallback
+4. **No .env needed in production** — `lib/db/client.ts` auto-detects `resolveDatabaseUrl()` and SSL:
+   - `railway.internal` → `ssl: false`
+   - `proxy.rlwy.net` / hosted → `ssl: { rejectUnauthorized: false }`
+   - Localhost → no SSL
+5. Healthcheck is `GET /api/health` (see `railway.json`). Set in Railway `Settings → Deploy → Healthcheck Path = /api/health`.
+
+### B. App service
+
+- Build: `nixpacks` — `railway.json` at repo root sets `buildCommand: bun install --frozen-lockfile && bun run build`, `startCommand: bun run start`
+- Env vars to set on Railway (besides the auto-injected DB):
+  ```
+  BETTER_AUTH_SECRET=<32+ chars, openssl rand -hex 32>
+  APP_URL=https://<your-app>.up.railway.app
+  SETTINGS_ENCRYPTION_KEY=<32 chars>
+  ADMIN_EMAILS=you@example.com
+  ADMIN_SEED_EMAIL=you@example.com
+  ADMIN_SEED_PASSWORD=<strong>
+  OPENAI_API_KEY / ANTHROPIC_API_KEY / TAVILY_API_KEY / VOYAGE_API_KEY
+  S3_* (or leave empty for .uploads fallback; recommend R2/S3 in prod)
+  ```
+- `DATABASE_PROVIDER=railway` (optional, defaults to `postgres` — both work; `railway` documents intent)
+- Railway private networking lets the app reach Postgres at `postgres.railway.internal` with zero egress and no SSL.
+
+### C. Sandboxed runners (second service)
+
+See `services/runner/README.md`. TL;DR:
+
+```bash
+# 1. Create second service from same repo
+#    Railway → New Service → GitHub Repo → set Root Directory = services/runner
+#    Or: New Empty Service → connect Dockerfile at services/runner/Dockerfile
+
+# 2. Set its variables
+RUNNER_TOKEN=$(openssl rand -hex 32)   # same value in both services
+PORT=3001
+
+# 3. In app service, add:
+RUNNER_URL=http://runner.railway.internal:3001
+RUNNER_TOKEN=<same>
 ```
-postgresql://postgres.<ref>:<pass>@aws-0-<region>.pooler.supabase.com:6543/postgres
+
+Without `RUNNER_URL`, `run_code` falls back to in-process `vm` (JS only). With it, JS + Python are sandboxed in the runner container (non-root, isolated vm, timeout 3–10s, 8k output cap).
+
+### D. Railway CLI (local)
+
+```bash
+# Install (already added as devDependency — use bunx)
+bunx railway --version   # 5.43.1+
+
+# Login — browser flow; run in project dir:
+bunx railway login
+
+# Link to your Railway project:
+bunx railway link        # pick the project + environments (production)
+
+# Link Postgres & redeploy:
+bunx railway variables   # verify DATABASE_URL present
+bunx railway up          # deploy current dir
+bunx railway logs        # tail
+bunx railway run psql $DATABASE_URL -c "select 1"  # test DB
 ```
+
+We wrap this in `scripts/railway-setup.ps1` / `.sh` — run `bun run railway:login` etc. See `package.json`.
+
+### Local against Railway DB
+
+```bash
+# Copy public URL for local dev
+bunx railway variables --kv | grep DATABASE_PUBLIC_URL
+# or: Railway dashboard → Postgres → Connect → Public Network → copy URL
+# Paste into .env.local:
+DATABASE_URL=postgresql://postgres:xxx@monorail.proxy.rlwy.net:xxxxx/railway?sslmode=require
+DATABASE_PROVIDER=railway
+bun run dev
+```
+
+> **Supabase/Neon legacy**: still supported (`DATABASE_PROVIDER=supabase|neon`). If you see `ENOTFOUND db.<ref>.supabase.co`, use the pooler URL `aws-0-<region>.pooler.supabase.com:6543`. Railway is now the default recommendation.
 
 ---
 
@@ -239,10 +324,15 @@ All vars are validated by `lib/env.ts` (zod). `.env.example` is the canonical li
 | Var | Default | Description |
 |-----|---------|-------------|
 | `NODE_ENV` | `development` | `development` \| `test` \| `production` |
-| `APP_URL` | `http://localhost:3000` | Public origin (auth callbacks, presign). |
+| `APP_URL` | `http://localhost:3000` | Public origin (auth callbacks, presign). On Railway set to `https://<app>.up.railway.app`. |
 | `BETTER_AUTH_SECRET` | *(required, ≥32)* | Session signing secret. |
-| `DATABASE_PROVIDER` | `postgres` | `postgres` \| `supabase` \| `neon` \| `mysql` |
-| `DATABASE_URL` | `postgres://postgres:postgres@localhost:5432/openchat` | SQL connection string. |
+| `DATABASE_PROVIDER` | `postgres` | `postgres` \| `railway` \| `supabase` \| `neon` \| `mysql` — `railway` is alias for `postgres` with docs intent. |
+| `DATABASE_URL` | `postgres://postgres:postgres@localhost:5432/openchat` | SQL connection string. On Railway auto-injected; local can be `DATABASE_PUBLIC_URL`. Falls back to `PGHOST`/`PGUSER`/`PGPASSWORD`/`PGDATABASE` if unset. |
+| `PGHOST` / `PGPORT` / `PGUSER` / `PGPASSWORD` / `PGDATABASE` | — | Railway fallback individually injected vars. |
+| `DATABASE_PRIVATE_URL` / `DATABASE_PUBLIC_URL` | — | Railway private vs public URL; `resolveDatabaseUrl()` prefers `DATABASE_URL` then these. |
+| `RUNNER_URL` | — | Sandboxed runner origin, e.g. `http://runner.railway.internal:3001`. |
+| `RUNNER_TOKEN` | — | Shared secret for runner auth (`Bearer` token). |
+| `RUNNER_TIMEOUT_MS` | `10000` | Runner request timeout cap. |
 | `SESSION_COOKIE_NAME` | `openchat_session` | Auth session cookie. |
 | `GUEST_COOKIE_NAME` | `openchat_guest` | Guest id cookie (httpOnly, 180d). |
 | `SESSION_TTL_DAYS` | `30` | Session TTL. |
@@ -265,8 +355,9 @@ All vars are validated by `lib/env.ts` (zod). `.env.example` is the canonical li
 | `S3_SECRET_KEY` | `minioadmin` |  |
 | `S3_REGION` | `us-east-1` |  |
 | `MAX_UPLOAD_MB` | `12` | Per-file limit, enforced in presign + ingest. |
+| `PORT` | `3000` | Injected by Railway; Next reads it automatically. |
 
-Storage behavior (`lib/storage/s3.ts`): presigned POST via `@aws-sdk/s3-presigned-post`; `getObject`/`putObject` try S3 first, then fall back to `.uploads/<key>` if creds missing or S3 down. Production should set real S3 creds and a non-local endpoint.
+Storage behavior (`lib/storage/s3.ts`): presigned POST via `@aws-sdk/s3-presigned-post`; `getObject`/`putObject` try S3 first, then fall back to `.uploads/<key>` if creds missing or S3 down. On Railway consider Mounted Volumes (`.uploads`) or R2/S3 for durable storage.
 
 ---
 
@@ -314,7 +405,9 @@ bun run build       # next build (Turbopack)
 - [ ] **Migrations hygiene**: move bootstrap DDL to `drizzle-kit generate` diffs; keep `001_agentic_core.sql` as seed.
 - [ ] **Proxy migration**: when Next 16 removes middleware warning, rename `middleware.ts` → `proxy.ts` (no logic change).
 - [ ] **Observability**: per-tool latency in `tool_events`, token usage rollup, Langfuse/OpenTelemetry tracing.
-- [ ] **Prod storage**: R2 / S3 lifecycle, presign expiry tuning, multipart upload for >12 MB.
+- [ ] **Prod storage**: R2 / S3 lifecycle, presign expiry tuning, multipart upload for >12 MB + Railway Volumes.
+- [x] **Railway Postgres**: private networking + SSL auto-detection, `railway.json`/`nixpacks.toml`, healthcheck.
+- [x] **Sandboxed runners**: `services/runner` second service via `RUNNER_URL`.
 
 ---
 

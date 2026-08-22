@@ -1,0 +1,19 @@
+{
+  "name": "openchat-runner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sandboxed code runner for OpenChat — Railway second service. Isolated vm for JS; python via subprocess.",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch server.ts",
+    "start": "bun run server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.10",
+    "typescript": "^5"
+  }
+}
