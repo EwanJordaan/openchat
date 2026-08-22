@@ -1,15 +1,17 @@
 import { sql } from "drizzle-orm";
-
 import { getDb } from "@/lib/db/client";
 
 const TABLES = [
   "audit_logs",
   "usage_counters",
   "user_settings",
+  "tool_events",
   "messages",
-  "temporary_chats",
-  "files",
   "chats",
+  "document_chunks",
+  "documents",
+  "project_members",
+  "projects",
   "sessions",
   "auth_accounts",
   "auth_sessions",
@@ -24,7 +26,10 @@ const TABLES = [
 
 export async function resetDatabase() {
   const { query } = getDb();
-  for (const table of TABLES) {
-    await query(sql.raw(`delete from ${table}`)).catch(() => undefined);
-  }
+  for (const t of TABLES) await query(sql.raw(`delete from ${t}`)).catch(() => undefined);
+}
+
+export async function seedMinimal() {
+  const { ensureDatabase } = await import("@/lib/db/bootstrap");
+  await ensureDatabase();
 }

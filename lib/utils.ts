@@ -36,3 +36,18 @@ export function parseJson<T>(value: unknown, fallback: T): T {
 export function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
+
+export function slugify(input: string) {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+}
+
+export function truncate(input: string, maxLength: number) {
+  if (input.length <= maxLength) return input;
+  if (maxLength <= 3) return input.slice(0, maxLength);
+  return `${input.slice(0, maxLength - 3)}...`;
+}

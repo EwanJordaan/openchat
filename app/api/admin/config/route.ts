@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { resolveActor } from "@/lib/auth/session";
+import { ensureDatabase } from "@/lib/db/bootstrap";
 import {
   getPublicAppSettings,
   listModels,
@@ -15,7 +15,7 @@ import {
   upsertProviderCredential,
   upsertRoleLimit,
 } from "@/lib/db/store";
-import { attachActorCookies, jsonError, requireAdmin } from "@/lib/http";
+import { attachActorCookies, jsonError, jsonOk, requireAdmin } from "@/lib/http";
 
 const actionSchema = z.discriminatedUnion("action", [
   z.object({
@@ -29,7 +29,7 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("provider"),
     payload: z.object({
-      provider: z.string().min(2).max(120),
+      provider: z.string().min(2).max(80),
       baseUrl: z.string().url(),
       apiKey: z.string().min(1).max(400).optional(),
       isEnabled: z.boolean(),
@@ -66,13 +66,9 @@ const actionSchema = z.discriminatedUnion("action", [
 ]);
 
 export async function GET() {
+  await ensureDatabase();
   const resolved = await resolveActor();
-  try {
-    requireAdmin(resolved.actor);
-  } catch {
-    return jsonError("Admin access required", 403);
-  }
-
+  try { requireAdmin(resolved.actor); } catch { return jsonError("Admin access required", 403); }
   const [settings, providers, models, roleLimits, users] = await Promise.all([
     getPublicAppSettings(),
     listProviders(),
@@ -80,59 +76,25 @@ export async function GET() {
     listRoleLimits(),
     listUsersWithRoles(),
   ]);
-
-  const response = NextResponse.json({
-    settings,
-    providers,
-    models,
-    roleLimits,
-    users,
-  });
-  return attachActorCookies(response, resolved);
+  return attachActorCookies(jsonOk({ settings, providers, models, roleLimits, users }), resolved);
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH(req: Request) {
+  await ensureDatabase();
   const resolved = await resolveActor();
-  try {
-    requireAdmin(resolved.actor);
-  } catch {
-    return jsonError("Admin access required", 403);
-  }
-
-  const payload = await request.json().catch(() => null);
-  const parsed = actionSchema.safeParse(payload);
-  if (!parsed.success) {
-    return jsonError(parsed.error.issues[0]?.message || "Invalid admin payload", 400);
-  }
-
-  const action = parsed.data;
-  if (action.action === "settings") {
-    await updatePublicAppSettings(action.payload);
-  }
-
-  if (action.action === "provider") {
-    await upsertProviderCredential(action.payload);
-  }
-
-  if (action.action === "model") {
-    await updateModel(action.payload.id, action.payload);
-  }
-
-  if (action.action === "roleLimit") {
-    await upsertRoleLimit(action.payload);
-  }
-
-  if (action.action === "userRoles") {
-    await setUserRoles(action.payload.userId, action.payload.roles);
-  }
-
-  await logAudit({
-    actorUserId: resolved.actor.userId,
-    action: `admin.${action.action}`,
-    targetType: "admin-config",
-    payload: action.payload,
-  });
-
-  const response = NextResponse.json({ ok: true });
-  return attachActorCookies(response, resolved);
+  try { requireAdmin(resolved.actor); } catch { return jsonError("Admin access required", 403); }
+  let raw: unknown;
+  try { raw = await req.json(); } catch { return attachActorCookies(jsonError("Invalid JSON", 400), resolved); }
+  const parsed = actionSchema.safeParse(raw);
+  if (!parsed.success) return attachActorCookies(jsonError(parsed.error.issues[0]?.message || "Invalid payload", 400), resolved);
+  const a = parsed.data;
+  if (a.action === "settings") await updatePublicAppSettings(a.payload);
+  if (a.action === "provider") await upsertProviderCredential(a.payload);
+  if (a.action === "model") await updateModel(a.payload.id, a.payload);
+  if (a.action === "roleLimit") await upsertRoleLimit(a.payload);
+  if (a.action === "userRoles") await setUserRoles(a.payload.userId, a.payload.roles as import("@/lib/types").Role[]);
+  await logAudit({ actorUserId: resolved.actor.userId, action: `admin.${a.action}`, targetType: "admin-config", payload: a.payload as Record<string, unknown> });
+  return attachActorCookies(jsonOk({ ok: true }), resolved);
 }
+
+export const dynamic = "force-dynamic";
