@@ -8,9 +8,8 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: rootDir,
   },
-  // Railway: standalone output reduces image size & speeds cold start
-  output: process.env.RAILWAY_ENVIRONMENT ? "standalone" : undefined,
-  // Allow Railway healthcheck to reach /api/health quickly
+  // Keep regular output for `next start`; use `node .next/standalone/server.js` only if you switch to standalone
+  // Railway Nixpacks handles `next start` correctly without standalone.
   experimental: {
     // keep for future optimizePackageImports if needed
   },

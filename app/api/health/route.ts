@@ -19,10 +19,30 @@ export async function GET() {
     db = "error";
   }
 
+  // Optional: runner ping (private network) — don't fail healthcheck if runner not configured
+  let runner: "ok" | "disabled" | "error" = "disabled";
+  const runnerUrl = process.env.RUNNER_URL?.trim();
+  if (runnerUrl) {
+    try {
+      const controller = new AbortController();
+      const tm = setTimeout(() => controller.abort(), 2000);
+      const token = process.env.RUNNER_TOKEN?.trim();
+      const res = await fetch(`${runnerUrl.replace(/\/$/, "")}/health`, {
+        signal: controller.signal,
+        headers: token ? { authorization: `Bearer ${token}` } : undefined,
+      });
+      clearTimeout(tm);
+      runner = res.ok ? "ok" : "error";
+    } catch {
+      runner = "error";
+    }
+  }
+
   return NextResponse.json(
     {
       status: "ok",
       db,
+      runner,
       timestamp: new Date().toISOString(),
       env: process.env.RAILWAY_ENVIRONMENT ? "railway" : process.env.NODE_ENV,
     },
