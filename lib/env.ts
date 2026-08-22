@@ -4,13 +4,8 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   APP_URL: z.string().default("http://localhost:3000"),
   BETTER_AUTH_SECRET: z.string().min(32),
-  DATABASE_PROVIDER: z
-    .enum(["postgres", "supabase", "neon", "mysql"])
-    .default("postgres"),
-  DATABASE_URL: z
-    .string()
-    .min(1)
-    .default("postgres://postgres:postgres@localhost:5432/openchat"),
+  DATABASE_PROVIDER: z.enum(["postgres", "supabase", "neon", "mysql"]).default("postgres"),
+  DATABASE_URL: z.string().min(1).default("postgres://postgres:postgres@localhost:5432/openchat"),
   SESSION_COOKIE_NAME: z.string().default("openchat_session"),
   GUEST_COOKIE_NAME: z.string().default("openchat_guest"),
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(30),
@@ -26,6 +21,17 @@ const envSchema = z.object({
   ADMIN_SEED_PASSWORD: z.string().default(""),
   OPENAI_BASE_URL: z.string().default("https://api.openai.com/v1"),
   OPENAI_API_KEY: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  VOYAGE_API_KEY: z.string().optional(),
+  TAVILY_API_KEY: z.string().optional(),
+  VECTOR_DIMS: z.coerce.number().int().positive().default(1536),
+  EMBED_PROVIDER: z.enum(["openai", "voyage", "local"]).default("openai"),
+  EMBED_MODEL: z.string().default("text-embedding-3-small"),
+  S3_ENDPOINT: z.string().default("http://localhost:9000"),
+  S3_BUCKET: z.string().default("openchat-uploads"),
+  S3_ACCESS_KEY: z.string().default("minioadmin"),
+  S3_SECRET_KEY: z.string().default("minioadmin"),
+  S3_REGION: z.string().default("us-east-1"),
   MAX_UPLOAD_MB: z.coerce.number().positive().default(12),
 });
 

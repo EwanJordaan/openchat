@@ -19,16 +19,12 @@ const heading = Space_Grotesk({
 
 export const metadata: Metadata = {
   title: "OpenChat",
-  description: "ChatGPT-style AI chat application with roles and admin controls",
+  description: "Agentic workspace — doc-native chat with citations",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${sans.variable} ${heading.variable}`}>
         <ThemeProvider>{children}</ThemeProvider>
       </body>

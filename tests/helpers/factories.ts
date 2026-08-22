@@ -6,12 +6,7 @@ export function actorFactory(overrides: Partial<Extract<Actor, { type: "user" }>
     guestId: "gst_test",
     roles: ["user"],
     userId: "usr_test",
-    user: {
-      id: "usr_test",
-      email: "user@example.com",
-      name: "User",
-      imageUrl: null,
-    },
+    user: { id: "usr_test", email: "user@example.com", name: "User", imageUrl: null },
     ...overrides,
   };
 }
@@ -32,6 +27,8 @@ export function chatFactory(overrides: Partial<ChatSummary> = {}): ChatSummary {
     id: "cht_test",
     title: "Test chat",
     modelId: "gpt-4o-mini",
+    projectId: null,
+    agentPreset: null,
     isPinned: false,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -72,7 +69,7 @@ export function fileFactory(overrides: Partial<UploadedFile> = {}): UploadedFile
     fileName: "file.txt",
     mimeType: "text/plain",
     sizeBytes: 10,
-    storagePath: "C:/tmp/file.txt",
+    storagePath: ".uploads/file.txt",
     ...overrides,
   };
 }

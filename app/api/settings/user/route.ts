@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { resolveActor } from "@/lib/auth/session";
+import { ensureDatabase } from "@/lib/db/bootstrap";
 import { getUserSettings, upsertUserSettings } from "@/lib/db/store";
-import { attachActorCookies, jsonError } from "@/lib/http";
+import { attachActorCookies, jsonError, jsonOk } from "@/lib/http";
 
-const settingsSchema = z.object({
+const schema = z.object({
   theme: z.enum(["system", "light", "dark"]).optional(),
   compactMode: z.boolean().optional(),
   enterToSend: z.boolean().optional(),
@@ -16,29 +16,31 @@ const settingsSchema = z.object({
 });
 
 export async function GET() {
+  await ensureDatabase();
   const resolved = await resolveActor();
-  if (resolved.actor.type !== "user") {
-    return jsonError("Sign in required", 401);
-  }
-
+  if (resolved.actor.type !== "user") return jsonError("Sign in required", 401);
   const settings = await getUserSettings(resolved.actor.userId);
-  const response = NextResponse.json({ settings });
-  return attachActorCookies(response, resolved);
+  return attachActorCookies(jsonOk({ settings }), resolved);
 }
 
-export async function PATCH(request: Request) {
+export async function PUT(req: Request) {
+  return handlePatch(req);
+}
+
+export async function PATCH(req: Request) {
+  return handlePatch(req);
+}
+
+async function handlePatch(req: Request) {
+  await ensureDatabase();
   const resolved = await resolveActor();
-  if (resolved.actor.type !== "user") {
-    return jsonError("Sign in required", 401);
-  }
-
-  const payload = await request.json().catch(() => null);
-  const parsed = settingsSchema.safeParse(payload ?? {});
-  if (!parsed.success) {
-    return jsonError(parsed.error.issues[0]?.message || "Invalid settings payload", 400);
-  }
-
+  if (resolved.actor.type !== "user") return jsonError("Sign in required", 401);
+  let raw: unknown;
+  try { raw = await req.json(); } catch { return attachActorCookies(jsonError("Invalid JSON", 400), resolved); }
+  const parsed = schema.safeParse(raw ?? {});
+  if (!parsed.success) return attachActorCookies(jsonError(parsed.error.issues[0]?.message || "Invalid payload", 400), resolved);
   const settings = await upsertUserSettings(resolved.actor.userId, parsed.data);
-  const response = NextResponse.json({ settings });
-  return attachActorCookies(response, resolved);
+  return attachActorCookies(jsonOk({ settings }), resolved);
 }
+
+export const dynamic = "force-dynamic";

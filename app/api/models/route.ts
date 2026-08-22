@@ -1,12 +1,13 @@
-import { NextResponse } from "next/server";
-
 import { resolveActor } from "@/lib/auth/session";
+import { ensureDatabase } from "@/lib/db/bootstrap";
 import { listModelsForActor } from "@/lib/db/store";
-import { attachActorCookies } from "@/lib/http";
+import { attachActorCookies, jsonOk } from "@/lib/http";
 
 export async function GET() {
-  const resolved = await resolveActor();
-  const models = await listModelsForActor(resolved.actor);
-  const response = NextResponse.json({ models });
-  return attachActorCookies(response, resolved);
+  await ensureDatabase();
+  const { actor, needsGuestCookie, needsSessionCleanup } = await resolveActor();
+  const models = await listModelsForActor(actor);
+  return attachActorCookies(jsonOk({ models }), { actor, needsGuestCookie, needsSessionCleanup });
 }
+
+export const dynamic = "force-dynamic";

@@ -16,6 +16,8 @@ const defaultModels = [
     isDefault: 1,
     isGuestAllowed: 1,
     maxOutputTokens: 2048,
+    supportsTools: 1,
+    contextWindow: 128000,
   },
   {
     id: "gpt-4.1-mini",
@@ -25,6 +27,8 @@ const defaultModels = [
     isDefault: 0,
     isGuestAllowed: 1,
     maxOutputTokens: 4096,
+    supportsTools: 1,
+    contextWindow: 128000,
   },
   {
     id: "gpt-4.1",
@@ -34,7 +38,25 @@ const defaultModels = [
     isDefault: 0,
     isGuestAllowed: 0,
     maxOutputTokens: 4096,
+    supportsTools: 1,
+    contextWindow: 128000,
   },
+  {
+    id: "claude-3-5-haiku-latest",
+    displayName: "Claude 3.5 Haiku",
+    provider: "anthropic",
+    description: "Fast Anthropic model with tool use",
+    isDefault: 0,
+    isGuestAllowed: 0,
+    maxOutputTokens: 4096,
+    supportsTools: 1,
+    contextWindow: 200000,
+  },
+];
+
+const defaultEmbedModels = [
+  { id: "emb_voyage_3_lite", provider: "voyage", modelId: "voyage-3-lite", dims: 1024, isDefault: 1 },
+  { id: "emb_text_small", provider: "openai", modelId: "text-embedding-3-small", dims: 1536, isDefault: 0 },
 ];
 
 const defaultRoleLimits = [
@@ -56,10 +78,7 @@ export async function ensureDatabase() {
 async function runBootstrap() {
   const { provider, query } = getDb();
 
-  const statements =
-    provider === "mysql"
-      ? mysqlBootstrapStatements
-      : postgresBootstrapStatements;
+  const statements = provider === "mysql" ? mysqlBootstrapStatements : postgresBootstrapStatements;
 
   for (const statement of statements) {
     try {
@@ -97,7 +116,7 @@ async function runBootstrap() {
 
     for (const model of defaultModels) {
       await query(sql`
-        insert ignore into models (id, provider, display_name, description, is_enabled, is_default, is_guest_allowed, max_output_tokens, created_at, updated_at)
+        insert ignore into models (id, provider, display_name, description, is_enabled, is_default, is_guest_allowed, max_output_tokens, supports_tools, context_window, created_at, updated_at)
         values (
           ${model.id},
           ${model.provider},
@@ -107,9 +126,18 @@ async function runBootstrap() {
           ${model.isDefault},
           ${model.isGuestAllowed},
           ${model.maxOutputTokens},
+          ${model.supportsTools},
+          ${model.contextWindow},
           ${now},
           ${now}
         )
+      `);
+    }
+
+    for (const emb of defaultEmbedModels) {
+      await query(sql`
+        insert ignore into embed_models (id, provider, model_id, dims, is_default, created_at, updated_at)
+        values (${emb.id}, ${emb.provider}, ${emb.modelId}, ${emb.dims}, ${emb.isDefault}, ${now}, ${now})
       `);
     }
 
@@ -143,7 +171,7 @@ async function runBootstrap() {
 
     for (const model of defaultModels) {
       await query(sql`
-        insert into models (id, provider, display_name, description, is_enabled, is_default, is_guest_allowed, max_output_tokens, created_at, updated_at)
+        insert into models (id, provider, display_name, description, is_enabled, is_default, is_guest_allowed, max_output_tokens, supports_tools, context_window, created_at, updated_at)
         values (
           ${model.id},
           ${model.provider},
@@ -153,9 +181,19 @@ async function runBootstrap() {
           ${model.isDefault},
           ${model.isGuestAllowed},
           ${model.maxOutputTokens},
+          ${model.supportsTools},
+          ${model.contextWindow},
           ${now},
           ${now}
         )
+        on conflict (id) do nothing
+      `);
+    }
+
+    for (const emb of defaultEmbedModels) {
+      await query(sql`
+        insert into embed_models (id, provider, model_id, dims, is_default, created_at, updated_at)
+        values (${emb.id}, ${emb.provider}, ${emb.modelId}, ${emb.dims}, ${emb.isDefault}, ${now}, ${now})
         on conflict (id) do nothing
       `);
     }
@@ -304,6 +342,8 @@ async function backfillBetterAuthCredentials(
 }
 
 const postgresBootstrapStatements = [
+  `create extension if not exists vector`,
+  `create extension if not exists pg_trgm`,
   `
   create table if not exists users (
     id text primary key,
@@ -375,29 +415,82 @@ const postgresBootstrapStatements = [
   )
   `,
   `
-  create table if not exists chats (
+  create table if not exists projects (
     id text primary key,
-    user_id text references users(id) on delete cascade,
-    guest_id text,
+    owner_user_id text references users(id) on delete set null,
     title text not null,
-    model_id text not null,
-    archived integer not null default 0,
-    is_pinned integer not null default 0,
+    description text,
+    visibility text not null default 'private',
     created_at text not null,
     updated_at text not null
   )
   `,
   `
-  create table if not exists temporary_chats (
+  create table if not exists project_members (
     id text primary key,
-    owner_user_id text references users(id) on delete cascade,
-    guest_id text not null,
-    model_id text not null,
-    messages_json text not null,
-    file_ids_json text not null,
+    project_id text not null references projects(id) on delete cascade,
+    user_id text not null references users(id) on delete cascade,
+    role text not null,
     created_at text not null,
-    updated_at text not null,
-    expires_at text not null
+    unique (project_id, user_id)
+  )
+  `,
+  `
+  create table if not exists documents (
+    id text primary key,
+    project_id text references projects(id) on delete set null,
+    owner_user_id text references users(id) on delete set null,
+    guest_id text,
+    title text not null,
+    source_type text not null,
+    source_url text,
+    mime_type text,
+    storage_key text,
+    sha256 text,
+    page_count integer,
+    token_count integer,
+    status text not null default 'pending',
+    error text,
+    created_at text not null,
+    updated_at text not null
+  )
+  `,
+  `
+  create table if not exists document_chunks (
+    id text primary key,
+    document_id text not null references documents(id) on delete cascade,
+    project_id text references projects(id) on delete set null,
+    ordinal integer not null,
+    heading text,
+    page integer,
+    char_offset integer,
+    content text not null,
+    tsv tsvector,
+    embedding vector(1536),
+    token_count integer
+  )
+  `,
+  `create index if not exists idx_doc_chunks_doc on document_chunks(document_id, ordinal)`,
+  `create index if not exists idx_doc_chunks_project on document_chunks(project_id)`,
+  `create index if not exists idx_documents_project on documents(project_id, updated_at)`,
+  `create index if not exists idx_documents_owner on documents(owner_user_id, updated_at)`,
+  `create index if not exists idx_documents_guest on documents(guest_id, updated_at)`,
+  // HNSW index — better recall/lat for 1536d; fallback to ivfflat if HNSW unavailable is ignored via safeToIgnore
+  `create index if not exists idx_doc_chunks_embedding_hnsw on document_chunks using hnsw (embedding vector_cosine_ops) with (m=16, ef_construction=64)`,
+  `create index if not exists idx_doc_chunks_tsv_gin on document_chunks using gin (tsv)`,
+  `
+  create table if not exists chats (
+    id text primary key,
+    project_id text references projects(id) on delete set null,
+    user_id text references users(id) on delete cascade,
+    guest_id text,
+    title text not null,
+    model_id text not null,
+    agent_preset text,
+    archived integer not null default 0,
+    is_pinned integer not null default 0,
+    created_at text not null,
+    updated_at text not null
   )
   `,
   `
@@ -407,7 +500,24 @@ const postgresBootstrapStatements = [
     role text not null,
     content text not null,
     model_id text not null,
-    attachments_json text not null,
+    attachments_json text not null default '[]',
+    tool_calls text,
+    tool_call_id text,
+    citations text,
+    token_count integer,
+    created_at text not null
+  )
+  `,
+  `
+  create table if not exists tool_events (
+    id text primary key,
+    chat_id text not null references chats(id) on delete cascade,
+    message_id text references messages(id) on delete set null,
+    tool_name text not null,
+    input text not null,
+    output text,
+    status text not null,
+    latency_ms integer,
     created_at text not null
   )
   `,
@@ -451,6 +561,19 @@ const postgresBootstrapStatements = [
     is_default integer not null default 0,
     is_guest_allowed integer not null default 0,
     max_output_tokens integer not null default 2048,
+    supports_tools integer not null default 0,
+    context_window integer,
+    created_at text not null,
+    updated_at text not null
+  )
+  `,
+  `
+  create table if not exists embed_models (
+    id text primary key,
+    provider text not null,
+    model_id text not null,
+    dims integer not null,
+    is_default integer not null default 0,
     created_at text not null,
     updated_at text not null
   )
@@ -500,18 +623,29 @@ const postgresBootstrapStatements = [
     created_at text not null
   )
   `,
+  `alter table chats add column if not exists project_id text references projects(id) on delete set null`,
+  `alter table chats add column if not exists agent_preset text`,
   `alter table chats add column if not exists is_pinned integer not null default 0`,
+  `alter table messages add column if not exists tool_calls text`,
+  `alter table messages add column if not exists tool_call_id text`,
+  `alter table messages add column if not exists citations text`,
+  `alter table messages add column if not exists token_count integer`,
+  `alter table models add column if not exists supports_tools integer not null default 0`,
+  `alter table models add column if not exists context_window integer`,
   `create index if not exists idx_chats_user on chats(user_id, updated_at)`,
   `create index if not exists idx_chats_guest on chats(guest_id, updated_at)`,
-  `create index if not exists idx_temporary_chats_user on temporary_chats(owner_user_id, updated_at)`,
-  `create index if not exists idx_temporary_chats_guest on temporary_chats(guest_id, updated_at)`,
-  `create index if not exists idx_temporary_chats_expires on temporary_chats(expires_at)`,
+  `create index if not exists idx_chats_project on chats(project_id, updated_at)`,
   `create index if not exists idx_messages_chat on messages(chat_id, created_at)`,
+  `create index if not exists idx_tool_events_chat on tool_events(chat_id, created_at)`,
+  `create index if not exists idx_tool_events_message on tool_events(message_id)`,
   `create index if not exists idx_sessions_user on sessions(user_id, expires_at)`,
   `create index if not exists idx_auth_sessions_user on auth_sessions(user_id, expires_at)`,
   `create index if not exists idx_auth_accounts_user on auth_accounts(user_id, provider_id)`,
   `create index if not exists idx_auth_verifications_identifier on auth_verifications(identifier, expires_at)`,
   `create index if not exists idx_usage_user_day on usage_counters(user_id, date_key)`,
+  `create index if not exists idx_projects_owner on projects(owner_user_id, updated_at)`,
+  `create index if not exists idx_project_members_user on project_members(user_id)`,
+  `create index if not exists idx_project_members_project on project_members(project_id)`,
 ];
 
 const mysqlBootstrapStatements = [
@@ -590,31 +724,83 @@ const mysqlBootstrapStatements = [
   )
   `,
   `
+  create table if not exists projects (
+    id varchar(191) primary key,
+    owner_user_id varchar(191),
+    title text not null,
+    description text,
+    visibility varchar(20) not null default 'private',
+    created_at varchar(40) not null,
+    updated_at varchar(40) not null,
+    constraint fk_projects_owner foreign key (owner_user_id) references users(id) on delete set null
+  )
+  `,
+  `
+  create table if not exists project_members (
+    id varchar(191) primary key,
+    project_id varchar(191) not null,
+    user_id varchar(191) not null,
+    role varchar(20) not null,
+    created_at varchar(40) not null,
+    unique key uniq_project_user (project_id, user_id),
+    constraint fk_pm_project foreign key (project_id) references projects(id) on delete cascade,
+    constraint fk_pm_user foreign key (user_id) references users(id) on delete cascade
+  )
+  `,
+  `
+  create table if not exists documents (
+    id varchar(191) primary key,
+    project_id varchar(191),
+    owner_user_id varchar(191),
+    guest_id varchar(191),
+    title text not null,
+    source_type varchar(20) not null,
+    source_url text,
+    mime_type varchar(191),
+    storage_key text,
+    sha256 varchar(128),
+    page_count int,
+    token_count int,
+    status varchar(20) not null default 'pending',
+    error text,
+    created_at varchar(40) not null,
+    updated_at varchar(40) not null,
+    constraint fk_docs_project foreign key (project_id) references projects(id) on delete set null,
+    constraint fk_docs_owner foreign key (owner_user_id) references users(id) on delete set null
+  )
+  `,
+  `
+  create table if not exists document_chunks (
+    id varchar(191) primary key,
+    document_id varchar(191) not null,
+    project_id varchar(191),
+    ordinal int not null,
+    heading text,
+    page int,
+    char_offset int,
+    content longtext not null,
+    tsv text,
+    embedding longtext,
+    token_count int,
+    constraint fk_chunks_doc foreign key (document_id) references documents(id) on delete cascade,
+    constraint fk_chunks_project foreign key (project_id) references projects(id) on delete set null
+  )
+  `,
+  `
   create table if not exists chats (
     id varchar(191) primary key,
+    project_id varchar(191),
     user_id varchar(191),
     guest_id varchar(191),
     title text not null,
     model_id varchar(191) not null,
+    agent_preset varchar(50),
     archived tinyint not null default 0,
     is_pinned tinyint not null default 0,
     created_at varchar(40) not null,
     updated_at varchar(40) not null,
-    constraint fk_chats_user foreign key (user_id) references users(id) on delete cascade
-  )
-  `,
-  `
-  create table if not exists temporary_chats (
-    id varchar(191) primary key,
-    owner_user_id varchar(191),
-    guest_id varchar(191) not null,
-    model_id varchar(191) not null,
-    messages_json longtext not null,
-    file_ids_json longtext not null,
-    created_at varchar(40) not null,
-    updated_at varchar(40) not null,
-    expires_at varchar(40) not null,
-    constraint fk_temporary_chats_user foreign key (owner_user_id) references users(id) on delete cascade
+    constraint fk_chats_user foreign key (user_id) references users(id) on delete cascade,
+    constraint fk_chats_project foreign key (project_id) references projects(id) on delete set null
   )
   `,
   `
@@ -625,8 +811,27 @@ const mysqlBootstrapStatements = [
     content longtext not null,
     model_id varchar(191) not null,
     attachments_json longtext not null,
+    tool_calls longtext,
+    tool_call_id varchar(191),
+    citations longtext,
+    token_count int,
     created_at varchar(40) not null,
     constraint fk_messages_chat foreign key (chat_id) references chats(id) on delete cascade
+  )
+  `,
+  `
+  create table if not exists tool_events (
+    id varchar(191) primary key,
+    chat_id varchar(191) not null,
+    message_id varchar(191),
+    tool_name varchar(191) not null,
+    input longtext not null,
+    output longtext,
+    status varchar(20) not null,
+    latency_ms int,
+    created_at varchar(40) not null,
+    constraint fk_tool_chat foreign key (chat_id) references chats(id) on delete cascade,
+    constraint fk_tool_msg foreign key (message_id) references messages(id) on delete set null
   )
   `,
   `
@@ -671,6 +876,19 @@ const mysqlBootstrapStatements = [
     is_default tinyint not null default 0,
     is_guest_allowed tinyint not null default 0,
     max_output_tokens int not null default 2048,
+    supports_tools tinyint not null default 0,
+    context_window int,
+    created_at varchar(40) not null,
+    updated_at varchar(40) not null
+  )
+  `,
+  `
+  create table if not exists embed_models (
+    id varchar(191) primary key,
+    provider varchar(191) not null,
+    model_id varchar(191) not null,
+    dims int not null,
+    is_default tinyint not null default 0,
     created_at varchar(40) not null,
     updated_at varchar(40) not null
   )
@@ -723,16 +941,18 @@ const mysqlBootstrapStatements = [
     constraint fk_audit_user foreign key (actor_user_id) references users(id) on delete set null
   )
   `,
-  `alter table chats add column if not exists is_pinned tinyint not null default 0`,
+  `create index idx_doc_chunks_doc on document_chunks(document_id, ordinal)`,
+  `create index idx_doc_chunks_project on document_chunks(project_id)`,
+  `create index idx_documents_project on documents(project_id, updated_at)`,
   `create index idx_chats_user on chats(user_id, updated_at)`,
   `create index idx_chats_guest on chats(guest_id, updated_at)`,
-  `create index idx_temporary_chats_user on temporary_chats(owner_user_id, updated_at)`,
-  `create index idx_temporary_chats_guest on temporary_chats(guest_id, updated_at)`,
-  `create index idx_temporary_chats_expires on temporary_chats(expires_at)`,
+  `create index idx_chats_project on chats(project_id, updated_at)`,
   `create index idx_messages_chat on messages(chat_id, created_at)`,
+  `create index idx_tool_events_chat on tool_events(chat_id, created_at)`,
   `create index idx_sessions_user on sessions(user_id, expires_at)`,
   `create index idx_auth_sessions_user on auth_sessions(user_id, expires_at)`,
   `create index idx_auth_accounts_user on auth_accounts(user_id, provider_id)`,
   `create index idx_auth_verifications_identifier on auth_verifications(identifier, expires_at)`,
   `create index idx_usage_user_day on usage_counters(user_id, date_key)`,
+  `create index idx_projects_owner on projects(owner_user_id, updated_at)`,
 ];

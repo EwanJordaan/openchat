@@ -2,7 +2,8 @@ import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth/better-auth";
-import { findUserById, getUserRoles } from "@/lib/db/store";
+import { getDb } from "@/lib/db/client";
+import { sql } from "drizzle-orm";
 import { env } from "@/lib/env";
 import type { Actor } from "@/lib/types";
 import { createId, toBool } from "@/lib/utils";
@@ -39,6 +40,30 @@ export function clearGuestCookie(response: NextResponse) {
   response.cookies.set(guestCookieName, "", cookieOptions(0));
 }
 
+export function createGuestId() {
+  return createId("gst");
+}
+
+export function setGuestCookie(response: NextResponse, guestId: string) {
+  ensureGuestCookie(response, guestId);
+}
+
+async function findUserById(userId: string) {
+  const { query } = getDb();
+  const rows = await query<{ id: string; email: string; name: string; image_url: string | null; is_active: number }>(
+    sql`select id, email, name, image_url, is_active from users where id = ${userId} limit 1`,
+  );
+  return rows[0] ?? null;
+}
+
+async function getUserRoles(userId: string) {
+  const { query } = getDb();
+  const rows = await query<{ role: string }>(sql`select role from user_roles where user_id = ${userId}`);
+  const roles = rows.map((r) => r.role) as Actor["roles"];
+  if (roles.length === 0) return ["user"] as Actor["roles"];
+  return roles;
+}
+
 async function resolveAuthUser() {
   const requestHeaders = await headers();
   const sessionResult = await auth.api.getSession({
@@ -60,7 +85,7 @@ async function resolveAuthUser() {
 export async function resolveActor() {
   const cookieStore = await cookies();
   const existingGuestId = cookieStore.get(guestCookieName)?.value;
-  const guestId = existingGuestId || createId("gst");
+  const guestId = existingGuestId || createGuestId();
 
   const { user, needsSessionCleanup } = await resolveAuthUser();
   if (!user) {
@@ -88,7 +113,7 @@ export async function resolveActor() {
       id: String(user.id),
       email: String(user.email),
       name: String(user.name),
-      imageUrl: user.image ? String(user.image) : null,
+      imageUrl: (user as { image?: string | null }).image ? String((user as { image: string }).image) : null,
     },
   };
 
@@ -102,7 +127,7 @@ export async function resolveActor() {
 export async function resolveGuestActorFromCookies() {
   const cookieStore = await cookies();
   const existingGuestId = cookieStore.get(guestCookieName)?.value;
-  const guestId = existingGuestId || createId("gst");
+  const guestId = existingGuestId || createGuestId();
 
   const guestActor: Actor = {
     type: "guest",

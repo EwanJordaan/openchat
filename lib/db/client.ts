@@ -10,17 +10,19 @@ import { mysqlAuthSchema, pgAuthSchema } from "@/lib/db/schema";
 type Provider = "postgres" | "supabase" | "neon" | "mysql";
 
 type ExecutableDb = {
-  execute: (statement: never) => Promise<unknown>;
+  execute: (statement: unknown) => Promise<unknown>;
 };
 
 export interface DbRunner {
   query: <T>(statement: SQL) => Promise<T[]>;
+  execute: <T>(statement: SQL) => Promise<T[]>;
 }
 
 interface DbContext {
   provider: Provider;
   db: ExecutableDb;
   query: <T>(statement: SQL) => Promise<T[]>;
+  execute: <T>(statement: SQL) => Promise<T[]>;
   withTransaction: <T>(callback: (tx: DbRunner) => Promise<T>) => Promise<T>;
 }
 
@@ -28,7 +30,7 @@ declare global {
   var __openchatDbContext: DbContext | undefined;
 }
 
-function extractRows<T>(result: unknown) {
+function extractRows<T>(result: unknown): T[] {
   if (Array.isArray(result)) return result as T[];
   if (result && typeof result === "object" && "rows" in result) {
     return (result as { rows: T[] }).rows;
@@ -76,6 +78,15 @@ function createRunner(db: ExecutableDb): DbRunner {
       }
       return extractRows<T>(result);
     },
+    execute: async <T>(statement: SQL) => {
+      let result: unknown;
+      try {
+        result = await db.execute(statement as never);
+      } catch (error) {
+        throw normalizeError(error);
+      }
+      return extractRows<T>(result);
+    },
   };
 }
 
@@ -84,18 +95,22 @@ function createContext(): DbContext {
 
   if (provider === "mysql") {
     const pool = mysql.createPool(env.DATABASE_URL);
-    const db = drizzleMysql(pool, { schema: mysqlAuthSchema, mode: "default" }) as ExecutableDb;
+    const db = drizzleMysql(pool, { schema: mysqlAuthSchema, mode: "default" }) as unknown as ExecutableDb;
     const runner = createRunner(db);
 
     return {
       provider,
       db,
       query: runner.query,
+      execute: runner.execute,
       withTransaction: async <T>(callback: (tx: DbRunner) => Promise<T>) => {
         const connection = await pool.getConnection();
         try {
           await connection.beginTransaction();
-          const txDb = drizzleMysql(connection, { schema: mysqlAuthSchema, mode: "default" }) as ExecutableDb;
+          const txDb = drizzleMysql(connection, {
+            schema: mysqlAuthSchema,
+            mode: "default",
+          }) as unknown as ExecutableDb;
           const result = await callback(createRunner(txDb));
           await connection.commit();
           return result;
@@ -120,6 +135,7 @@ function createContext(): DbContext {
     provider,
     db,
     query: runner.query,
+    execute: runner.execute,
     withTransaction: async <T>(callback: (tx: DbRunner) => Promise<T>) => {
       const client = await pool.connect();
       try {
