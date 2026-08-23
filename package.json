@@ -13,7 +13,7 @@
     "test:unit": "bun test tests/unit",
     "test:integration": "bun test tests/integration",
     "test:ci": "bun run test:unit && bun run test:integration",
-    "test:coverage": "bun test --coverage --coverage-reporter json && node scripts/check-coverage.mjs",
+    "test:coverage": "bun test --coverage --coverage-reporter lcov && node scripts/check-coverage.mjs",
     "railway:login": "railway login",
     "railway:link": "railway link",
     "railway:status": "railway status",
