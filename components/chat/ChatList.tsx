@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import type { ChatSummary } from "@/lib/types";
+import { Pin, PinOff } from "lucide-react";
 
 const fetcher = (u: string) => fetch(u).then((r) => r.json());
 
@@ -9,16 +10,21 @@ export function ChatList({
   projectId,
   activeId,
   onSelect,
-  onNew,
+  filter,
 }: {
   projectId?: string | null;
   activeId?: string | null;
   onSelect?: (id: string) => void;
   onNew?: () => void;
+  filter?: string;
 }) {
   const key = projectId ? `/api/chats?projectId=${encodeURIComponent(projectId)}` : "/api/chats";
   const { data, mutate } = useSWR<{ chats: ChatSummary[] }>(key, fetcher);
-  const chats = data?.chats ?? [];
+  let chats = data?.chats ?? [];
+  if (filter) {
+    const q = filter.toLowerCase();
+    chats = chats.filter((c) => (c.title ?? "").toLowerCase().includes(q));
+  }
   const pinned = chats.filter((c) => c.isPinned);
   const rest = chats.filter((c) => !c.isPinned);
 
@@ -28,26 +34,56 @@ export function ChatList({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, minHeight: 0, flex: 1 }}>
-      <div className="sidebar-header" style={{ paddingTop: 0 }}>
-        <button type="button" className="btn primary" style={{ width: "100%", justifyContent: "center" }} onClick={() => onNew?.()}>New chat</button>
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, minHeight: 0, flex: 1, overflow: "hidden" }}>
       <div className="chat-list">
-        {pinned.length ? <div className="eyebrow" style={{ padding: "0 6px" }}>Pinned</div> : null}
+        {chats.length === 0 && !filter ? (
+          <div
+            style={{
+              border: "1px dashed var(--border)",
+              borderRadius: 12,
+              padding: "12px 10px",
+              textAlign: "center",
+              background: "color-mix(in srgb, var(--surface-muted) 60%, transparent)",
+            }}
+          >
+            <div style={{ fontSize: "0.82rem", fontWeight: 600 }}>No chats yet</div>
+            <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>Start a new conversation above</div>
+          </div>
+        ) : null}
+
+        {filter && chats.length === 0 ? (
+          <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", padding: "8px 6px", textAlign: "center" }}>No chats match “{filter}”.</div>
+        ) : null}
+
+        {pinned.length ? <div className="eyebrow" style={{ padding: "6px 6px 2px" }}>Pinned</div> : null}
         {pinned.map((c) => (
           <div key={c.id} className={`chat-item ${c.id === activeId ? "active" : ""}`}>
-            <button type="button" onClick={() => onSelect?.(c.id)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "transparent", border: 0, cursor: "pointer", fontSize: "0.82rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.title || "Untitled"}</button>
-            <button type="button" className="btn" style={{ padding: "2px 6px", fontSize: "0.68rem" }} onClick={() => void togglePin(c)}>{c.isPinned ? "Unpin" : "Pin"}</button>
+            <button type="button" className="chat-item-title" onClick={() => onSelect?.(c.id)} title={c.title || "Untitled"}>
+              {c.title || "Untitled"}
+            </button>
+            <button type="button" className="btn btn-icon ghost" style={{ width: 26, height: 26, flex: "0 0 26px" }} onClick={() => void togglePin(c)} aria-label="Unpin">
+              <PinOff size={12} />
+            </button>
           </div>
         ))}
-        {rest.length ? <div className="eyebrow" style={{ padding: "0 6px", marginTop: 6 }}>Recent</div> : null}
+
+        {rest.length ? (
+          <div className="eyebrow" style={{ padding: "10px 6px 2px", display: pinned.length ? undefined : "none" }}>
+            Recent
+          </div>
+        ) : null}
+        {rest.length && !pinned.length && chats.length ? <div className="eyebrow" style={{ padding: "6px 6px 2px" }}>Recents</div> : null}
+
         {rest.map((c) => (
           <div key={c.id} className={`chat-item ${c.id === activeId ? "active" : ""}`}>
-            <button type="button" onClick={() => onSelect?.(c.id)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "transparent", border: 0, cursor: "pointer", fontSize: "0.82rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.title || "Untitled"}</button>
-            <button type="button" className="btn" style={{ padding: "2px 6px", fontSize: "0.68rem" }} onClick={() => void togglePin(c)}>Pin</button>
+            <button type="button" className="chat-item-title" onClick={() => onSelect?.(c.id)} title={c.title || "Untitled"}>
+              {c.title || "Untitled"}
+            </button>
+            <button type="button" className="btn btn-icon ghost" style={{ width: 26, height: 26, flex: "0 0 26px", opacity: 0.7 }} onClick={() => void togglePin(c)} aria-label="Pin">
+              <Pin size={12} />
+            </button>
           </div>
         ))}
-        {chats.length === 0 ? <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", padding: "8px 6px" }}>No chats yet.</div> : null}
       </div>
     </div>
   );
