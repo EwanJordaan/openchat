@@ -487,8 +487,8 @@ h1, h2, h3 { font-family: var(--font-heading), sans-serif; margin: 0; letter-spa
 :root[data-theme="dark"] .dropzone:hover, :root[data-theme="dark"] .dropzone.dragging { background: #232323; border-color: #4a4a4a; }
 
 /* ── Project nav — refined ── */
-.project-nav { padding: 10px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; min-height: 0; flex: 1; }
-.project-nav-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+.project-nav { padding: 10px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; min-height: 0; flex: 1; }
+.project-nav-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px; }
 .project-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; scrollbar-width: none; padding-right: 2px; }
 .project-list::-webkit-scrollbar { display: none; }
 .project-card {
@@ -746,3 +746,7 @@ h1, h2, h3 { font-family: var(--font-heading), sans-serif; margin: 0; letter-spa
 /* scrollbar hide for lists */
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* T3 folder item hover reveal (hoisted from per-row style) */
+.group\/item:hover button[aria-label="Folder actions"] { opacity: 1 !important; }
+.group\/item:hover span.bg-input { opacity: 0 !important; }

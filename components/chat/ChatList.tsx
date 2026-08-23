@@ -21,8 +21,9 @@ export function ChatList({
   const key = projectId ? `/api/chats?projectId=${encodeURIComponent(projectId)}` : "/api/chats";
   const { data, mutate } = useSWR<{ chats: ChatSummary[] }>(key, fetcher);
   let chats = data?.chats ?? [];
-  if (filter) {
-    const q = filter.toLowerCase();
+  const fq = filter?.trim() ?? "";
+  if (fq) {
+    const q = fq.toLowerCase();
     chats = chats.filter((c) => (c.title ?? "").toLowerCase().includes(q));
   }
   const pinned = chats.filter((c) => c.isPinned);
@@ -51,8 +52,8 @@ export function ChatList({
           </div>
         ) : null}
 
-        {filter && chats.length === 0 ? (
-          <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", padding: "8px 6px", textAlign: "center" }}>No chats match “{filter}”.</div>
+        {fq && chats.length === 0 ? (
+          <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", padding: "8px 6px", textAlign: "center" }}>No chats match “{fq}”.</div>
         ) : null}
 
         {pinned.length ? <div className="eyebrow" style={{ padding: "6px 6px 2px" }}>Pinned</div> : null}
