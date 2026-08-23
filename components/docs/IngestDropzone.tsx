@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { Upload, FileUp } from "lucide-react";
 
 type Stage = "idle" | "presigning" | "uploading" | "finalizing" | "done" | "error";
 
@@ -41,9 +42,7 @@ export function IngestDropzone({ projectId, onComplete }: { projectId?: string |
             const up = await fetch(uploadUrl, { method: "POST", body: fd });
             if (!up.ok) throw new Error(`S3 upload failed ${up.status}`);
           } else if (uploadUrl) {
-            // file:// fallback or direct PUT
             if (uploadUrl.startsWith("file://")) {
-              // local dev: directly complete without PUT
             } else {
               const up = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
               if (!up.ok) throw new Error(`PUT failed ${up.status}`);
@@ -109,8 +108,25 @@ export function IngestDropzone({ projectId, onComplete }: { projectId?: string |
       }}
     >
       <input ref={inputRef} type="file" multiple onChange={(e) => e.target.files && void handleFiles(e.target.files)} />
-      <div style={{ fontSize: "0.86rem", fontWeight: 600 }}>{stage === "idle" ? "Drop PDFs, docx, md, csv here" : progress || stage}</div>
-      <div style={{ fontSize: "0.74rem", marginTop: 4, color: "var(--text-muted)" }}>or click to browse · max {(12).toString()} MB per file</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: "0.84rem", fontWeight: 600 }}>
+        <span
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 8,
+            background: stage === "idle" ? "var(--accent-soft)" : "var(--surface)",
+            color: "var(--accent)",
+            display: "grid",
+            placeItems: "center",
+            border: "1px solid var(--border)",
+            flex: "0 0 28px",
+          }}
+        >
+          {stage === "idle" ? <Upload size={14} /> : <FileUp size={14} />}
+        </span>
+        <span>{stage === "idle" ? "Drop files here" : progress || stage}</span>
+      </div>
+      <div style={{ fontSize: "0.72rem", marginTop: 6, color: "var(--text-muted)" }}>PDF, docx, md, csv · max 12 MB</div>
       {error ? <p style={{ margin: "8px 0 0", color: "var(--danger)", fontSize: "0.76rem" }}>{error}</p> : null}
     </div>
   );
