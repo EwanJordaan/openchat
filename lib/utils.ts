@@ -1,4 +1,9 @@
+import { clsx, type ClassValue } from "clsx";
 import { customAlphabet } from "nanoid";
+
+export function cn(...inputs: ClassValue[]) {
+  return clsx(inputs);
+}
 
 const idAlphabet = "0123456789abcdefghijklmnopqrstuvwxyz";
 const randomId = customAlphabet(idAlphabet, 14);

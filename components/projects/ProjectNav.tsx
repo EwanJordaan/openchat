@@ -3,14 +3,15 @@
 import { useEffect, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import type { Project } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { ProjectCard } from "./ProjectCard";
 import { T3FolderNav } from "./T3FolderNav";
-import { Folder, Plus } from "lucide-react";
+import { Folder, MessageSquare, Plus } from "lucide-react";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 const STORAGE_KEY = "openchat:sidebar-mode";
-type SidebarMode = "normal" | "t3";
+type SidebarMode = "normal" | "folders";
 
 export function ProjectNav({
   projects: initial,
@@ -37,10 +38,10 @@ export function ProjectNav({
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY) as SidebarMode | null;
-      if (raw === "normal" || raw === "t3") {
+      const raw = localStorage.getItem(STORAGE_KEY) as string | null;
+      if (raw === "normal" || raw === "folders" || raw === "t3") {
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setMode(raw);
+        setMode(raw === "t3" ? "folders" : (raw as SidebarMode));
       }
     } catch {}
     setHydrated(true);
@@ -67,7 +68,6 @@ export function ProjectNav({
       });
       if (!res.ok) throw new Error("create failed");
       setTitle("");
-      // refresh both SWR keys (/api/projects and /api/projects?limit=100) for Normal/T3 consistency
       void globalMutate((key) => typeof key === "string" && key.startsWith("/api/projects"));
       onCreated?.();
     } finally {
@@ -75,80 +75,62 @@ export function ProjectNav({
     }
   }
 
+  // ChatGPT-style Work toggle: pill segmented, icons, muted background
   const toggle = (
     <div
       role="tablist"
       aria-label="Sidebar mode"
-      style={{
-        display: "flex",
-        background: "var(--surface-muted)",
-        padding: 4,
-        borderRadius: 10,
-        gap: 4,
-        border: "1px solid var(--border-soft)",
-      }}
+      className="flex items-center gap-1 rounded-full bg-muted p-1 border"
     >
       <button
         type="button"
         role="tab"
         aria-selected={mode === "normal"}
         onClick={() => setMode("normal")}
-        style={{
-          flex: 1,
-          fontSize: "0.72rem",
-          fontWeight: 600,
-          padding: "6px 8px",
-          borderRadius: 7,
-          border: mode === "normal" ? "1px solid var(--border)" : "1px solid transparent",
-          background: mode === "normal" ? "var(--surface)" : "transparent",
-          color: mode === "normal" ? "var(--text-primary)" : "var(--text-muted)",
-          boxShadow: mode === "normal" ? "var(--shadow-sm)" : "none",
-          cursor: "pointer",
-          transition: "background 0.14s, color 0.14s, border-color 0.14s, box-shadow 0.14s",
-        }}
+        className={cn(
+          "flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all",
+          mode === "normal"
+            ? "bg-background text-foreground shadow-sm border"
+            : "text-muted-foreground hover:text-foreground",
+        )}
       >
-        Normal
+        <MessageSquare className="h-3.5 w-3.5" />
+        Chat
       </button>
       <button
         type="button"
         role="tab"
-        aria-selected={mode === "t3"}
-        onClick={() => setMode("t3")}
-        style={{
-          flex: 1,
-          fontSize: "0.72rem",
-          fontWeight: 600,
-          padding: "6px 8px",
-          borderRadius: 7,
-          border: mode === "t3" ? "1px solid var(--border)" : "1px solid transparent",
-          background: mode === "t3" ? "var(--surface)" : "transparent",
-          color: mode === "t3" ? "var(--text-primary)" : "var(--text-muted)",
-          boxShadow: mode === "t3" ? "var(--shadow-sm)" : "none",
-          cursor: "pointer",
-          transition: "background 0.14s, color 0.14s, border-color 0.14s, box-shadow 0.14s",
-        }}
+        aria-selected={mode === "folders"}
+        onClick={() => setMode("folders")}
+        className={cn(
+          "flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all",
+          mode === "folders"
+            ? "bg-background text-foreground shadow-sm border"
+            : "text-muted-foreground hover:text-foreground",
+        )}
       >
-        T3 Code
+        <Folder className="h-3.5 w-3.5" />
+        Folders
       </button>
     </div>
   );
 
-  if (mode === "t3") {
+  if (mode === "folders") {
     return (
-      <div className="project-nav" style={{ gap: 12, display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
+      <div className="project-nav flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
         {toggle}
         <T3FolderNav projects={projects} activeId={activeId} onSelect={onSelect} onCreated={onCreated} filter={filter} />
       </div>
     );
   }
 
-  // Normal mode — cleaned
+  // Normal mode — simple clean Projects UI
   return (
-    <div className="project-nav" style={{ gap: 12 }}>
+    <div className="project-nav gap-3">
       {toggle}
 
       <div className="project-nav-header" style={{ padding: 4 }}>
-        <span className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <span className="eyebrow inline-flex items-center gap-1.5">
           <Folder size={12} /> Projects
         </span>
         {projects.length > 0 ? (

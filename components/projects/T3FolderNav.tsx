@@ -1,671 +1,322 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
-import type { Project, ChatSummary } from "@/lib/types";
-import { Check, Edit3, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import type { ChatSummary, Project } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from "@/components/ui/sidebar";
+import { Check, Edit3, Loader2, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-/* ── Color system ── */
-export const PROJECT_COLORS = ["blue", "green", "purple", "orange", "red"] as const;
-export type ProjectColor = (typeof PROJECT_COLORS)[number];
+// ── Verbatim copy from intern3: project-constants.ts ──
+export const PROJECT_COLORS = [
+  {
+    id: "blue",
+    name: "Blue",
+    class: "text-blue-500 bg-blue-500 border-blue-400 dark:text-blue-600 dark:bg-blue-600 dark:border-blue-500",
+  },
+  {
+    id: "red",
+    name: "Red",
+    class: "text-red-500 bg-red-500 border-red-400 dark:text-red-600 dark:bg-red-600 dark:border-red-500",
+  },
+  {
+    id: "green",
+    name: "Green",
+    class: "text-green-500 bg-green-500 border-green-400 dark:text-green-600 dark:bg-green-600 dark:border-green-500",
+  },
+  {
+    id: "purple",
+    name: "Purple",
+    class: "text-purple-500 bg-purple-500 border-purple-400 dark:text-purple-600 dark:bg-purple-600 dark:border-purple-500",
+  },
+  {
+    id: "orange",
+    name: "Orange",
+    class: "text-orange-500 bg-orange-500 border-orange-400 dark:text-orange-600 dark:bg-orange-600 dark:border-orange-500",
+  },
+  {
+    id: "pink",
+    name: "Pink",
+    class: "text-pink-500 bg-pink-500 border-pink-400 dark:text-pink-600 dark:bg-pink-600 dark:border-pink-500",
+  },
+  {
+    id: "teal",
+    name: "Teal",
+    class: "text-teal-500 bg-teal-500 border-teal-400 dark:text-teal-600 dark:bg-teal-600 dark:border-teal-500",
+  },
+  {
+    id: "gray",
+    name: "Gray",
+    class: "text-gray-500 bg-gray-500 border-gray-400 dark:text-gray-600 dark:bg-gray-600 dark:border-gray-500",
+  },
+  {
+    id: "indigo",
+    name: "Indigo",
+    class: "text-indigo-500 bg-indigo-500 border-indigo-400 dark:text-indigo-600 dark:bg-indigo-600 dark:border-indigo-500",
+  },
+  {
+    id: "yellow",
+    name: "Yellow",
+    class: "text-yellow-500 bg-yellow-500 border-yellow-400 dark:text-yellow-600 dark:bg-yellow-600 dark:border-yellow-500",
+  },
+  {
+    id: "cyan",
+    name: "Cyan",
+    class: "text-cyan-500 bg-cyan-500 border-cyan-400 dark:text-cyan-600 dark:bg-cyan-600 dark:border-cyan-500",
+  },
+] as const;
 
-const COLOR_MAP: Record<ProjectColor, string> = {
-  blue: "#3b82f6",
-  green: "#22c55e",
-  purple: "#8b5cf6",
-  orange: "#f97316",
-  red: "#ef4444",
-};
+export type ProjectColorId = (typeof PROJECT_COLORS)[number]["id"];
 
-function getProjectColor(project: Project): ProjectColor {
-  const raw = (project as unknown as { color?: string }).color;
-  if (raw && (PROJECT_COLORS as readonly string[]).includes(raw)) return raw as ProjectColor;
-  if (typeof window !== "undefined") {
-    try {
-      const map = JSON.parse(localStorage.getItem("openchat:project-colors") || "{}") as Record<string, string>;
-      const c = map[project.id];
-      if (c && (PROJECT_COLORS as readonly string[]).includes(c)) return c as ProjectColor;
-    } catch {}
-  }
-  return "blue";
+export function getProjectColorClasses(colorId: ProjectColorId | undefined): string {
+  if (!colorId)
+    return "text-gray-500 bg-gray-500 border-gray-400 dark:text-gray-600 dark:bg-gray-600 dark:border-gray-500";
+  const color = PROJECT_COLORS.find((c) => c.id === colorId);
+  return (
+    color?.class ||
+    "text-gray-500 bg-gray-500 border-gray-400 dark:text-gray-600 dark:bg-gray-600 dark:border-gray-500"
+  );
 }
 
-function setProjectColor(projectId: string, color: string) {
+export const DEFAULT_PROJECT_ICON = "📁";
+
+// ── openchat adaptation: localStorage color persistence (maps project.id -> color id) ──
+function getStoredColor(projectId: string): ProjectColorId | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const map = JSON.parse(localStorage.getItem("openchat:project-colors") || "{}") as Record<string, string>;
+    const c = map[projectId];
+    if (c && PROJECT_COLORS.some((x) => x.id === c)) return c as ProjectColorId;
+  } catch {}
+  return null;
+}
+
+function setStoredColor(projectId: string, colorId: string) {
   if (typeof window === "undefined") return;
   try {
     const map = JSON.parse(localStorage.getItem("openchat:project-colors") || "{}") as Record<string, string>;
-    map[projectId] = color;
+    map[projectId] = colorId;
     localStorage.setItem("openchat:project-colors", JSON.stringify(map));
   } catch {}
 }
 
-function getProjectColorClasses(color: ProjectColor): string {
-  // Tailwind class helper, kept for spec parity; actual dot uses inline style via COLOR_MAP
-  const map: Record<ProjectColor, string> = {
-    blue: "bg-blue-500",
-    green: "bg-green-500",
-    purple: "bg-purple-500",
-    orange: "bg-orange-500",
-    red: "bg-red-500",
-  };
-  return map[color];
+function resolveProjectColor(project: Project): ProjectColorId {
+  // project may have color in future schema, but currently we fallback to LS
+  const raw = (project as unknown as { color?: string }).color as ProjectColorId | undefined;
+  if (raw && PROJECT_COLORS.some((c) => c.id === raw)) return raw;
+  return getStoredColor(project.id) ?? "blue";
 }
 
-/* ── Dialog primitives (minimal, T3-like) ── */
-function DialogOverlay({ onClick }: { onClick: () => void }) {
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.32)",
-        backdropFilter: "blur(4px)",
-        zIndex: 60,
-      }}
-    />
-  );
-}
+// ── NewFolderButton — verbatim copy from intern3 src/components/threads/new-folder-button.tsx ──
+function NewFolderButton({ onCreated }: { onCreated?: () => void }) {
+  const [showDialog, setShowDialog] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [folderDescription, setFolderDescription] = useState("");
+  const [folderColor, setFolderColor] = useState<string>("blue");
+  const [isCreating, setIsCreating] = useState(false);
 
-function DialogPanel({
-  children,
-  onClose,
-  title,
-}: {
-  children: React.ReactNode;
-  onClose: () => void;
-  title: string;
-}) {
-  return (
-    <>
-      <DialogOverlay onClick={onClose} />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 61,
-          display: "grid",
-          placeItems: "center",
-          padding: 16,
-          pointerEvents: "none",
-        }}
-      >
-        <div
-          style={{
-            width: "min(448px, 100%)",
-            maxWidth: "28rem",
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            borderRadius: 16,
-            boxShadow: "var(--shadow-lg)",
-            padding: 20,
-            display: "flex",
-            flexDirection: "column",
-            gap: 16,
-            pointerEvents: "auto",
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {children}
-        </div>
-      </div>
-    </>
-  );
-}
-
-/* ── NewFolderButton + Dialog ── */
-function NewFolderButton({
-  onCreated,
-}: {
-  onCreated?: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [color, setColor] = useState<ProjectColor>("blue");
-  const [saving, setSaving] = useState(false);
-
-  async function handleCreate() {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    setSaving(true);
+  const handleCreate = async () => {
+    const trimmedName = folderName.trim();
+    if (!trimmedName) return;
+    setIsCreating(true);
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: trimmed, description: description.trim() || null }),
+        body: JSON.stringify({ title: trimmedName, description: folderDescription.trim() || null }),
       });
       if (!res.ok) throw new Error("create failed");
       const j = (await res.json()) as { project: Project };
-      if (j.project?.id) setProjectColor(j.project.id, color);
-      setName("");
-      setDescription("");
-      setColor("blue");
-      setOpen(false);
+      if (j.project?.id) setStoredColor(j.project.id, folderColor);
+      setFolderName("");
+      setFolderDescription("");
+      setFolderColor("blue");
+      setShowDialog(false);
       onCreated?.();
     } catch {
       // silent
     } finally {
-      setSaving(false);
+      setIsCreating(false);
     }
-  }
+  };
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="New folder"
-        title="New folder"
-        className="inline-flex items-center justify-center rounded-md hover:bg-accent/50 text-muted-foreground hover:text-foreground transition-colors"
-        style={{
-          width: 24,
-          height: 24,
-          borderRadius: 6,
-          color: "var(--text-muted)",
-          flex: "0 0 24px",
-        }}
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => setShowDialog(true)}
+        className="size-6 text-muted-foreground"
       >
-        <Plus size={16} />
-      </button>
-      {open ? (
-        <DialogPanel title="New Folder" onClose={() => !saving && setOpen(false)}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <h2 style={{ fontSize: "1rem", fontWeight: 600, margin: 0, color: "var(--text-primary)" }}>New Folder</h2>
-            <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: 0 }}>Create a folder to organize your chats.</p>
-          </div>
+        <Plus className="size-4" />
+        <span className="sr-only">New folder</span>
+      </Button>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: "0.82rem", fontWeight: 500, color: "var(--text-primary)" }}>
-              Name
-              <input
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create New Folder</DialogTitle>
+            <DialogDescription>Folders are a great way to organize your threads</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="folder-name">Name</Label>
+              <Input
+                id="folder-name"
+                value={folderName}
+                onChange={(e) => setFolderName(e.target.value)}
+                placeholder="Enter folder name"
+                className="max-w-[50%]"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !isCreating) void handleCreate();
+                }}
+                disabled={isCreating}
                 autoFocus
-                placeholder="Folder name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !saving) void handleCreate();
-                  if (e.key === "Escape" && !saving) setOpen(false);
-                }}
-                maxLength={120}
-                style={{
-                  maxWidth: "50%",
-                  border: "1px solid var(--border)",
-                  borderRadius: 9,
-                  background: "var(--surface-elevated)",
-                  color: "var(--text-primary)",
-                  padding: "0.45rem 0.6rem",
-                  fontSize: "0.85rem",
-                  width: "100%",
-                  outline: "none",
-                }}
               />
-            </label>
+            </div>
 
-            <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: "0.82rem", fontWeight: 500, color: "var(--text-primary)" }}>
-              Description
-              <input
-                placeholder="Optional description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !saving) void handleCreate();
-                }}
-                maxLength={500}
-                style={{
-                  border: "1px solid var(--border)",
-                  borderRadius: 9,
-                  background: "var(--surface-elevated)",
-                  color: "var(--text-primary)",
-                  padding: "0.45rem 0.6rem",
-                  fontSize: "0.85rem",
-                  width: "100%",
-                  outline: "none",
-                }}
+            <div className="space-y-2">
+              <Label htmlFor="folder-description">Description (Optional)</Label>
+              <Input
+                id="folder-description"
+                value={folderDescription}
+                onChange={(e) => setFolderDescription(e.target.value)}
+                placeholder="Enter folder description"
+                disabled={isCreating}
               />
-            </label>
+            </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <span style={{ fontSize: "0.82rem", fontWeight: 500, color: "var(--text-primary)" }}>Color</span>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                {PROJECT_COLORS.map((c) => {
-                  const active = color === c;
-                  return (
-                    <button
-                      key={c}
-                      type="button"
-                      aria-label={`Color ${c}`}
-                      onClick={() => setColor(c)}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 9999,
-                        background: COLOR_MAP[c],
-                        border: active ? "2px solid var(--text-primary)" : "2px solid transparent",
-                        transform: active ? "scale(1.10)" : "scale(1)",
-                        display: "grid",
-                        placeItems: "center",
-                        transition: "transform 0.14s, border-color 0.14s",
-                        cursor: "pointer",
-                        flex: "0 0 32px",
-                      }}
-                    >
-                      {active ? <Check size={14} color="#fff" strokeWidth={3} /> : null}
-                    </button>
-                  );
-                })}
+            <div className="space-y-2">
+              <Label>Color</Label>
+              <div className="flex gap-2">
+                {PROJECT_COLORS.map((color) => (
+                  <button
+                    key={color.id}
+                    type="button"
+                    onClick={() => setFolderColor(color.id)}
+                    disabled={isCreating}
+                    className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all",
+                      color.class.split(" ").slice(1).join(" "),
+                      folderColor === color.id ? "scale-110 border-foreground" : "border-transparent hover:scale-105",
+                    )}
+                  >
+                    {folderColor === color.id && <Check className="h-4 w-4 text-white drop-shadow-sm" />}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
-
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, paddingTop: 4 }}>
-            <button type="button" className="btn ghost" onClick={() => setOpen(false)} disabled={saving}>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDialog(false)} disabled={isCreating}>
               Cancel
-            </button>
-            <button
-              type="button"
-              className="btn primary"
-              onClick={() => void handleCreate()}
-              disabled={saving || !name.trim()}
-            >
-              {saving ? "Creating…" : "Save"}
-            </button>
-          </div>
-        </DialogPanel>
-      ) : null}
+            </Button>
+            <Button onClick={() => void handleCreate()} disabled={isCreating || !folderName.trim()}>
+              {isCreating ? "Creating..." : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
 
-/* ── FolderItem ── */
+// ── FolderItem — verbatim copy from intern3 src/components/threads/folder-item.tsx ──
 function FolderItem({
   project,
+  numThreads,
   active,
   onSelect,
-  numThreads,
   onUpdated,
   onDeleted,
 }: {
   project: Project;
+  numThreads: number;
   active?: boolean;
   onSelect?: () => void;
-  numThreads: number;
   onUpdated?: () => void;
   onDeleted?: () => void;
 }) {
-  const [color, setColor] = useState<ProjectColor>("blue");
-  // hydrate color after mount to avoid SSR mismatch (LS vs server default)
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setColor(getProjectColor(project));
-  }, [project]);
-  const dotBg = COLOR_MAP[color];
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editColor, setEditColor] = useState<string>("blue");
+  const [isEditing, setIsEditing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    if (!isMenuOpen) return;
-    function onDocClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setIsMenuOpen(false);
-    }
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, [isMenuOpen]);
+  const colorId = resolveProjectColor(project) as ProjectColorId;
+  const colorClasses = getProjectColorClasses(colorId);
 
-  const itemBg = active
-    ? "color-mix(in srgb, var(--accent) 18%, var(--surface))"
-    : isMenuOpen
-      ? "color-mix(in srgb, var(--accent) 12%, transparent)"
-      : "transparent";
+  // hydrate edit fields when opening
+  const openEditDialog = () => {
+    setEditName(project.title);
+    setEditDescription(project.description || "");
+    setEditColor(colorId);
+    setShowEditDialog(true);
+  };
 
-  return (
-    <>
-      {/* SidebarMenuItem > div group/item ... */}
-      <div
-        className="group/item flex w-full items-center rounded-sm"
-        style={{
-          background: itemBg,
-          borderRadius: 6,
-          minHeight: 30,
-          padding: "2px 4px 2px 6px",
-          gap: 6,
-          transition: "background 0.14s",
-        }}
-        onMouseEnter={(e) => {
-          if (!active && !isMenuOpen) e.currentTarget.style.background = "color-mix(in srgb, var(--accent) 10%, transparent)";
-        }}
-        onMouseLeave={(e) => {
-          if (!active && !isMenuOpen) e.currentTarget.style.background = "transparent";
-        }}
-      >
-        {/* SidebarMenuButton asChild flex-1 hover:bg-transparent > Link */}
-        <button
-          type="button"
-          onClick={onSelect}
-          className="flex-1 hover:bg-transparent text-xs font-medium truncate flex items-center gap-2 text-left"
-          style={{
-            display: "flex",
-            flex: 1,
-            alignItems: "center",
-            gap: 8,
-            minWidth: 0,
-            background: "transparent",
-            border: 0,
-            cursor: "pointer",
-            padding: "6px 4px",
-            borderRadius: 4,
-            color: active ? "var(--text-primary)" : "var(--text-secondary)",
-            fontSize: "0.82rem",
-            fontWeight: 500,
-            textAlign: "left" as const,
-          }}
-          title={project.title}
-        >
-          <span
-            className={getProjectColorClasses(color)}
-            aria-hidden
-            style={{
-              width: 12,
-              height: 12,
-              borderRadius: 9999,
-              background: dotBg,
-              flex: "0 0 12px",
-              display: "inline-block",
-            }}
-          />
-          <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{project.title}</span>
-        </button>
-
-        {/* Right: DropdownMenu trigger */}
-        <div ref={menuRef} style={{ position: "relative", display: "flex", alignItems: "center", gap: 4, flex: "0 0 auto" }}>
-          {/* count pill */}
-          <span
-            className="bg-input px-0.5 py-0.25 text-muted-foreground text-xs"
-            style={{
-              background: "var(--surface-muted)",
-              padding: "1px 6px",
-              borderRadius: 9999,
-              fontSize: "0.70rem",
-              color: "var(--text-muted)",
-              border: "1px solid var(--border-soft)",
-              opacity: isMenuOpen ? 0 : 1,
-              transition: "opacity 0.14s",
-              display: numThreads > 0 ? "inline-flex" : "none",
-              alignItems: "center",
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {numThreads}
-          </span>
-
-          <button
-            type="button"
-            aria-label="Folder actions"
-            aria-expanded={isMenuOpen}
-            onClick={() => setIsMenuOpen((v) => !v)}
-            className="rounded p-1 hover:bg-accent/50"
-            style={{
-              width: 24,
-              height: 24,
-              borderRadius: 6,
-              display: "grid",
-              placeItems: "center",
-              color: "var(--text-muted)",
-              border: 0,
-              background: isMenuOpen ? "color-mix(in srgb, var(--accent) 14%, transparent)" : "transparent",
-              opacity: isMenuOpen ? 1 : 0,
-              transition: "opacity 0.14s, background 0.14s",
-              cursor: "pointer",
-            }}
-          >
-            <MoreHorizontal size={16} />
-          </button>
-
-          {/* Dropdown content */}
-          {isMenuOpen ? (
-            <div
-              role="menu"
-              style={{
-                position: "absolute",
-                top: "calc(100% + 6px)",
-                right: 0,
-                minWidth: 160,
-                background: "var(--surface)",
-                border: "1px solid var(--border)",
-                borderRadius: 10,
-                boxShadow: "var(--shadow-lg)",
-                padding: 4,
-                zIndex: 30,
-                display: "flex",
-                flexDirection: "column",
-                gap: 2,
-              }}
-            >
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setIsMenuOpen(false);
-                  setEditOpen(true);
-                }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "8px 10px",
-                  borderRadius: 8,
-                  border: 0,
-                  background: "transparent",
-                  color: "var(--text-primary)",
-                  fontSize: "0.82rem",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  width: "100%",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-muted)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                <Edit3 size={14} /> Edit folder
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setIsMenuOpen(false);
-                  setDeleteOpen(true);
-                }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "8px 10px",
-                  borderRadius: 8,
-                  border: 0,
-                  background: "transparent",
-                  color: "var(--danger)",
-                  fontSize: "0.82rem",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  width: "100%",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "color-mix(in srgb, var(--danger) 10%, transparent)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                <Trash2 size={14} /> Delete folder
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      {editOpen ? (
-        <EditFolderDialog project={project} initialColor={color} onClose={() => setEditOpen(false)} onUpdated={onUpdated} />
-      ) : null}
-
-      {deleteOpen ? (
-        <DeleteFolderDialog project={project} numThreads={numThreads} onClose={() => setDeleteOpen(false)} onDeleted={onDeleted} />
-      ) : null}
-    </>
-  );
-}
-
-function EditFolderDialog({
-  project,
-  initialColor,
-  onClose,
-  onUpdated,
-}: {
-  project: Project;
-  initialColor: ProjectColor;
-  onClose: () => void;
-  onUpdated?: () => void;
-}) {
-  const [name, setName] = useState(project.title);
-  const [description, setDescription] = useState(project.description ?? "");
-  const [color, setColor] = useState<ProjectColor>(initialColor);
-  const [saving, setSaving] = useState(false);
-
-  async function handleSave() {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    setSaving(true);
+  const handleEdit = async () => {
+    const trimmedName = editName.trim();
+    if (!trimmedName) return;
+    setIsEditing(true);
     try {
       const res = await fetch(`/api/projects/${project.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: trimmed, description: description.trim() || null }),
+        body: JSON.stringify({ title: trimmedName, description: editDescription.trim() || null }),
       });
       if (!res.ok) throw new Error("update failed");
-      setProjectColor(project.id, color);
-      onClose();
+      setStoredColor(project.id, editColor);
+      setShowEditDialog(false);
       onUpdated?.();
     } catch {
+      // silent
     } finally {
-      setSaving(false);
+      setIsEditing(false);
     }
-  }
+  };
 
-  return (
-    <DialogPanel title="Edit Folder" onClose={() => !saving && onClose()}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <h2 style={{ fontSize: "1rem", fontWeight: 600, margin: 0, color: "var(--text-primary)" }}>Edit Folder</h2>
-        <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: 0 }}>Update folder details.</p>
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: "0.82rem", fontWeight: 500, color: "var(--text-primary)" }}>
-          Name
-          <input
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !saving) void handleSave();
-              if (e.key === "Escape" && !saving) onClose();
-            }}
-            maxLength={120}
-            style={{
-              maxWidth: "50%",
-              border: "1px solid var(--border)",
-              borderRadius: 9,
-              background: "var(--surface-elevated)",
-              color: "var(--text-primary)",
-              padding: "0.45rem 0.6rem",
-              fontSize: "0.85rem",
-              width: "100%",
-              outline: "none",
-            }}
-          />
-        </label>
-
-        <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: "0.82rem", fontWeight: 500, color: "var(--text-primary)" }}>
-          Description
-          <input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !saving) void handleSave();
-            }}
-            maxLength={500}
-            style={{
-              border: "1px solid var(--border)",
-              borderRadius: 9,
-              background: "var(--surface-elevated)",
-              color: "var(--text-primary)",
-              padding: "0.45rem 0.6rem",
-              fontSize: "0.85rem",
-              width: "100%",
-              outline: "none",
-            }}
-          />
-        </label>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <span style={{ fontSize: "0.82rem", fontWeight: 500, color: "var(--text-primary)" }}>Color</span>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            {PROJECT_COLORS.map((c) => {
-              const active = color === c;
-              return (
-                <button
-                  key={c}
-                  type="button"
-                  aria-label={`Color ${c}`}
-                  onClick={() => setColor(c)}
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 9999,
-                    background: COLOR_MAP[c],
-                    border: active ? "2px solid var(--text-primary)" : "2px solid transparent",
-                    transform: active ? "scale(1.10)" : "scale(1)",
-                    display: "grid",
-                    placeItems: "center",
-                    transition: "transform 0.14s, border-color 0.14s",
-                    cursor: "pointer",
-                    flex: "0 0 32px",
-                  }}
-                >
-                  {active ? <Check size={14} color="#fff" strokeWidth={3} /> : null}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, paddingTop: 4 }}>
-        <button type="button" className="btn ghost" onClick={onClose} disabled={saving}>
-          Cancel
-        </button>
-        <button type="button" className="btn primary" onClick={() => void handleSave()} disabled={saving || !name.trim()}>
-          {saving ? "Saving…" : "Save"}
-        </button>
-      </div>
-    </DialogPanel>
-  );
-}
-
-function DeleteFolderDialog({
-  project,
-  numThreads,
-  onClose,
-  onDeleted,
-}: {
-  project: Project;
-  numThreads: number;
-  onClose: () => void;
-  onDeleted?: () => void;
-}) {
-  const [deleting, setDeleting] = useState(false);
-  async function handleDelete() {
-    setDeleting(true);
+  const handleDelete = async () => {
+    setIsDeleting(true);
     try {
       const res = await fetch(`/api/projects/${project.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("delete failed");
@@ -674,83 +325,191 @@ function DeleteFolderDialog({
         delete map[project.id];
         localStorage.setItem("openchat:project-colors", JSON.stringify(map));
       } catch {}
-      onClose();
+      setShowDeleteDialog(false);
       onDeleted?.();
     } catch {
+      // silent
     } finally {
-      setDeleting(false);
+      setIsDeleting(false);
     }
-  }
+  };
+
+  const { setOpenMobile } = useSidebar();
 
   return (
     <>
-      <DialogOverlay onClick={() => !deleting && onClose()} />
-      <div
-        role="alertdialog"
-        aria-modal="true"
-        aria-label="Delete folder"
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 62,
-          display: "grid",
-          placeItems: "center",
-          padding: 16,
-          pointerEvents: "none",
-        }}
-      >
+      <SidebarMenuItem>
         <div
-          style={{
-            width: "min(448px, 100%)",
-            maxWidth: "28rem",
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            borderRadius: 16,
-            boxShadow: "var(--shadow-lg)",
-            padding: 20,
-            display: "flex",
-            flexDirection: "column",
-            gap: 16,
-            pointerEvents: "auto",
-          }}
-          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            "group/item flex w-full items-center rounded-sm hover:bg-accent/50",
+            isMenuOpen && "bg-accent/50",
+            active && "bg-accent/60",
+          )}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <h2 style={{ fontSize: "1rem", fontWeight: 600, margin: 0, color: "var(--text-primary)" }}>Are you sure you want to delete this folder?</h2>
-            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", margin: 0, lineHeight: 1.5 }}>
-              This action cannot be undone. This will permanently delete the folder <strong style={{ color: "var(--text-primary)" }}>{project.title}</strong>
-              {numThreads > 0
-                ? ` and archive its ${numThreads} ${numThreads === 1 ? "thread" : "threads"}. Threads will be archived, not deleted.`
-                : " and archive its threads."}
-            </p>
-            {numThreads > 0 ? (
-              <p style={{ fontSize: "0.76rem", color: "var(--text-muted)", margin: 0 }}>
-                Folder contains <strong style={{ color: "var(--text-primary)" }}>{numThreads}</strong> {numThreads === 1 ? "thread" : "threads"}.
-              </p>
-            ) : null}
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-            <button type="button" className="btn ghost" onClick={onClose} disabled={deleting}>
-              Cancel
-            </button>
+          <SidebarMenuButton
+            asChild
+            className={cn("flex-1 hover:bg-transparent", active && "text-foreground")}
+          >
             <button
               type="button"
-              className="btn primary"
-              style={{ background: "var(--danger)", borderColor: "var(--danger)" }}
-              onClick={() => void handleDelete()}
-              disabled={deleting}
+              onClick={() => {
+                setOpenMobile(false);
+                onSelect?.();
+              }}
+              className="flex items-center gap-2 text-left w-full"
             >
-              {deleting ? "Deleting…" : "Delete folder"}
+              <div className={cn("flex size-3 flex-shrink-0 items-center justify-center rounded-full text-xs", colorClasses.split(" ").slice(1).join(" "))} />
+              <span className="truncate font-medium">{project.title}</span>
             </button>
-          </div>
+          </SidebarMenuButton>
+
+          <DropdownMenu onOpenChange={setIsMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className="relative rounded p-1">
+                <span
+                  className={cn(
+                    "-translate-y-1/2 absolute top-[50%] right-2 ml-auto flex-shrink-0 rounded bg-input px-0.5 py-0.25 text-muted-foreground text-xs leading-none transition-opacity",
+                    isMenuOpen ? "opacity-0" : "opacity-100 group-hover/item:opacity-0",
+                  )}
+                >
+                  {numThreads}
+                </span>
+                <MoreHorizontal
+                  className={cn("mr-1 h-4 w-4 transition-opacity", isMenuOpen || "opacity-0 group-hover/item:opacity-100")}
+                />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={openEditDialog}>
+                <Edit3 className="h-4 w-4" />
+                Edit folder
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowDeleteDialog(true)} variant="destructive">
+                <Trash2 className="h-4 w-4" />
+                Delete folder
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-      </div>
+      </SidebarMenuItem>
+
+      {/* Edit Dialog — verbatim structure */}
+      <Dialog
+        open={showEditDialog}
+        onOpenChange={(open) => {
+          if (!isEditing) setShowEditDialog(open);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Folder</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="edit-folder-name">Name</Label>
+              <Input
+                id="edit-folder-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="max-w-[50%]"
+                placeholder="Enter folder name"
+                disabled={isEditing}
+                autoFocus
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-folder-description">Description (optional)</Label>
+              <Input
+                id="edit-folder-description"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Enter folder description"
+                disabled={isEditing}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Color</Label>
+              <div className="flex gap-2">
+                {PROJECT_COLORS.map((color) => (
+                  <button
+                    key={color.id}
+                    type="button"
+                    onClick={() => setEditColor(color.id)}
+                    disabled={isEditing}
+                    className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all",
+                      color.class.split(" ").slice(1).join(" "),
+                      editColor === color.id ? "scale-110 border-foreground" : "border-transparent hover:scale-105",
+                    )}
+                  >
+                    {editColor === color.id && <Check className="h-4 w-4 text-white drop-shadow-sm" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)} disabled={isEditing}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleEdit()} disabled={isEditing || !editName.trim()}>
+              {isEditing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Dialog — verbatim AlertDialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Folder</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <span className="font-bold">{project.title}</span>?
+              {numThreads > 0 && (
+                <>
+                  <br />
+                  <br />
+                  This folder contains {numThreads} thread{numThreads !== 1 ? "s" : ""}. The folder will be archived instead of deleted.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void handleDelete()}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {numThreads > 0 ? "Archiving..." : "Deleting..."}
+                </>
+              ) : numThreads > 0 ? (
+                "Archive"
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
 
-/* ── Main T3FolderNav ── */
+// ── Main Folders Nav — 100% Folders UI ──
 export function T3FolderNav({
   projects: initial,
   activeId,
@@ -788,79 +547,36 @@ export function T3FolderNav({
     onCreated?.();
   }
 
+  // Verbatim SidebarGroup Folders section from intern3 threads-sidebar.tsx
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        padding: "8px 8px 0 8px",
-        overflow: "hidden",
-        minHeight: 0,
-        flex: 1,
-      }}
-    >
-      {/* SidebarGroup > SidebarGroupLabel pr-0 flex */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          paddingLeft: 8,
-          paddingRight: 0,
-          height: 28,
-          minHeight: 28,
-        }}
-      >
-        <span
-          className="text-xs font-medium"
-          style={{
-            fontSize: "0.68rem",
-            fontWeight: 700,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-            color: "var(--text-muted)",
-          }}
-        >
-          Folders
-        </span>
+    <SidebarGroup>
+      <SidebarGroupLabel className="pr-0">
+        Folders
+        <div className="flex-grow" />
         <NewFolderButton onCreated={handleMutate} />
-      </div>
-
-      {/* SidebarGroupContent > SidebarMenu */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 2,
-          overflowY: "auto",
-          scrollbarWidth: "none",
-          paddingRight: 2,
-          minHeight: 0,
-          flex: 1,
-        }}
-      >
-        {filtered.map((p) => (
-          <FolderItem
-            key={p.id}
-            project={p}
-            active={p.id === activeId}
-            onSelect={() => onSelect?.(p.id)}
-            numThreads={countByProject.get(p.id) ?? 0}
-            onUpdated={handleMutate}
-            onDeleted={handleMutate}
-          />
-        ))}
-        {filtered.length === 0 && q ? (
-          <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", padding: "8px 6px" }}>No folders match “{q}”.</div>
-        ) : null}
-        {filtered.length === 0 && !q ? (
-          <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", padding: "8px 6px", lineHeight: 1.4 }}>
-            No folders yet. Create one to organize chats.
-          </div>
-        ) : null}
-      </div>
-    </div>
+      </SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {filtered.map((p) => (
+            <FolderItem
+              key={p.id}
+              project={p}
+              active={p.id === activeId}
+              onSelect={() => onSelect?.(p.id)}
+              numThreads={countByProject.get(p.id) ?? 0}
+              onUpdated={handleMutate}
+              onDeleted={handleMutate}
+            />
+          ))}
+        </SidebarMenu>
+      </SidebarGroupContent>
+      {filtered.length === 0 && q ? (
+        <div className="text-muted-foreground p-4 text-center text-sm">No folders match “{q}”.</div>
+      ) : null}
+      {filtered.length === 0 && !q ? (
+        <div className="text-muted-foreground p-4 text-center text-sm">No folders yet. Create one to organize chats.</div>
+      ) : null}
+    </SidebarGroup>
   );
 }
 
